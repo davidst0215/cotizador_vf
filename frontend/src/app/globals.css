@@ -1,0 +1,46 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, sans-serif;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+/* Estilos personalizados para el Sistema TDV */
+.tdv-gradient {
+  background: linear-gradient(135deg, #821417 0%, #bd4c42 100%);
+}
+
+.tdv-shadow {
+  box-shadow: 0 10px 15px -3px rgba(130, 20, 23, 0.1), 0 4px 6px -2px rgba(130, 20, 23, 0.05);
+}
+
+/* Animaciones suaves */
+.tdv-transition {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Scroll personalizado */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #fff4e1;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #bd4c42;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #821417;
+}

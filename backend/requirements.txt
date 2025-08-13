@@ -1,29 +1,42 @@
 
 # =====================================================================
-# DEPENDENCIAS BACKEND TDV COTIZADOR
+# DEPENDENCIAS BACKEND TDV COTIZADOR v2.0
+# Sistema de Cotización Inteligente para TDV
 # =====================================================================
 
-# FastAPI y servidor
-fastapi==0.104.1
-uvicorn[standard]==0.24.0
+# FastAPI y servidor web
+fastapi==0.104.1                # Framework web moderno para APIs
+uvicorn[standard]==0.24.0       # Servidor ASGI para FastAPI
 
-# Base de datos
-pyodbc==5.0.1
+# Base de datos y conectores
+pyodbc==5.0.1                   # Conector SQL Server/ODBC
 
-# Modelos y validación
-pydantic==2.5.0
-pydantic-settings==2.1.0
+# Modelos, validación y configuración
+pydantic==2.5.0                 # Validación de datos y modelos
+pydantic-settings==2.1.0        # Configuración con Pydantic
 
-# Utilidades
-python-multipart==0.0.6
-python-dotenv==1.0.0
+# Utilidades web y archivos
+python-multipart==0.0.6         # Manejo de formularios multipart
+python-dotenv==1.0.0            # Carga de variables de entorno
 
-# Cálculos y datos
-numpy==1.25.2
-pandas==2.1.4
+# Cálculos científicos y manipulación de datos
+numpy==1.25.2                   # Cálculos numéricos
+pandas==2.1.4                   # Manipulación de datos estructurados
 
+# Análisis y reportes (para backtesting)
+openpyxl==3.1.2                 # Lectura/escritura archivos Excel
 
+# Testing y desarrollo
+pytest==7.4.3                   # Framework de testing
+httpx==0.25.2                   # Cliente HTTP para tests de API
 
-# Testing (opcional)
-pytest==7.4.3
-httpx==0.25.2
+# Logging y monitoreo
+colorlog==6.8.0                 # Logs con colores para desarrollo
+
+# Seguridad y autenticación (futuras extensiones)
+passlib[bcrypt]==1.7.4          # Hashing de passwords
+python-jose[cryptography]==3.3.0 # JWT tokens
+
+# Optimización y cache (opcional)
+redis==5.0.1                    # Cache distribuido
+cachetools==5.3.2               # Cache en memoria

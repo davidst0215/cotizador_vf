@@ -110,7 +110,7 @@ frontend/
 ### Archivos de Respaldo
 
 ```
-_backup_old/
+db_ops/
 ├── Carga_datos_costos_wip.py   # 📥 Script carga WIPs
 └── Carga_datos_finanzas.py    # 📥 Script carga finanzas
 ```
@@ -120,6 +120,7 @@ _backup_old/
 ### API Endpoints Documentados
 
 #### 1. Información del Sistema
+
 ```http
 GET /                           # Información general
 GET /health                     # Estado del sistema
@@ -127,12 +128,14 @@ GET /configuracion              # Configuración y factores
 ```
 
 #### 2. Cotización Principal
+
 ```http
 POST /cotizar                   # Generar cotización
 POST /ops-utilizadas-cotizacion # OPs utilizadas
 ```
 
 #### 3. Búsqueda y Verificación
+
 ```http
 GET /verificar-estilo-completo/{codigo}     # Verificación completa
 GET /buscar-estilos/{codigo}                # Búsqueda similares
@@ -140,6 +143,7 @@ GET /autocompletar-estilo/{codigo}          # Auto-completado
 ```
 
 #### 4. Datos Maestros
+
 ```http
 GET /clientes                   # Lista clientes
 GET /familias-productos         # Familias disponibles
@@ -147,12 +151,14 @@ GET /tipos-prenda/{familia}     # Tipos por familia
 ```
 
 #### 5. Configuración WIPs
+
 ```http
 GET /wips-disponibles                       # WIPs con costos
 GET /ruta-textil-recomendada/{tipo_prenda} # Ruta textil
 ```
 
 #### 6. Análisis y Reportes
+
 ```http
 GET /analisis-historico         # Análisis histórico
 GET /info-fechas-corrida       # Fechas de corrida
@@ -162,32 +168,34 @@ GET /versiones-calculo         # Versiones disponibles
 ### Modelos de Datos
 
 #### CotizacionInput
+
 ```typescript
 interface CotizacionInput {
-  cliente_marca: string
-  temporada: string
-  cantidad_prendas: number
-  familia_producto: string
-  tipo_prenda: string
-  codigo_estilo?: string
-  usuario: string
-  version_calculo: string
-  wips_seleccionadas?: WipSeleccionada[]
+  cliente_marca: string;
+  temporada: string;
+  cantidad_prendas: number;
+  familia_producto: string;
+  tipo_prenda: string;
+  codigo_estilo?: string;
+  usuario: string;
+  version_calculo: string;
+  wips_seleccionadas?: WipSeleccionada[];
 }
 ```
 
 #### CotizacionResponse
+
 ```typescript
 interface CotizacionResponse {
-  id_cotizacion: string
-  fecha_cotizacion: string
-  inputs: CotizacionInput
-  componentes: ComponenteCosto[]
-  factores_aplicados: FactoresAplicados
-  costo_base_total: number
-  precio_final: number
-  margen_recomendado: number
-  info_comercial?: InfoComercial
+  id_cotizacion: string;
+  fecha_cotizacion: string;
+  inputs: CotizacionInput;
+  componentes: ComponenteCosto[];
+  factores_aplicados: FactoresAplicados;
+  costo_base_total: number;
+  precio_final: number;
+  margen_recomendado: number;
+  info_comercial?: InfoComercial;
 }
 ```
 
@@ -196,6 +204,7 @@ interface CotizacionResponse {
 ### Tablas Principales
 
 #### COSTO_OP_DETALLE
+
 ```sql
 -- Contiene datos históricos de órdenes de producción
 CREATE TABLE TDV.saya.COSTO_OP_DETALLE (
@@ -220,6 +229,7 @@ CREATE TABLE TDV.saya.COSTO_OP_DETALLE (
 ```
 
 #### RESUMEN_WIP_POR_PRENDA
+
 ```sql
 -- Información de Work In Process por tipo de prenda
 CREATE TABLE TDV.saya.RESUMEN_WIP_POR_PRENDA (
@@ -236,6 +246,7 @@ CREATE TABLE TDV.saya.RESUMEN_WIP_POR_PRENDA (
 ```
 
 #### HISTORIAL_ESTILOS
+
 ```sql
 -- Registro histórico de estilos fabricados
 CREATE TABLE TDV.saya.HISTORIAL_ESTILOS (
@@ -258,7 +269,7 @@ CREATE TABLE TDV.saya.HISTORIAL_ESTILOS (
 def algoritmo_cotizacion(input_data):
     """
     Algoritmo principal de cotización TDV
-    
+
     Flujo:
     1. Validación de entrada
     2. Categorización del estilo
@@ -266,33 +277,34 @@ def algoritmo_cotizacion(input_data):
     4. Aplicación de factores
     5. Cálculo de precio final
     """
-    
+
     # 1. Validación
     validar_entrada(input_data)
-    
+
     # 2. Categorización
     categoria_estilo = categorizar_estilo(input_data.codigo_estilo)
     categoria_lote = categorizar_lote(input_data.cantidad_prendas)
-    
+
     # 3. Costos base
     costos_base = obtener_costos_historicos(input_data)
-    
+
     # 4. Factores de ajuste
     factor_estilo = get_factor_estilo(categoria_estilo)
     factor_lote = get_factor_lote(categoria_lote)
     factor_marca = get_factor_marca(input_data.cliente_marca)
     factor_esfuerzo = get_factor_esfuerzo(costos_base.esfuerzo_total)
-    
+
     # 5. Cálculo final
     costo_ajustado = costos_base * factor_estilo * factor_lote * factor_esfuerzo
     precio_final = costo_ajustado * factor_marca
-    
+
     return CotizacionResponse(...)
 ```
 
 ### Factores de Ajuste
 
 #### Por Volumen de Lote
+
 ```python
 RANGOS_LOTE = {
     'Micro Lote': {'min': 1, 'max': 50, 'factor': 1.15},      # +15%
@@ -304,6 +316,7 @@ RANGOS_LOTE = {
 ```
 
 #### Por Recurrencia del Estilo
+
 ```python
 FACTORES_ESTILO = {
     'Muy Recurrente': {'factor': 0.95},  # -5% (más eficiente)
@@ -313,6 +326,7 @@ FACTORES_ESTILO = {
 ```
 
 #### Por Marca/Cliente
+
 ```python
 FACTORES_MARCA = {
     'LACOSTE': 1.05,           # Premium +5%
@@ -326,12 +340,14 @@ FACTORES_MARCA = {
 ## 🔒 Seguridad y Validaciones
 
 ### Validación de Entrada
+
 - **Pydantic Models:** Validación automática de tipos
 - **Rangos de Seguridad:** Límites min/max por componente
 - **Queries Parametrizadas:** Prevención SQL injection
 - **CORS:** Orígenes específicos configurados
 
 ### Manejo de Errores
+
 ```python
 # Estructura de errores JSON
 {
@@ -345,6 +361,7 @@ FACTORES_MARCA = {
 ## 📊 Métricas y Monitoreo
 
 ### Health Check
+
 ```python
 GET /health
 {
@@ -360,6 +377,7 @@ GET /health
 ```
 
 ### Logging
+
 ```python
 # Formato de logs
 2025-01-XX 10:30:45 - backend.main - INFO - Nueva cotización: usuario | estilo_001
@@ -372,6 +390,7 @@ GET /health
 ### Variables de Entorno Requeridas
 
 #### Backend
+
 ```env
 DB_SERVER=131.107.20.77
 DB_USERNAME=CHSAYA01
@@ -384,6 +403,7 @@ CORS_ORIGINS=http://localhost:3000
 ```
 
 #### Frontend
+
 ```env
 NEXT_PUBLIC_API_URL=http://localhost:8000
 ```
@@ -391,15 +411,17 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 ### Comandos de Deploy
 
 #### Desarrollo
+
 ```bash
 # Backend
 cd backend && uvicorn main:app --reload
 
-# Frontend  
+# Frontend
 cd frontend && npm run dev
 ```
 
 #### Producción
+
 ```bash
 # Backend
 cd backend && uvicorn main:app --host 0.0.0.0 --port 8000
@@ -411,17 +433,20 @@ cd frontend && npm run build && npm start
 ## 🔄 Flujo de Desarrollo
 
 ### Proceso de Testing
+
 1. **Unit Tests:** `pytest backend/`
 2. **API Tests:** `pytest backend/tests/test_api.py`
 3. **Frontend Tests:** `npm test`
 4. **Backtesting:** `python backend/backtesting.py`
 
 ### Control de Versiones
+
 - **Main Branch:** Código de producción
 - **Feature Branches:** Nuevas funcionalidades
 - **Hotfix Branches:** Correcciones urgentes
 
 ### Pipeline CI/CD
+
 ```yaml
 # Ejemplo de pipeline
 1. Code Push → GitHub
@@ -433,6 +458,6 @@ cd frontend && npm run build && npm start
 
 ---
 
-**Documento técnico actualizado:** 2025  
-**Versión del sistema:** 2.0  
+**Documento técnico actualizado:** 2025
+**Versión del sistema:** 2.0
 **Autor:** SAYA INVESTMENTS

@@ -1,0 +1,81 @@
+---
+# Global excludes
+exclude: |
+  (?x)(
+    ^(?:node_modules|\.next|dist|build|\.venv|venv|.tox|__pycache__)/|
+    .*\.lock$|
+    \.coverage|
+    \.mypy_cache/|
+    \.ruff_cache/|
+    coverage\.xml
+  )
+
+repos:
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    # keep it before yamllint
+    rev: v4.0.0-alpha.8
+    hooks:
+      - id: prettier
+        additional_dependencies: []
+
+  # ESLint for JS/TS/React/Next
+  - repo: https://github.com/pre-commit/mirrors-eslint
+    rev: v9.35.0
+    hooks:
+      - id: eslint
+        entry: eslint
+        language: node
+        files: \.(js|jsx|ts|tsx)$
+        args: ["--max-warnings=0", "--fix"]
+        additional_dependencies: [] # rely on project eslint & plugins
+
+    # Stylelint (useful for Tailwind/CSS)
+  - repo: https://github.com/thibaudcolas/pre-commit-stylelint
+    rev: v16.24.0
+    hooks:
+      - id: stylelint
+        args: ["--fix"]
+
+  # 🔧 Lint and format Python with ruff (replaces black, flake8, isort)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.12.12
+    hooks:
+      - id: ruff
+        args: ["--fix"]
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.17.1
+    hooks:
+      - id: mypy
+        verbose: true
+        additional_dependencies:
+          - types-pytz
+          - types-PyYAML
+          - types-requests
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-added-large-files
+      - id: check-yaml
+        args:
+          - --allow-multiple-documents
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+        args: ["--markdown-linebreak-ext=md"]
+        exclude: '\.patch$'
+
+  - repo: https://github.com/hadolint/hadolint
+    rev: v2.13.1
+    hooks:
+      - id: hadolint-docker
+
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.11.0.1
+    hooks:
+      - id: shellcheck
+
+  - repo: https://github.com/adrienverge/yamllint.git
+    rev: v1.37.1
+    hooks:
+      - id: yamllint

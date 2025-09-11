@@ -10,7 +10,7 @@ MODELOS PYDANTIC - BACKEND TDV COTIZADOR - COMPLETAMENTE CORREGIDOS
 """
 
 from pydantic import BaseModel, Field, validator
-from typing import List, Optional, Dict, Any, Union
+from typing import List, Optional, Dict, Any
 from datetime import datetime
 from enum import Enum
 
@@ -69,24 +69,24 @@ class CotizacionInput(BaseModel):
     cantidad_prendas: Optional[int] = Field(None, ge=1, description="Cantidad de prendas del lote")
     esfuerzo_total: Optional[int] = Field(None, ge=1, le=10, description="Esfuerzo total (1-10)")
     margen_adicional: Optional[float] = Field(None, ge=0, le=100, description="Margen adicional en %")
-    
+
     # ✅ CORREGIDO: Campo para versión de cálculo con enum
     version_calculo: VersionCalculo = Field(default=VersionCalculo.FLUIDA, description="Versión de cálculo")
-    
+
     # Campos determinados automáticamente por el backend
     es_estilo_nuevo: Optional[bool] = Field(None, description="Se determina automáticamente")
-    
+
     # WIPs para estilos nuevos
     wips_textiles: Optional[List[WipSeleccionada]] = Field(None, description="WIPs textiles seleccionadas")
     wips_manufactura: Optional[List[WipSeleccionada]] = Field(None, description="WIPs manufactura seleccionadas")
-    
+
     @validator('categoria_lote')
     def validar_categoria_lote(cls, v):
         categorias_validas = ['Micro Lote', 'Lote Pequeño', 'Lote Mediano', 'Lote Grande', 'Lote Masivo']
         if v not in categorias_validas:
             raise ValueError(f'Categoría debe ser una de: {categorias_validas}')
         return v
-    
+
     @validator('version_calculo', pre=True)
     def validar_version_calculo(cls, v):
         """Valida y normaliza la versión de cálculo"""
@@ -165,7 +165,7 @@ class OpReal(BaseModel):
     costos_componentes: CostosComponentesOP = Field(..., description="Desglose de costos")
     costo_total_unitario: float = Field(..., ge=0, description="Costo total unitario")
     esfuerzo_total: int = Field(default=6, ge=1, le=10, description="Esfuerzo total de la OP")
-    
+
     # ✅ NUEVOS: Campos para límites aplicados
     precio_ajustado: Optional[bool] = Field(default=False, description="Si el precio fue ajustado por límites")
     precio_original: Optional[float] = Field(None, description="Precio original antes de ajustes")
@@ -237,7 +237,7 @@ class ComponenteCosto(BaseModel):
     detalles: Optional[Dict[str, Any]] = Field(None, description="Detalles adicionales")
     validado: bool = Field(default=False, description="Si fue validado")
     ajustado_por_rango: bool = Field(default=False, description="Si fue ajustado por rango")
-    
+
     @validator('fuente', pre=True)
     def validar_fuente(cls, v):
         """Convierte string a enum si es necesario"""
@@ -295,19 +295,19 @@ class CotizacionResponse(BaseModel):
     # Identificación
     id_cotizacion: str = Field(..., description="ID único de cotización")
     fecha_cotizacion: datetime = Field(..., description="Fecha de cotización")
-    
+
     # Inputs procesados (incluye version_calculo)
     inputs: CotizacionInput = Field(..., description="Datos de entrada")
-    
+
     # Categorización automática
     categoria_lote: str = Field(..., description="Categoría del lote determinada")
     categoria_esfuerzo: Optional[int] = Field(None, description="Nivel de esfuerzo")
     categoria_estilo: TipoEstilo = Field(..., description="Categoría del estilo")
     factor_marca: float = Field(..., description="Factor aplicado por marca")
-    
+
     # Componentes de costo
     componentes: List[ComponenteCosto] = Field(..., description="Desglose de componentes")
-    
+
     # Cálculos individuales
     costo_textil: float = Field(..., description="Costo textil unitario")
     costo_manufactura: float = Field(..., description="Costo manufactura unitario")
@@ -317,29 +317,29 @@ class CotizacionResponse(BaseModel):
     gasto_administracion: float = Field(..., description="Gasto administración unitario")
     gasto_ventas: float = Field(..., description="Gasto ventas unitario")
     costo_base_total: float = Field(..., description="Costo base total unitario")
-    
+
     # Vector de ajuste
     factor_lote: float = Field(..., description="Factor de lote aplicado")
     factor_esfuerzo: float = Field(..., description="Factor de esfuerzo aplicado")
     factor_estilo: float = Field(..., description="Factor de estilo aplicado")
     vector_total: float = Field(..., description="Vector total de ajuste")
-    
+
     # Resultado final
     precio_final: float = Field(..., description="Precio final por prenda")
     margen_aplicado: float = Field(..., description="Margen aplicado en porcentaje")
-    
+
     # Validaciones y alertas
     validaciones: List[str] = Field(..., description="Lista de validaciones exitosas")
     alertas: List[str] = Field(..., description="Lista de alertas/advertencias")
-    
+
     # Info comercial avanzada
     info_comercial: InfoComercial = Field(..., description="Información comercial")
-    
+
     # Metadatos de procesamiento
     metodos_usados: List[str] = Field(..., description="Métodos utilizados")
     registros_encontrados: int = Field(..., description="Registros encontrados en BD")
     precision_estimada: float = Field(..., description="Precisión estimada del cálculo")
-    
+
     # ✅ CAMPOS MEJORADOS Y NUEVOS
     version_calculo_usada: VersionCalculo = Field(..., description="Versión de cálculo aplicada")
     codigo_estilo: Optional[str] = Field(None, description="Código del estilo")

@@ -6,57 +6,57 @@ from config import settings, db_config
 
 def diagnosticar_version_calculo():
     """Diagnóstica qué está mal con version_calculo"""
-    
+
     connection_string = db_config.get_connection_string(settings)
-    
+
     try:
         conn = pyodbc.connect(connection_string)
         cursor = conn.cursor()
-        
+
         print("🔍 DIAGNÓSTICO DE version_calculo")
         print("=" * 50)
-        
+
         # 1. Verificar conexión a BD correcta
         cursor.execute("SELECT DB_NAME()")
         db_name = cursor.fetchone()[0]
         print(f"✅ Conectado a BD: {db_name}")
-        
+
         # 2. Verificar esquema disponible
         cursor.execute("SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA")
         schemas = [row[0] for row in cursor.fetchall()]
         print(f"✅ Esquemas disponibles: {schemas}")
-        
+
         # 3. Verificar tablas en esquema TDV.saya
         cursor.execute("""
-            SELECT TABLE_NAME 
-            FROM INFORMATION_SCHEMA.TABLES 
+            SELECT TABLE_NAME
+            FROM INFORMATION_SCHEMA.TABLES
             WHERE TABLE_SCHEMA = 'saya'
         """)
         tablas = [row[0] for row in cursor.fetchall()]
         print(f"✅ Tablas en saya: {tablas}")
-        
+
         # 4. Verificar columnas en COSTO_OP_DETALLE
         cursor.execute("""
-            SELECT COLUMN_NAME, DATA_TYPE 
-            FROM INFORMATION_SCHEMA.COLUMNS 
-            WHERE TABLE_SCHEMA = 'saya' 
+            SELECT COLUMN_NAME, DATA_TYPE
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = 'saya'
             AND TABLE_NAME = 'COSTO_OP_DETALLE'
             ORDER BY ORDINAL_POSITION
         """)
         columnas_costo = cursor.fetchall()
-        print(f"✅ Columnas en COSTO_OP_DETALLE:")
+        print("✅ Columnas en COSTO_OP_DETALLE:")
         for col, tipo in columnas_costo:
             print(f"   - {col} ({tipo})")
-        
+
         # 5. PRUEBA ESPECÍFICA: ¿Existe version_calculo?
         version_calculo_existe = any(col[0] == 'version_calculo' for col in columnas_costo)
         print(f"🎯 ¿Existe version_calculo en COSTO_OP_DETALLE? {version_calculo_existe}")
-        
+
         # 6. Si existe, probar consulta simple
         if version_calculo_existe:
             cursor.execute("""
                 SELECT DISTINCT version_calculo, COUNT(*) as registros
-                FROM TDV.saya.COSTO_OP_DETALLE 
+                FROM TDV.saya.COSTO_OP_DETALLE
                 GROUP BY version_calculo
                 ORDER BY registros DESC
             """)
@@ -64,58 +64,58 @@ def diagnosticar_version_calculo():
             print("✅ Versiones disponibles en COSTO_OP_DETALLE:")
             for version, count in versiones:
                 print(f"   - {version}: {count:,} registros")
-                
+
             # 7. Probar consulta con parámetro (la que falla)
             print("\n🧪 PROBANDO CONSULTA PROBLEMÁTICA:")
             try:
                 cursor.execute("""
-                    SELECT COUNT(*) 
-                    FROM TDV.saya.COSTO_OP_DETALLE 
+                    SELECT COUNT(*)
+                    FROM TDV.saya.COSTO_OP_DETALLE
                     WHERE version_calculo = ?
                 """, ('FLUIDA',))
                 resultado = cursor.fetchone()[0]
                 print(f"✅ Query con parámetro FUNCIONA: {resultado:,} registros FLUIDA")
-                
+
             except Exception as e:
                 print(f"❌ Query con parámetro FALLA: {e}")
-                
+
             # 8. Probar consulta con fecha_corrida (la problemática completa)
             print("\n🧪 PROBANDO CONSULTA CON fecha_corrida:")
             try:
                 cursor.execute("""
-                    SELECT MAX(fecha_corrida) as fecha_max 
-                    FROM TDV.saya.COSTO_OP_DETALLE 
+                    SELECT MAX(fecha_corrida) as fecha_max
+                    FROM TDV.saya.COSTO_OP_DETALLE
                     WHERE version_calculo = ?
                 """, ('FLUIDA',))
                 resultado = cursor.fetchone()[0]
                 print(f"✅ Query completa FUNCIONA: {resultado}")
-                
+
             except Exception as e:
                 print(f"❌ Query completa FALLA: {e}")
-        
+
         # 9. Verificar otras tablas problemáticas
         for tabla in ['HISTORIAL_ESTILOS', 'RESUMEN_WIP_POR_PRENDA']:
             try:
                 cursor.execute(f"""
-                    SELECT COLUMN_NAME 
-                    FROM INFORMATION_SCHEMA.COLUMNS 
-                    WHERE TABLE_SCHEMA = 'saya' 
+                    SELECT COLUMN_NAME
+                    FROM INFORMATION_SCHEMA.COLUMNS
+                    WHERE TABLE_SCHEMA = 'saya'
                     AND TABLE_NAME = '{tabla}'
                     AND COLUMN_NAME = 'version_calculo'
                 """)
                 existe = cursor.fetchone()
                 print(f"🎯 {tabla} tiene version_calculo: {existe is not None}")
-                
+
                 if existe:
                     cursor.execute(f"SELECT DISTINCT version_calculo FROM TDV.saya.{tabla}")
                     versiones = [row[0] for row in cursor.fetchall()]
                     print(f"   Versiones: {versiones}")
-                    
+
             except Exception as e:
                 print(f"❌ Error verificando {tabla}: {e}")
-        
+
         conn.close()
-        
+
     except Exception as e:
         print(f"❌ ERROR DE CONEXIÓN: {e}")
         print(f"   Connection string: {connection_string}")

@@ -85,9 +85,9 @@ COPY --from=builder --chown=${APP_USER}:${APP_USER} /opt/venv /opt/venv
 COPY --from=builder --chown=${APP_USER}:${APP_USER} /src /app
 
 # configure odbc
-COPY odbcinst.sh .
+COPY odbcinst.sh /tmp
 RUN set -eux; \
-    ./odbcinst.sh
+    /tmp/odbcinst.sh
 
 WORKDIR /app
 USER ${APP_USER}

@@ -1,3 +1,5 @@
+#!/usr/bin/env sh
+
 LIBTDS=$(find /lib /usr/lib -type l -name 'libtdsodbc*.so*' 2>/dev/null)
 odbcinst -i -d -f /dev/stdin <<EOF
 [FreeTDS]

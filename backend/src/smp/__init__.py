@@ -1,38 +1,24 @@
 import logging
 import sys
-import os
 
 from pathlib import Path
+from platformdirs import user_log_dir
 
 
 __version__ = "0.1.0"
 
-# CONFIGURAR LOGGING SIN EMOJIS Y CON UTF-8
+# log config
 APP = "tdv_cotizador"
-WIN = sys.platform.startswith("win")
-HOME = Path.home()
-BASE = (
-    Path(
-        os.environ.get("LOCALAPPDATA")
-        or os.environ.get("APPDATA")
-        or HOME / "AppData" / "Local"
-    )
-    if WIN
-    else Path(
-        os.environ.get("XDG_STATE_HOME")
-        or os.environ.get("XDG_DATA_HOME")
-        or HOME / ".local" / "state"
-    )
-)
-LOGDIR = BASE / APP / ("Logs" if WIN else "logs")
-LOGDIR.mkdir(parents=True, exist_ok=True)
-LOGFILE = LOGDIR / f"{APP}.log"
+logfile = Path(user_log_dir(APP)) / f"{APP}.log"
+logfile.parent.mkdir(parents=True, exist_ok=True)
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
-        logging.FileHandler(LOGFILE),
-        logging.StreamHandler(sys.stdout if WIN else sys.stderr),
+        logging.FileHandler(logfile),
+        logging.StreamHandler(
+            sys.stdout if sys.platform.startswith("win") else sys.stderr
+        ),
     ],
 )

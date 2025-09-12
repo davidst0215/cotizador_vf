@@ -15,16 +15,18 @@ from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime
 from uuid import uuid4
 
-from models import (
+from .models import (
     CotizacionInput,
     CotizacionResponse,
     ComponenteCosto,
+    TipoEstilo,
     WipConfiguracion,
     InfoComercial,
     WipSeleccionada,
+    VersionCalculo
 )
-from database import tdv_queries
-from config import factores
+from .database import tdv_queries
+from .config import factores
 
 logger = logging.getLogger(__name__)
 
@@ -178,7 +180,7 @@ class CotizadorTDV:
 
         # Validar version_calculo
         if not hasattr(input_data, "version_calculo") or not input_data.version_calculo:
-            input_data.version_calculo = "FLUIDA"  # Default
+            input_data.version_calculo = VersionCalculo.FLUIDA  # Default
         else:
             versiones_validas = ["FLUIDA", "truncado"]
             if input_data.version_calculo not in versiones_validas:
@@ -222,7 +224,7 @@ class CotizadorTDV:
 
     def _determinar_categoria_estilo_completa(
         self, input_data: CotizacionInput
-    ) -> Tuple[str, int, Optional[Dict]]:
+    ) -> Tuple[TipoEstilo, int, Optional[Dict]]:
         """
         ✅ FUNCIÓN COMPLETAMENTE CORREGIDA: Determina categoría con auto-completado
 
@@ -230,7 +232,7 @@ class CotizadorTDV:
             Tuple[categoria, volumen_historico, info_autocompletado]
         """
 
-        categoria_estilo = "Nuevo"
+        categoria_estilo = TipoEstilo.NUEVO
         volumen_historico = 0
         info_autocompletado = None
 
@@ -248,11 +250,11 @@ class CotizadorTDV:
 
                     # Categorizar según volumen
                     if volumen_total >= 4000:
-                        categoria_estilo = "Muy Recurrente"
+                        categoria_estilo = TipoEstilo.MUY_RECURRENTE
                     elif volumen_total > 0:
-                        categoria_estilo = "Recurrente"
+                        categoria_estilo = TipoEstilo.RECURRENTE
                     else:
-                        categoria_estilo = "Nuevo"
+                        categoria_estilo = TipoEstilo.NUEVO
 
                     # Información para auto-completado
                     info_autocompletado = {
@@ -273,7 +275,7 @@ class CotizadorTDV:
                     )
                 else:
                     # No encontrado, es nuevo
-                    categoria_estilo = "Nuevo"
+                    categoria_estilo = TipoEstilo.NUEVO
                     logger.info(
                         f"🆕 Estilo {input_data.codigo_estilo} NO ENCONTRADO: categoría=Nuevo"
                     )
@@ -282,7 +284,7 @@ class CotizadorTDV:
                 logger.error(
                     f"❌ Error determinando categoría estilo {input_data.codigo_estilo}: {e}"
                 )
-                categoria_estilo = "Nuevo"  # Asumir nuevo en caso de error
+                categoria_estilo = TipoEstilo.NUEVO  # Asumir nuevo en caso de error
 
         return categoria_estilo, volumen_historico, info_autocompletado
 

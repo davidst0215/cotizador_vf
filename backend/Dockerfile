@@ -84,6 +84,11 @@ RUN set -eux; \
 COPY --from=builder --chown=${APP_USER}:${APP_USER} /opt/venv /opt/venv
 COPY --from=builder --chown=${APP_USER}:${APP_USER} /src /app
 
+# configure odbc
+COPY odbcinst.sh .
+RUN set -eux; \
+    ./odbcinst.sh
+
 WORKDIR /app
 USER ${APP_USER}
 

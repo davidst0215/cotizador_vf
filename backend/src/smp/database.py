@@ -114,16 +114,16 @@ class TDVQueries:
     ) -> datetime:
         """Obtiene la fecha_corrida máxima de cada tabla para una versión específica"""
 
-        # HISTORIAL_ESTILOS no tiene version_calculo
+        # historial_estilos no tiene version_calculo
         if tabla == "historial_estilos":
             query = f"SELECT MAX(fecha_corrida) as fecha_max FROM {settings.db_schema}.historial_estilos"
             resultado = self.db.execute_query(query)
         else:
             # Para las otras tablas que SÍ tienen version_calculo
             queries = {
-                "COSTO_OP_DETALLE": f"SELECT MAX(fecha_corrida) as fecha_max FROM {settings.db_schema}.costo_op_detalle WHERE version_calculo = ?",
-                "RESUMEN_WIP_POR_PRENDA": f"SELECT MAX(fecha_corrida) as fecha_max FROM {settings.db_schema}.resumen_wip_por_prenda WHERE version_calculo = ?",
-                "COSTO_WIP_OP": f"SELECT MAX(fecha_corrida) as fecha_max FROM {settings.db_schema}.costo_wip_op WHERE version_calculo = ?",
+                "costo_op_detalle": f"SELECT MAX(fecha_corrida) as fecha_max FROM {settings.db_schema}.costo_op_detalle WHERE version_calculo = ?",
+                "resumen_wip_por_prenda": f"SELECT MAX(fecha_corrida) as fecha_max FROM {settings.db_schema}.resumen_wip_por_prenda WHERE version_calculo = ?",
+                "costo_wip_op": f"SELECT MAX(fecha_corrida) as fecha_max FROM {settings.db_schema}.costo_wip_op WHERE version_calculo = ?",
             }
 
             if tabla in queries:
@@ -143,8 +143,8 @@ class TDVQueries:
         version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
     ) -> bool:
         """
-        Verifica si un estilo existe HISTORIAL_ESTILOS no tiene
-        version_calculo, solo COSTO_OP_DETALLE
+        Verifica si un estilo existe historial_estilos no tiene
+        version_calculo, solo costo_op_detalle
         """
 
         if not codigo_estilo or not codigo_estilo.strip():
@@ -153,7 +153,7 @@ class TDVQueries:
         codigo_estilo = codigo_estilo.strip().upper()
 
         try:
-            # ✅ PASO 1: Verificar en HISTORIAL_ESTILOS (SIN version_calculo)
+            # ✅ PASO 1: Verificar en historial_estilos (SIN version_calculo)
             query_historial = f"""
             SELECT COUNT(*) as total_historial
             FROM {settings.db_schema}.historial_estilos h
@@ -172,8 +172,7 @@ class TDVQueries:
                 else False
             )
 
-            # ✅ PASO 2: Verificar en COSTO_OP_DETALLE (CON version_calculo)
-            # ✅ CORREGIDO: Usar fechas relativas en lugar de GETDATE()
+            # ✅ PASO 2: Verificar en costo_op_detalle (CON version_calculo)
             query_ops = f"""
             SELECT COUNT(*) as total_ops
             FROM {settings.db_schema}.costo_op_detalle c
@@ -185,7 +184,7 @@ class TDVQueries:
                 WHERE version_calculo = ?)
               AND c.prendas_requeridas > 0
               AND c.fecha_facturacion >= (
-                SELECT DATEADD(month, -36, MAX(fecha_facturacion))
+                SELECT (MAX(fecha_facturacion) - INTERVAL '36 months')
                 FROM {settings.db_schema}.costo_op_detalle
                 WHERE version_calculo = ?
               )
@@ -266,7 +265,7 @@ class TDVQueries:
                 FROM {settings.db_schema}.historial_estilos)
               AND c.prendas_requeridas > 0
               AND c.fecha_facturacion >= (
-                SELECT DATEADD(month, -36, MAX(fecha_facturacion))
+                SELECT (MAX(fecha_facturacion) - INTERVAL '36 months')
                 FROM {settings.db_schema}.costo_op_detalle
                 WHERE version_calculo = ?
               )
@@ -300,7 +299,7 @@ class TDVQueries:
                     "version_calculo": version_calculo,
                 }
 
-            # ✅ FALLBACK: Buscar solo en COSTO_OP_DETALLE con fechas relativas
+            # ✅ FALLBACK: Buscar solo en costo_op_detalle con fechas relativas
             logger.info(
                 f"🔍 Estilo {codigo_estilo} no en historial, buscando en OPs directamente..."
             )
@@ -324,7 +323,7 @@ class TDVQueries:
                 WHERE version_calculo = ?)
               AND c.prendas_requeridas > 0
               AND c.fecha_facturacion >= (
-                SELECT DATEADD(month, -36, MAX(fecha_facturacion))
+                SELECT (MAX(fecha_facturacion) - INTERVAL '36 months')
                 FROM {settings.db_schema}.costo_op_detalle
                 WHERE version_calculo = ?
               )
@@ -432,7 +431,7 @@ class TDVQueries:
             SELECT MAX(fecha_corrida)
             FROM {settings.db_schema}.historial_estilos)
           AND c.fecha_facturacion >= (
-            SELECT DATEADD(month, -24, MAX(fecha_facturacion))
+            SELECT (MAX(fecha_facturacion) - INTERVAL '24 months')
             FROM {settings.db_schema}.costo_op_detalle
             WHERE version_calculo = ?
           )
@@ -488,7 +487,7 @@ class TDVQueries:
             FROM {settings.db_schema}.costo_op_detalle
             WHERE version_calculo = ?)
           AND fecha_facturacion >= (
-            SELECT DATEADD(month, -36, MAX(fecha_facturacion))
+            SELECT (MAX(fecha_facturacion) - INTERVAL '36 months')
             FROM {settings.db_schema}.costo_op_detalle
             WHERE version_calculo = ?
           )
@@ -517,7 +516,7 @@ class TDVQueries:
             FROM {settings.db_schema}.costo_op_detalle
             WHERE version_calculo = ?)
         AND fecha_facturacion >= (
-            SELECT DATEADD(month, -36, MAX(fecha_facturacion))
+            SELECT (MAX(fecha_facturacion) - INTERVAL '36 months')
             FROM {settings.db_schema}.costo_op_detalle
             WHERE version_calculo = ?
         )
@@ -549,7 +548,7 @@ class TDVQueries:
           FROM {settings.db_schema}.costo_op_detalle
           WHERE version_calculo = ?)
         AND fecha_facturacion >= (
-          SELECT DATEADD(month, -24, MAX(fecha_facturacion))
+          SELECT (MAX(fecha_facturacion) - INTERVAL '24 months')
           FROM {settings.db_schema}.costo_op_detalle
           WHERE version_calculo = ?
         )
@@ -595,7 +594,7 @@ class TDVQueries:
                 FROM {settings.db_schema}.costo_op_detalle
                 WHERE version_calculo = ?)
               AND fecha_facturacion >= (
-                  SELECT DATEADD(month, -6, MAX(fecha_facturacion))
+                  SELECT (MAX(fecha_facturacion) - INTERVAL '6 months')
                   FROM {settings.db_schema}.costo_op_detalle
                   WHERE version_calculo = ?
               )
@@ -639,7 +638,7 @@ class TDVQueries:
             FROM {settings.db_schema}.costo_op_detalle
             WHERE version_calculo = ?)
           AND fecha_facturacion >= (
-            SELECT DATEADD(month, -20, MAX(fecha_facturacion))
+            SELECT (MAX(fecha_facturacion) - INTERVAL '20 months')
             FROM {settings.db_schema}.costo_op_detalle
             WHERE version_calculo = ?
           )
@@ -707,7 +706,7 @@ class TDVQueries:
           SELECT MAX(fecha_corrida)
           FROM {settings.db_schema}.historial_estilos)
         AND c.fecha_facturacion >= (
-          SELECT DATEADD(month, -?, MAX(fecha_facturacion))
+          SELECT (MAX(fecha_facturacion) - ? * INTERVAL ' months')
           FROM {settings.db_schema}.costo_op_detalle
           WHERE version_calculo = ?
         )
@@ -859,7 +858,7 @@ class TDVQueries:
             FROM {settings.db_schema}.resumen_wip_por_prenda
             WHERE version_calculo = ?)
           AND mes >= (
-            SELECT DATEADD(month, -18, MAX(mes))
+            SELECT (MAX(mes) - INTERVAL '18 months')
             FROM {settings.db_schema}.resumen_wip_por_prenda
             WHERE version_calculo = ? AND tipo_de_producto = ?
           )
@@ -943,7 +942,7 @@ class TDVQueries:
                     FROM {settings.db_schema}.resumen_wip_por_prenda
                     WHERE version_calculo = ?)
                   AND mes >= (
-                    SELECT DATEADD(month, -?, MAX(mes))
+                    SELECT (MAX(mes) - ? * INTERVAL '1 month')
                     FROM {settings.db_schema}.resumen_wip_por_prenda
                     WHERE version_calculo = ? AND tipo_de_producto = ?
                   )
@@ -993,7 +992,7 @@ class TDVQueries:
                         FROM {settings.db_schema}.resumen_wip_por_prenda
                         WHERE version_calculo = ?)
                       AND mes >= (
-                        SELECT DATEADD(month, -?, MAX(mes))
+                        SELECT (MAX(mes) - ? * INTERVAL '1 month')
                         FROM {settings.db_schema}.resumen_wip_por_prenda
                         WHERE version_calculo = ? AND tipo_de_producto = ?
                       )
@@ -1048,7 +1047,7 @@ class TDVQueries:
             FROM {settings.db_schema}.resumen_wip_por_prenda
             WHERE version_calculo = ?)
           AND w.mes >= (
-            SELECT DATEADD(month, -18, MAX(mes))
+            SELECT (MAX(mes) - INTERVAL '18 months')
             FROM {settings.db_schema}.resumen_wip_por_prenda
             WHERE version_calculo = ? AND tipo_de_producto = ?
           )
@@ -1147,7 +1146,7 @@ class TDVQueries:
             FROM {settings.db_schema}.resumen_wip_por_prenda
             WHERE version_calculo = ?)
           AND mes >= (
-            SELECT DATEADD(month, -18, MAX(mes))
+            SELECT (MAX(mes) - INTERVAL '18 months')
             FROM {settings.db_schema}.resumen_wip_por_prenda
             WHERE version_calculo = ? AND tipo_de_producto = ?
           )
@@ -1309,7 +1308,7 @@ class TDVQueries:
           FROM {settings.db_schema}.costo_op_detalle
           WHERE version_calculo = ?)
         AND fecha_facturacion >= (
-          SELECT DATEADD(year, -1, MAX(fecha_facturacion))
+          SELECT (MAX(fecha_facturacion) - INTERVAL '12 months')
           FROM {settings.db_schema}.costo_op_detalle
           WHERE version_calculo = ?
         )
@@ -1396,10 +1395,7 @@ class TDVQueries:
         codigo_estilo: str,
         version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
     ) -> int:
-        """
-        ✅ SIN CAMBIOS: Ya usa lógica correcta con fecha_corrida
-        """
-        # ✅ QUERY YA CORRECTA: Solo filtrar version_calculo en COSTO_OP_DETALLE
+        # Solo filtrar version_calculo en costo_op_detalle
         query = f"""
         SELECT COALESCE(SUM(prendas_requeridas), 0) as volumen_total
         FROM {settings.db_schema}.costo_op_detalle c
@@ -1507,7 +1503,7 @@ class TDVQueries:
                     SELECT MAX(fecha_corrida)
                     FROM {settings.db_schema}.historial_estilos)
                   AND c.fecha_facturacion >= (
-                    SELECT DATEADD(month, -18, MAX(fecha_facturacion))
+                    SELECT (MAX(fecha_facturacion) - INTERVAL '18 months')
                     FROM {settings.db_schema}.costo_op_detalle
                     WHERE version_calculo = ?
                 )
@@ -1572,7 +1568,7 @@ class TDVQueries:
                     FROM {settings.db_schema}.costo_op_detalle
                     WHERE version_calculo = ?)
                   AND c.fecha_facturacion >= (
-                    SELECT DATEADD(month, -18, MAX(fecha_facturacion))
+                    SELECT (MAX(fecha_facturacion) - INTERVAL '18 months')
                     FROM {settings.db_schema}.costo_op_detalle
                     WHERE version_calculo = ?
                 )
@@ -1773,7 +1769,7 @@ class TDVQueries:
             SELECT MAX(fecha_corrida)
             FROM {settings.db_schema}.costo_op_detalle
             WHERE version_calculo = ?)
-          AND fecha_facturacion >= DATEADD(month, -6, GETDATE())
+          AND fecha_facturacion >= (GETDATE() - INTERVAL '6 months')
           AND prendas_requeridas > 0
         """
 
@@ -1801,7 +1797,7 @@ class TDVQueries:
             SELECT MAX(fecha_corrida)
             FROM {settings.db_schema}.costo_op_detalle
             WHERE version_calculo = ?)
-         AND fecha_facturacion >= DATEADD(month, -18, GETDATE())
+         AND fecha_facturacion >= (GETDATE() - INTERVAL '18 months')
           AND prendas_requeridas > 0
         GROUP BY YEAR(fecha_facturacion), MONTH(fecha_facturacion)
         ORDER BY año DESC, mes DESC
@@ -1828,7 +1824,7 @@ class TDVQueries:
             SELECT MAX(fecha_corrida)
             FROM {settings.db_schema}.costo_op_detalle
             WHERE version_calculo = ?)
-          AND fecha_facturacion >= DATEADD(month, -12, GETDATE())
+          AND fecha_facturacion >= (GETDATE() - INTERVAL '12 months')
           AND prendas_requeridas > 0
         GROUP BY cliente
         ORDER BY SUM(prendas_requeridas) DESC

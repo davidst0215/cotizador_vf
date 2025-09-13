@@ -34,7 +34,7 @@ from .database import TDVQueries
 from .utils import cotizador_tdv
 
 logger = logging.getLogger(__name__)
-tdv_queries = TDVQueries.get_instance()
+tdv_queries: TDVQueries = TDVQueries.get_instance()
 
 
 # SERIALIZADOR JSON PERSONALIZADO
@@ -142,8 +142,8 @@ async def root():
         "status": "activo",
         "arquitectura": "TDV Real Database",
         "features": [
-            "✅ CORREGIDO: Búsqueda mejorada en COSTO_OP_DETALLE",
-            "✅ CORREGIDO: Configurador WIPs desde RESUMEN_WIP_POR_PRENDA",
+            "✅ CORREGIDO: Búsqueda mejorada en costo_op_detalle",
+            "✅ CORREGIDO: Configurador WIPs desde resumen_wip_por_prenda",
             "✅ CORREGIDO: Categorización automática de estilos",
             "✅ NUEVO: Auto-completado inteligente para estilos recurrentes",
             "✅ NUEVO: Endpoint OPs reales utilizadas",
@@ -392,7 +392,7 @@ async def obtener_wips_disponibles(
             total_disponibles=len(
                 [w for w in wips_textiles + wips_manufactura if w.disponible]
             ),
-            fuente="RESUMEN_WIP_POR_PRENDA",
+            fuente="resumen_wip_por_prenda",
             fecha_actualizacion=datetime.now(),
             metodo_analisis=metodo_usado,
             tipo_prenda_filtro=tipo_prenda,
@@ -467,7 +467,7 @@ async def obtener_clientes(
         respuesta = {
             "clientes": clientes,
             "total": len(clientes),
-            "fuente": "COSTO_OP_DETALLE",
+            "fuente": "costo_op_detalle",
             "version_calculo": version_calculo,
             "timestamp": datetime.now().isoformat(),
         }
@@ -486,7 +486,7 @@ async def obtener_clientes(
 async def obtener_familias_productos(
     version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
 ):
-    """✅ CORREGIDO: Obtiene familias de productos disponibles CON VERSION_CALCULO"""
+    """Obtiene familias de productos disponibles CON VERSION_CALCULO"""
     try:
         logger.info(f"📁 Cargando familias para versión: {version_calculo}")
 
@@ -495,7 +495,7 @@ async def obtener_familias_productos(
         respuesta = {
             "familias": familias,
             "total": len(familias),
-            "fuente": "COSTO_OP_DETALLE",
+            "fuente": "costo_op_detalle",
             "version_calculo": version_calculo,
             "timestamp": datetime.now().isoformat(),
         }
@@ -524,7 +524,7 @@ async def obtener_tipos_prenda(
             "tipos": tipos,
             "familia": familia,
             "total": len(tipos),
-            "fuente": "COSTO_OP_DETALLE",
+            "fuente": "costo_op_detalle",
             "version_calculo": version_calculo,
             "timestamp": datetime.now().isoformat(),
         }
@@ -793,7 +793,7 @@ async def obtener_info_fechas_corrida(
         logger.info(f"📅 Obteniendo fechas corrida para versión: {version_calculo}")
 
         info_fechas = {}
-        tablas = ["COSTO_OP_DETALLE", "RESUMEN_WIP_POR_PRENDA", "HISTORIAL_ESTILOS"]
+        tablas = ["costo_op_detalle", "resumen_wip_por_prenda", "historial_estilos"]
 
         for tabla in tablas:
             try:
@@ -1029,7 +1029,7 @@ async def debug_estilo_clasificacion(
     try:
         debug_info = {}
 
-        # 1. Verificación en HISTORIAL_ESTILOS
+        # 1. Verificación en historial_estilos
         query_historial = f"""
         SELECT COUNT(*) as total, MAX(fecha_corrida) as ultima_corrida
         FROM {settings.db_schema}.historial_estilos
@@ -1042,7 +1042,7 @@ async def debug_estilo_clasificacion(
             resultado_historial[0] if resultado_historial else {}
         )
 
-        # 2. Verificación en COSTO_OP_DETALLE
+        # 2. Verificación en costo_op_detalle
         query_ops = f"""
         SELECT
           COUNT(*) as total_ops,
@@ -1206,14 +1206,14 @@ async def startup_event():
                     logger.info(f"     - {version}: {registros} registros")
             else:
                 logger.warning(
-                    "⚠️ No se encontraron versiones de cálculo en COSTO_OP_DETALLE"
+                    "⚠️ No se encontraron versiones de cálculo en costo_op_detalle"
                 )
 
         except Exception as e:
             logger.warning(f"⚠️ Error verificando versiones de cálculo: {e}")
 
         # Verificar fechas de corrida por versión
-        for tabla in ["COSTO_OP_DETALLE", "RESUMEN_WIP_POR_PRENDA"]:
+        for tabla in ["costo_op_detalle", "resumen_wip_por_prenda"]:
             try:
                 for version in ["FLUIDA", "truncado"]:
                     try:

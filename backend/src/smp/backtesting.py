@@ -36,7 +36,7 @@ def diagnosticar_version_calculo():
         tablas = [row[0] for row in cursor.fetchall()]
         print(f"✅ Tablas: {tablas}")
 
-        # 4. Verificar columnas en COSTO_OP_DETALLE
+        # 4. Verificar columnas en costo_op_detalle
         cursor.execute(f"""
             SELECT COLUMN_NAME, DATA_TYPE
             FROM INFORMATION_SCHEMA.COLUMNS
@@ -54,7 +54,7 @@ def diagnosticar_version_calculo():
             col[0] == "version_calculo" for col in columnas_costo
         )
         print(
-            f"🎯 ¿Existe version_calculo en COSTO_OP_DETALLE? {version_calculo_existe}"
+            f"🎯 ¿Existe version_calculo en costo_op_detalle? {version_calculo_existe}"
         )
 
         # 6. Si existe, probar consulta simple
@@ -66,7 +66,7 @@ def diagnosticar_version_calculo():
                 ORDER BY registros DESC
             """)
             versiones = cursor.fetchall()
-            print("✅ Versiones disponibles en COSTO_OP_DETALLE:")
+            print("✅ Versiones disponibles en costo_op_detalle:")
             for version, count in versiones:
                 print(f"   - {version}: {count:,} registros")
 
@@ -107,7 +107,7 @@ def diagnosticar_version_calculo():
                 print(f"❌ Query completa FALLA: {e}")
 
         # 9. Verificar otras tablas problemáticas
-        for tabla in ["HISTORIAL_ESTILOS", "RESUMEN_WIP_POR_PRENDA"]:
+        for tabla in ["historial_estilos", "resumen_wip_por_prenda"]:
             try:
                 cursor.execute(f"""
                     SELECT COLUMN_NAME

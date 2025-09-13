@@ -115,7 +115,7 @@ class TDVQueries:
         """Obtiene la fecha_corrida máxima de cada tabla para una versión específica"""
 
         # HISTORIAL_ESTILOS no tiene version_calculo
-        if tabla == "HISTORIAL_ESTILOS":
+        if tabla == "historial_estilos":
             query = f"SELECT MAX(fecha_corrida) as fecha_max FROM {settings.db_schema}.historial_estilos"
             resultado = self.db.execute_query(query)
         else:
@@ -935,18 +935,19 @@ class TDVQueries:
                 SELECT
                   AVG(CAST(costo_por_prenda AS FLOAT)) as costo_promedio
                 FROM {settings.db_schema}.resumen_wip_por_prenda
-                WHERE wip_id = ? AND tipo_de_producto = ?
-                AND version_calculo = ?
-                AND fecha_corrida = (
-                  SELECT MAX(fecha_corrida)
-                  FROM {settings.db_schema}.resumen_wip_por_prenda
-                  WHERE version_calculo = ?)
-                AND mes >= (
-                  SELECT DATEADD(month, -?, MAX(mes))
-                  FROM {settings.db_schema}.resumen_wip_por_prenda
-                  WHERE version_calculo = ? AND tipo_de_producto = ?
-                )
-                AND costo_por_prenda > 0
+                WHERE wip_id = ?
+                  AND tipo_de_producto = ?
+                  AND version_calculo = ?
+                  AND fecha_corrida = (
+                    SELECT MAX(fecha_corrida)
+                    FROM {settings.db_schema}.resumen_wip_por_prenda
+                    WHERE version_calculo = ?)
+                  AND mes >= (
+                    SELECT DATEADD(month, -?, MAX(mes))
+                    FROM {settings.db_schema}.resumen_wip_por_prenda
+                    WHERE version_calculo = ? AND tipo_de_producto = ?
+                  )
+                  AND costo_por_prenda > 0
                 """
                 resultado_wip = self.db.execute_query(
                     query_wip,
@@ -986,17 +987,17 @@ class TDVQueries:
                     SELECT AVG(CAST(costo_por_prenda AS FLOAT)) as costo_promedio
                     FROM {settings.db_schema}.resumen_wip_por_prenda
                     WHERE wip_id = ? AND tipo_de_producto = ?
-                    AND version_calculo = ?
-                    AND fecha_corrida = (
-                      SELECT MAX(fecha_corrida)
-                      FROM {settings.db_schema}.resumen_wip_por_prenda
-                      WHERE version_calculo = ?)
-                    AND mes >= (
-                      SELECT DATEADD(month, -?, MAX(mes))
-                      FROM {settings.db_schema}.resumen_wip_por_prenda
-                      WHERE version_calculo = ? AND tipo_de_producto = ?
-                    )
-                    AND costo_por_prenda > 0
+                      AND version_calculo = ?
+                      AND fecha_corrida = (
+                        SELECT MAX(fecha_corrida)
+                        FROM {settings.db_schema}.resumen_wip_por_prenda
+                        WHERE version_calculo = ?)
+                      AND mes >= (
+                        SELECT DATEADD(month, -?, MAX(mes))
+                        FROM {settings.db_schema}.resumen_wip_por_prenda
+                        WHERE version_calculo = ? AND tipo_de_producto = ?
+                      )
+                      AND costo_por_prenda > 0
                     """
                     resultado_wip = self.db.execute_query(
                         query_wip,
@@ -1041,17 +1042,17 @@ class TDVQueries:
           w.wip_id as grupo_wip
         FROM {settings.db_schema}.resumen_wip_por_prenda w
         WHERE w.tipo_de_producto = ?
-        AND w.version_calculo = ?
-        AND w.fecha_corrida = (
-          SELECT MAX(fecha_corrida)
-          FROM {settings.db_schema}.resumen_wip_por_prenda
-          WHERE version_calculo = ?)
-        AND w.mes >= (
-          SELECT DATEADD(month, -18, MAX(mes))
-          FROM {settings.db_schema}.resumen_wip_por_prenda
-          WHERE version_calculo = ? AND tipo_de_producto = ?
-        )
-        AND w.costo_por_prenda > 0
+          AND w.version_calculo = ?
+          AND w.fecha_corrida = (
+            SELECT MAX(fecha_corrida)
+            FROM {settings.db_schema}.resumen_wip_por_prenda
+            WHERE version_calculo = ?)
+          AND w.mes >= (
+            SELECT DATEADD(month, -18, MAX(mes))
+            FROM {settings.db_schema}.resumen_wip_por_prenda
+            WHERE version_calculo = ? AND tipo_de_producto = ?
+          )
+          AND w.costo_por_prenda > 0
         GROUP BY w.wip_id
         HAVING COUNT(*) >= 1
         ORDER BY COUNT(*) DESC, AVG(w.costo_por_prenda) ASC
@@ -1139,18 +1140,18 @@ class TDVQueries:
         SELECT wip_id, AVG(CAST(costo_por_prenda AS FLOAT)) as costo_promedio
         FROM {settings.db_schema}.resumen_wip_por_prenda
         WHERE wip_id IN ('37', '45')
-        AND tipo_de_producto = ?
-        AND version_calculo = ?
-        AND fecha_corrida = (
-          SELECT MAX(fecha_corrida)
-          FROM {settings.db_schema}.resumen_wip_por_prenda
-          WHERE version_calculo = ?)
-        AND mes >= (
-          SELECT DATEADD(month, -18, MAX(mes))
-          FROM {settings.db_schema}.resumen_wip_por_prenda
-          WHERE version_calculo = ? AND tipo_de_producto = ?
-        )
-        AND costo_por_prenda > 0
+          AND tipo_de_producto = ?
+          AND version_calculo = ?
+          AND fecha_corrida = (
+            SELECT MAX(fecha_corrida)
+            FROM {settings.db_schema}.resumen_wip_por_prenda
+            WHERE version_calculo = ?)
+          AND mes >= (
+            SELECT DATEADD(month, -18, MAX(mes))
+            FROM {settings.db_schema}.resumen_wip_por_prenda
+            WHERE version_calculo = ? AND tipo_de_producto = ?
+          )
+          AND costo_por_prenda > 0
         GROUP BY wip_id
         """
 
@@ -1184,7 +1185,8 @@ class TDVQueries:
               WHERE version_calculo = ?)
           AND costo_por_prenda > 0
         )
-        SELECT wip_id, costo_por_prenda FROM UltimosCostos WHERE rn = 1
+        SELECT wip_id, costo_por_prenda
+        FROM UltimosCostos WHERE rn = 1
         """
 
         resultados_estables = self.db.execute_query(

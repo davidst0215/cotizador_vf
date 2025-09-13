@@ -89,6 +89,11 @@ COPY odbcinst.sh /tmp
 RUN set -eux; \
     /tmp/odbcinst.sh
 
+# configure entrypoint
+RUN printf '%s\n' '#!/bin/sh' \
+  "exec uvicorn ${APP_MODULE}.main:app --host 0.0.0.0 --port 8000 --proxy-headers" \
+  > /usr/local/bin/entrypoint.sh && chmod +x /usr/local/bin/entrypoint.sh
+
 WORKDIR /app
 USER ${APP_USER}
 
@@ -102,5 +107,4 @@ except: sys.exit(1)"
 
 EXPOSE 8000
 
-# Use exec form; user can override CMD at runtime.
-CMD ["uvicorn", "${APP_MODULE}.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]
+CMD ["/usr/local/bin/entrypoint.sh"]

@@ -10,7 +10,7 @@ services:
       - DB_PASSWORD=${DB_PASSWORD}
       - DB_NAME=${DB_NAME}
       - DB_SCHEMA=${DB_SCHEMA}
-      - CONNECTION_STRING=Driver={PostgreSQL};Server=${DB_HOST};Port=${DB_PORT};Database=${DB_NAME};Uid=${DB_USER};Pwd=${DB_PASSWORD};Sslmode=${SSLMODE};Pooling=1;Timeout=30;ConnectTimeout=10
+      - CONNECTION_STRING=Driver={PostgreSQL};Server=${DB_HOST};Port=${DB_PORT};Database=${DB_NAME};Uid=${DB_USER};Pwd=${DB_PASSWORD};Sslmode=${SSLMODE};sslrootcert=/.secrets/client.crt;Pooling=1;Timeout=30;ConnectTimeout=10
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -20,7 +20,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./backend:/app
+      - ./.secrets:/.secrets
 
   frontend:
     build:
@@ -36,8 +36,6 @@ services:
       start_period: 10s
     ports:
       - "3000:3000"
-    volumes:
-      - ./frontend:/app
     depends_on:
       backend:
         condition: service_healthy

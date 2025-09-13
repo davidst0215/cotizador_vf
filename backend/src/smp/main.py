@@ -687,20 +687,24 @@ async def obtener_analisis_historico(
 
         # Query base actualizada CON VERSION_CALCULO
         base_params = [familia, version_calculo, meses]
-        base_query = """
+        base_query = f"""
         SELECT
             COUNT(*) as total_ops,
             SUM(prendas_requeridas) as total_prendas,
             AVG(monto_factura / NULLIF(prendas_requeridas, 0)) as precio_promedio,
-            AVG((costo_textil + costo_manufactura + costo_avios + costo_materia_prima +
-                 costo_indirecto_fijo + gasto_administracion + gasto_ventas) / NULLIF(prendas_requeridas, 0)) as costo_promedio,
+            AVG((costo_textil + costo_manufactura + costo_avios
+                 + costo_materia_prima + costo_indirecto_fijo
+                 + gasto_administracion + gasto_ventas)
+                 / NULLIF(prendas_requeridas, 0)) as costo_promedio,
             AVG(CAST(esfuerzo_total AS FLOAT)) as esfuerzo_promedio,
             COUNT(DISTINCT cliente) as clientes_unicos
-        FROM TDV.saya.COSTO_OP_DETALLE
+        FROM {settings.db_schema}.costo_op_detalle
         WHERE familia_de_productos = ?
           AND version_calculo = ?
           AND fecha_corrida >= DATEADD(month, -?,
-              (SELECT MAX(fecha_corrida) FROM TDV.saya.COSTO_OP_DETALLE WHERE version_calculo = ?))
+              (SELECT MAX(fecha_corrida)
+               FROM {settings.db_schema}.costo_op_detalle
+               WHERE version_calculo = ?))
           AND prendas_requeridas > 0
         """
         base_params.append(version_calculo)  # Para el subquery
@@ -719,7 +723,7 @@ async def obtener_analisis_historico(
                 "meses": meses,
                 "version_calculo": version_calculo,
             },
-            "fuente": "COSTO_OP_DETALLE",
+            "fuente": "costo_op_detalle",
             "metodo": "fecha_corrida_maxima_con_version_calculo",
             "timestamp": datetime.now().isoformat(),
         }
@@ -1027,9 +1031,9 @@ async def debug_estilo_clasificacion(
         debug_info = {}
 
         # 1. Verificación en HISTORIAL_ESTILOS
-        query_historial = """
+        query_historial = f"""
         SELECT COUNT(*) as total, MAX(fecha_corrida) as ultima_corrida
-        FROM TDV.saya.HISTORIAL_ESTILOS
+        FROM {settings.db_schema}.historial_estilos
         WHERE codigo_estilo = ? AND version_calculo = ?
         """
         resultado_historial = tdv_queries.db.execute_query(
@@ -1040,10 +1044,13 @@ async def debug_estilo_clasificacion(
         )
 
         # 2. Verificación en COSTO_OP_DETALLE
-        query_ops = """
-        SELECT COUNT(*) as total_ops, SUM(prendas_requeridas) as volumen_total,
-               MAX(fecha_corrida) as ultima_corrida, MAX(fecha_facturacion) as ultima_facturacion
-        FROM TDV.saya.COSTO_OP_DETALLE
+        query_ops = f"""
+        SELECT
+          COUNT(*) as total_ops,
+          SUM(prendas_requeridas) as volumen_total,
+          MAX(fecha_corrida) as ultima_corrida,
+          MAX(fecha_facturacion) as ultima_facturacion
+        FROM {settings.db_schema}.costo_op_detalle
         WHERE estilo_propio = ? AND version_calculo = ?
         """
         resultado_ops = tdv_queries.db.execute_query(
@@ -1052,9 +1059,9 @@ async def debug_estilo_clasificacion(
         debug_info["costo_op_detalle"] = resultado_ops[0] if resultado_ops else {}
 
         # 3. Búsqueda con LIKE
-        query_like = """
+        query_like = f"""
         SELECT codigo_estilo, COUNT(*) as total
-        FROM TDV.saya.HISTORIAL_ESTILOS
+        FROM {settings.db_schema}.historial_estilos
         WHERE codigo_estilo LIKE ? AND version_calculo = ?
         GROUP BY codigo_estilo
         ORDER BY codigo_estilo
@@ -1104,13 +1111,13 @@ async def obtener_versiones_calculo():
         for version in versiones:
             try:
                 # Obtener estadísticas básicas por versión
-                query = """
+                query = f"""
                 SELECT
-                    COUNT(*) as total_registros,
-                    COUNT(DISTINCT cliente) as clientes_unicos,
-                    COUNT(DISTINCT familia_de_productos) as familias_unicas,
-                    MAX(fecha_corrida) as ultima_fecha_corrida
-                FROM TDV.saya.COSTO_OP_DETALLE
+                  COUNT(*) as total_registros,
+                  COUNT(DISTINCT cliente) as clientes_unicos,
+                  COUNT(DISTINCT familia_de_productos) as familias_unicas,
+                  MAX(fecha_corrida) as ultima_fecha_corrida
+                FROM {settings.db_schema}.costo_op_detalle
                 WHERE version_calculo = ?
                 """
                 resultado = tdv_queries.db.execute_query(query, (version,))
@@ -1185,9 +1192,9 @@ async def startup_event():
 
         # Verificar versiones disponibles
         try:
-            versiones_query = """
+            versiones_query = f"""
             SELECT DISTINCT version_calculo, COUNT(*) as registros
-            FROM TDV.saya.COSTO_OP_DETALLE
+            FROM {settings.db_schema}.costo_op_detalle
             GROUP BY version_calculo
             ORDER BY registros DESC
             """

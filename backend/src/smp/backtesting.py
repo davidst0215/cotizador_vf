@@ -27,25 +27,25 @@ def diagnosticar_version_calculo():
         schemas = [row[0] for row in cursor.fetchall()]
         print(f"✅ Esquemas disponibles: {schemas}")
 
-        # 3. Verificar tablas en esquema TDV.saya
-        cursor.execute("""
+        # 3. Verificar tablas
+        cursor.execute(f"""
             SELECT TABLE_NAME
             FROM INFORMATION_SCHEMA.TABLES
-            WHERE TABLE_SCHEMA = 'saya'
+            WHERE TABLE_SCHEMA = '{settings.db_schema}'
         """)
         tablas = [row[0] for row in cursor.fetchall()]
-        print(f"✅ Tablas en saya: {tablas}")
+        print(f"✅ Tablas: {tablas}")
 
         # 4. Verificar columnas en COSTO_OP_DETALLE
-        cursor.execute("""
+        cursor.execute(f"""
             SELECT COLUMN_NAME, DATA_TYPE
             FROM INFORMATION_SCHEMA.COLUMNS
-            WHERE TABLE_SCHEMA = 'saya'
-            AND TABLE_NAME = 'COSTO_OP_DETALLE'
+            WHERE TABLE_SCHEMA = '{settings.db_schema}'
+            AND TABLE_NAME = 'costo_op_detalle'
             ORDER BY ORDINAL_POSITION
         """)
         columnas_costo = cursor.fetchall()
-        print("✅ Columnas en COSTO_OP_DETALLE:")
+        print("✅ Columnas en costo_op_detalle:")
         for col, tipo in columnas_costo:
             print(f"   - {col} ({tipo})")
 
@@ -59,9 +59,9 @@ def diagnosticar_version_calculo():
 
         # 6. Si existe, probar consulta simple
         if version_calculo_existe:
-            cursor.execute("""
+            cursor.execute(f"""
                 SELECT DISTINCT version_calculo, COUNT(*) as registros
-                FROM TDV.saya.COSTO_OP_DETALLE
+                FROM {settings.db_schema}.costo_op_detalle
                 GROUP BY version_calculo
                 ORDER BY registros DESC
             """)
@@ -74,9 +74,9 @@ def diagnosticar_version_calculo():
             print("\n🧪 PROBANDO CONSULTA PROBLEMÁTICA:")
             try:
                 cursor.execute(
-                    """
+                    f"""
                     SELECT COUNT(*)
-                    FROM TDV.saya.COSTO_OP_DETALLE
+                    FROM {settings.db_schema}.costo_op_detalle
                     WHERE version_calculo = ?
                 """,
                     ("FLUIDA",),
@@ -93,9 +93,9 @@ def diagnosticar_version_calculo():
             print("\n🧪 PROBANDO CONSULTA CON fecha_corrida:")
             try:
                 cursor.execute(
-                    """
+                    f"""
                     SELECT MAX(fecha_corrida) as fecha_max
-                    FROM TDV.saya.COSTO_OP_DETALLE
+                    FROM {settings.db_schema}.costo_op_detalle
                     WHERE version_calculo = ?
                 """,
                     ("FLUIDA",),
@@ -121,7 +121,7 @@ def diagnosticar_version_calculo():
 
                 if existe:
                     cursor.execute(
-                        f"SELECT DISTINCT version_calculo FROM TDV.saya.{tabla}"
+                        f"SELECT DISTINCT version_calculo FROM {settings.db_schema}.{tabla}"
                     )
                     versiones = [row[0] for row in cursor.fetchall()]
                     print(f"   Versiones: {versiones}")

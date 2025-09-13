@@ -14,7 +14,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse as FastAPIJSONResponse
 from typing import List, Optional
 from datetime import datetime
-import uvicorn
 import logging
 import json
 import pyodbc
@@ -1247,9 +1246,10 @@ async def shutdown_event():
 # =====================================================================
 
 if __name__ == "__main__":
+    import uvicorn
     logger.info(f"🚀 Iniciando servidor en {settings.api_host}:{settings.api_port}")
     uvicorn.run(
-        "main:app",
+        "app",
         host=settings.api_host,
         port=settings.api_port,
         reload=settings.debug,

@@ -4,15 +4,19 @@ services:
       context: backend
       dockerfile: Dockerfile
     environment:
+      - API_HOST=0.0.0.0
+      - API_PORT=8000
       - DB_HOST=${DB_HOST}
       - DB_PORT=${DB_PORT}
       - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
       - DB_NAME=${DB_NAME}
       - DB_SCHEMA=${DB_SCHEMA}
-      - CONNECTION_STRING=Driver={PostgreSQL};Server=${DB_HOST};Port=${DB_PORT};Database=${DB_NAME};Uid=${DB_USER};Pwd=${DB_PASSWORD};Sslmode=${SSLMODE};sslrootcert=/.secrets/client.crt;Pooling=1;Timeout=30;ConnectTimeout=10
+      - PGSSLCERT=/.secrets/cotizador.crt
+      - PGSSLKEY=/.secrets/cotizador.key
+      - CONNECTION_STRING=Driver={PostgreSQL};Server=${DB_HOST};Port=${DB_PORT};Database=${DB_NAME};Uid=${DB_USER};Sslmode=${SSLMODE};Pooling=1;Timeout=30;ConnectTimeout=10
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8000/health"]
       interval: 30s
       timeout: 5s
       retries: 3

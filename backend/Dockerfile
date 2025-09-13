@@ -90,20 +90,21 @@ RUN set -eux; \
     /tmp/odbcinst.sh
 
 # configure entrypoint
-RUN printf '%s\n' '#!/bin/sh' \
-  "exec uvicorn ${APP_MODULE}.main:app --host 0.0.0.0 --port 8000 --proxy-headers" \
-  > /usr/local/bin/entrypoint.sh && chmod +x /usr/local/bin/entrypoint.sh
+RUN cat <<EOF > /usr/local/bin/entrypoint.sh && \
+    chmod +x /usr/local/bin/entrypoint.sh
+#!/bin/sh
+exec uvicorn ${APP_MODULE}.main:app --host \${API_HOST:-0.0.0.0} --port \${API_PORT:-8000} --proxy-headers
+EOF
 
 WORKDIR /app
 USER ${APP_USER}
 
 # Lightweight healthcheck implemented with the bundled python binary (no extra packages required).
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD python -c "import sys,urllib.request as u; \
-try: \
-  r=u.urlopen('http://127.0.0.1:8000/health', timeout=2); \
-  sys.exit(0 if r.getcode()==200 else 1); \
-except: sys.exit(1)"
+CMD python -c 'import sys, urllib.request as u; r=None \
+try: r=u.urlopen("http://127.0.0.1:8000/health", timeout=2) \
+except: sys.exit(1) \
+sys.exit(0 if r.getcode()==200 else 1)'
 
 EXPOSE 8000
 

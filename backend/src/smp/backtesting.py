@@ -8,7 +8,7 @@ from config import settings
 def diagnosticar_version_calculo():
     """Diagnóstica qué está mal con version_calculo"""
 
-    connection_string = settings.connection_string(settings)
+    connection_string = settings.connection_string
 
     try:
         conn = pyodbc.connect(connection_string)

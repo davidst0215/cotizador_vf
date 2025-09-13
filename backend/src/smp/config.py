@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     db_user: str
     db_password: str
     db_name: str
-    schema_name: str
+    db_schema: str
 
     # Connection string
     connection_string: Optional[str] = None

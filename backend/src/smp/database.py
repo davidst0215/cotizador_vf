@@ -30,7 +30,7 @@ class DatabaseManager:
     """Manager centralizado para conexiones y queries de TDV"""
 
     def __init__(self):
-        self.connection_string = settings.connection_string(settings)
+        self.connection_string = settings.connection_string
         self._test_connection()
 
     def _test_connection(self):

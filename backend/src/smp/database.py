@@ -15,16 +15,14 @@ import statistics
 from typing import List, Dict, Any, Optional, Tuple
 from contextlib import contextmanager
 import logging
-import pandas as pd
 from datetime import datetime
 
 from .config import factores
-from .config import settings, db_config
+from .config import settings
 from .models import EstiloSimilar, WipDisponible, VersionCalculo
 
 
 # Configurar logging estándar
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
@@ -32,7 +30,7 @@ class DatabaseManager:
     """Manager centralizado para conexiones y queries de TDV"""
 
     def __init__(self):
-        self.connection_string = db_config.get_connection_string(settings)
+        self.connection_string = settings.connection_string(settings)
         self._test_connection()
 
     def _test_connection(self):
@@ -89,8 +87,25 @@ class DatabaseManager:
 class TDVQueries:
     """Queries específicas para TDV - CORREGIDAS PARA FECHAS RELATIVAS"""
 
+    _instance = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(TDVQueries, cls).__new__(cls)
+            # __init__ will be called after __new__, but only once
+        return cls._instance
+
     def __init__(self):
-        self.db = DatabaseManager()
+        # Only initialize if not already done
+        if not hasattr(self, "_initialized"):
+            self.db = DatabaseManager()
+            self._initialized = True
+
+    @classmethod
+    def get_instance(cls):
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance
 
     def obtener_fecha_maxima_corrida(
         self,
@@ -101,16 +116,14 @@ class TDVQueries:
 
         # HISTORIAL_ESTILOS no tiene version_calculo
         if tabla == "HISTORIAL_ESTILOS":
-            query = (
-                "SELECT MAX(fecha_corrida) as fecha_max FROM TDV.saya.HISTORIAL_ESTILOS"
-            )
+            query = f"SELECT MAX(fecha_corrida) as fecha_max FROM {settings.db_schema}.historial_estilos"
             resultado = self.db.execute_query(query)
         else:
             # Para las otras tablas que SÍ tienen version_calculo
             queries = {
-                "COSTO_OP_DETALLE": "SELECT MAX(fecha_corrida) as fecha_max FROM TDV.saya.COSTO_OP_DETALLE WHERE version_calculo = ?",
-                "RESUMEN_WIP_POR_PRENDA": "SELECT MAX(fecha_corrida) as fecha_max FROM TDV.saya.RESUMEN_WIP_POR_PRENDA WHERE version_calculo = ?",
-                "COSTO_WIP_OP": "SELECT MAX(fecha_corrida) as fecha_max FROM TDV.saya.COSTO_WIP_OP WHERE version_calculo = ?",
+                "COSTO_OP_DETALLE": f"SELECT MAX(fecha_corrida) as fecha_max FROM {settings.db_schema}.costo_op_detalle WHERE version_calculo = ?",
+                "RESUMEN_WIP_POR_PRENDA": f"SELECT MAX(fecha_corrida) as fecha_max FROM {settings.db_schema}.resumen_wip_por_prenda WHERE version_calculo = ?",
+                "COSTO_WIP_OP": f"SELECT MAX(fecha_corrida) as fecha_max FROM {settings.db_schema}.costo_wip_op WHERE version_calculo = ?",
             }
 
             if tabla in queries:
@@ -130,8 +143,8 @@ class TDVQueries:
         version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
     ) -> bool:
         """
-        ✅ FUNCIÓN CORREGIDA: Verifica si un estilo existe
-        HISTORIAL_ESTILOS no tiene version_calculo, solo COSTO_OP_DETALLE
+        Verifica si un estilo existe HISTORIAL_ESTILOS no tiene
+        version_calculo, solo COSTO_OP_DETALLE
         """
 
         if not codigo_estilo or not codigo_estilo.strip():
@@ -141,11 +154,13 @@ class TDVQueries:
 
         try:
             # ✅ PASO 1: Verificar en HISTORIAL_ESTILOS (SIN version_calculo)
-            query_historial = """
+            query_historial = f"""
             SELECT COUNT(*) as total_historial
-            FROM TDV.saya.HISTORIAL_ESTILOS h
+            FROM {settings.db_schema}.historial_estilos h
             WHERE h.codigo_estilo = ?
-              AND h.fecha_corrida = (SELECT MAX(fecha_corrida) FROM TDV.saya.HISTORIAL_ESTILOS)
+              AND h.fecha_corrida = (
+                SELECT MAX(fecha_corrida)
+                FROM {settings.db_schema}.historial_estilos)
             """
 
             resultado_historial = self.db.execute_query(
@@ -159,17 +174,20 @@ class TDVQueries:
 
             # ✅ PASO 2: Verificar en COSTO_OP_DETALLE (CON version_calculo)
             # ✅ CORREGIDO: Usar fechas relativas en lugar de GETDATE()
-            query_ops = """
+            query_ops = f"""
             SELECT COUNT(*) as total_ops
-            FROM TDV.saya.COSTO_OP_DETALLE c
+            FROM {settings.db_schema}.costo_op_detalle c
             WHERE c.estilo_propio = ?
               AND c.version_calculo = ?
-              AND c.fecha_corrida = (SELECT MAX(fecha_corrida) FROM TDV.saya.COSTO_OP_DETALLE WHERE version_calculo = ?)
+              AND c.fecha_corrida = (
+                SELECT MAX(fecha_corrida)
+                FROM {settings.db_schema}.costo_op_detalle
+                WHERE version_calculo = ?)
               AND c.prendas_requeridas > 0
               AND c.fecha_facturacion >= (
-                  SELECT DATEADD(month, -36, MAX(fecha_facturacion))
-                  FROM TDV.saya.COSTO_OP_DETALLE
-                  WHERE version_calculo = ?
+                SELECT DATEADD(month, -36, MAX(fecha_facturacion))
+                FROM {settings.db_schema}.costo_op_detalle
+                WHERE version_calculo = ?
               )
             """
 
@@ -223,28 +241,34 @@ class TDVQueries:
 
         try:
             # ✅ QUERY PRINCIPAL CORREGIDA: Con fechas relativas
-            query = """
+            query = f"""
             SELECT TOP 1
-                h.codigo_estilo,
-                c.familia_de_productos,
-                c.tipo_de_producto,
-                c.cliente,
-                COUNT(*) OVER() as total_ops,
-                SUM(c.prendas_requeridas) OVER() as volumen_total,
-                AVG(c.esfuerzo_total) OVER() as esfuerzo_promedio,
-                MAX(c.fecha_facturacion) OVER() as ultima_facturacion,
-                MIN(c.fecha_facturacion) OVER() as primera_facturacion
-            FROM TDV.saya.HISTORIAL_ESTILOS h
-            INNER JOIN TDV.saya.COSTO_OP_DETALLE c ON h.codigo_estilo = c.estilo_propio
+              h.codigo_estilo,
+              c.familia_de_productos,
+              c.tipo_de_producto,
+              c.cliente,
+              COUNT(*) OVER() as total_ops,
+              SUM(c.prendas_requeridas) OVER() as volumen_total,
+              AVG(c.esfuerzo_total) OVER() as esfuerzo_promedio,
+              MAX(c.fecha_facturacion) OVER() as ultima_facturacion,
+              MIN(c.fecha_facturacion) OVER() as primera_facturacion
+            FROM {settings.db_schema}.historial_estilos h
+            INNER JOIN {settings.db_schema}.costo_op_detalle c
+              ON h.codigo_estilo = c.estilo_propio
             WHERE h.codigo_estilo = ?
               AND c.version_calculo = ?
-              AND c.fecha_corrida = (SELECT MAX(fecha_corrida) FROM TDV.saya.COSTO_OP_DETALLE WHERE version_calculo = ?)
-              AND h.fecha_corrida = (SELECT MAX(fecha_corrida) FROM TDV.saya.HISTORIAL_ESTILOS)
+              AND c.fecha_corrida = (
+                SELECT MAX(fecha_corrida)
+                FROM {settings.db_schema}.costo_op_detalle
+                WHERE version_calculo = ?)
+              AND h.fecha_corrida = (
+                SELECT MAX(fecha_corrida)
+                FROM {settings.db_schema}.historial_estilos)
               AND c.prendas_requeridas > 0
               AND c.fecha_facturacion >= (
-                  SELECT DATEADD(month, -36, MAX(fecha_facturacion))
-                  FROM TDV.saya.COSTO_OP_DETALLE
-                  WHERE version_calculo = ?
+                SELECT DATEADD(month, -36, MAX(fecha_facturacion))
+                FROM {settings.db_schema}.costo_op_detalle
+                WHERE version_calculo = ?
               )
             ORDER BY c.fecha_facturacion DESC
             """
@@ -281,25 +305,28 @@ class TDVQueries:
                 f"🔍 Estilo {codigo_estilo} no en historial, buscando en OPs directamente..."
             )
 
-            query_fallback = """
+            query_fallback = f"""
             SELECT TOP 1
-                c.estilo_propio as codigo_estilo,
-                c.familia_de_productos,
-                c.tipo_de_producto,
-                c.cliente,
-                COUNT(*) OVER() as total_ops,
-                SUM(c.prendas_requeridas) OVER() as volumen_total,
-                AVG(c.esfuerzo_total) OVER() as esfuerzo_promedio,
-                MAX(c.fecha_facturacion) OVER() as ultima_facturacion
-            FROM TDV.saya.COSTO_OP_DETALLE c
+              c.estilo_propio as codigo_estilo,
+              c.familia_de_productos,
+              c.tipo_de_producto,
+              c.cliente,
+              COUNT(*) OVER() as total_ops,
+              SUM(c.prendas_requeridas) OVER() as volumen_total,
+              AVG(c.esfuerzo_total) OVER() as esfuerzo_promedio,
+              MAX(c.fecha_facturacion) OVER() as ultima_facturacion
+            FROM {settings.db_schema}.costo_op_detalle c
             WHERE c.estilo_propio = ?
               AND c.version_calculo = ?
-              AND c.fecha_corrida = (SELECT MAX(fecha_corrida) FROM TDV.saya.COSTO_OP_DETALLE WHERE version_calculo = ?)
+              AND c.fecha_corrida = (
+                SELECT MAX(fecha_corrida)
+                FROM {settings.db_schema}.costo_op_detalle
+                WHERE version_calculo = ?)
               AND c.prendas_requeridas > 0
               AND c.fecha_facturacion >= (
-                  SELECT DATEADD(month, -36, MAX(fecha_facturacion))
-                  FROM TDV.saya.COSTO_OP_DETALLE
-                  WHERE version_calculo = ?
+                SELECT DATEADD(month, -36, MAX(fecha_facturacion))
+                FROM {settings.db_schema}.costo_op_detalle
+                WHERE version_calculo = ?
               )
             ORDER BY c.fecha_facturacion DESC
             """
@@ -383,7 +410,7 @@ class TDVQueries:
         prefijo = codigo_estilo[:6] if len(codigo_estilo) >= 6 else codigo_estilo[:4]
 
         # ✅ QUERY CORREGIDA: Con fechas relativas
-        query = """
+        query = f"""
         SELECT DISTINCT
             h.codigo_estilo as codigo,
             COALESCE(c.familia_de_productos, 'N/A') as familia_producto,
@@ -391,17 +418,23 @@ class TDVQueries:
             'Histórico' as temporada,
             COUNT(c.cod_ordpro) as ops_encontradas,
             AVG(CAST(c.monto_factura AS FLOAT) / NULLIF(c.prendas_requeridas, 0)) as costo_promedio
-        FROM TDV.saya.HISTORIAL_ESTILOS h
-        INNER JOIN TDV.saya.COSTO_OP_DETALLE c ON h.codigo_estilo = c.estilo_propio
+        FROM {settings.db_schema}.historial_estilos h
+        INNER JOIN {settings.db_schema}.costo_op_detalle c
+          ON h.codigo_estilo = c.estilo_propio
         WHERE h.codigo_estilo LIKE ?
           AND c.cliente LIKE ?
           AND c.version_calculo = ?
-          AND c.fecha_corrida = (SELECT MAX(fecha_corrida) FROM TDV.saya.COSTO_OP_DETALLE WHERE version_calculo = ?)
-          AND h.fecha_corrida = (SELECT MAX(fecha_corrida) FROM TDV.saya.HISTORIAL_ESTILOS)
+          AND c.fecha_corrida = (
+            SELECT MAX(fecha_corrida)
+            FROM {settings.db_schema}.costo_op_detalle
+            WHERE version_calculo = ?)
+          AND h.fecha_corrida = (
+            SELECT MAX(fecha_corrida)
+            FROM {settings.db_schema}.historial_estilos)
           AND c.fecha_facturacion >= (
-              SELECT DATEADD(month, -24, MAX(fecha_facturacion))
-              FROM TDV.saya.COSTO_OP_DETALLE
-              WHERE version_calculo = ?
+            SELECT DATEADD(month, -24, MAX(fecha_facturacion))
+            FROM {settings.db_schema}.costo_op_detalle
+            WHERE version_calculo = ?
           )
           AND c.prendas_requeridas > 0
           AND c.monto_factura > 0
@@ -444,17 +477,20 @@ class TDVQueries:
     def obtener_clientes_disponibles(
         self, version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA
     ) -> List[str]:
-        """✅ CORREGIDA: Obtiene lista de clientes únicos con fechas relativas"""
-        query = """
+        """Obtiene lista de clientes únicos con fechas relativas"""
+        query = f"""
         SELECT DISTINCT cliente
-        FROM TDV.saya.COSTO_OP_DETALLE
+        FROM {settings.db_schema}.costo_op_detalle
         WHERE cliente IS NOT NULL
           AND version_calculo = ?
-          AND fecha_corrida = (SELECT MAX(fecha_corrida) FROM TDV.saya.COSTO_OP_DETALLE WHERE version_calculo = ?)
+          AND fecha_corrida = (
+            SELECT MAX(fecha_corrida)
+            FROM {settings.db_schema}.costo_op_detalle
+            WHERE version_calculo = ?)
           AND fecha_facturacion >= (
-              SELECT DATEADD(month, -36, MAX(fecha_facturacion))
-              FROM TDV.saya.COSTO_OP_DETALLE
-              WHERE version_calculo = ?
+            SELECT DATEADD(month, -36, MAX(fecha_facturacion))
+            FROM {settings.db_schema}.costo_op_detalle
+            WHERE version_calculo = ?
           )
         ORDER BY cliente
         """
@@ -470,16 +506,19 @@ class TDVQueries:
         self, version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA
     ) -> List[str]:
         """✅ CORREGIDA: Obtiene familias de productos disponibles con fechas relativas"""
-        query = """
+        query = f"""
         SELECT DISTINCT familia_de_productos
-        FROM TDV.saya.COSTO_OP_DETALLE
+        FROM {settings.db_schema}.costo_op_detalle
         WHERE familia_de_productos IS NOT NULL
-        AND familia_de_productos != ''
-        AND version_calculo = ?
-        AND fecha_corrida = (SELECT MAX(fecha_corrida) FROM TDV.saya.COSTO_OP_DETALLE WHERE version_calculo = ?)
+          AND familia_de_productos != ''
+          AND version_calculo = ?
+          AND fecha_corrida = (
+            SELECT MAX(fecha_corrida)
+            FROM {settings.db_schema}.costo_op_detalle
+            WHERE version_calculo = ?)
         AND fecha_facturacion >= (
             SELECT DATEADD(month, -36, MAX(fecha_facturacion))
-            FROM TDV.saya.COSTO_OP_DETALLE
+            FROM {settings.db_schema}.costo_op_detalle
             WHERE version_calculo = ?
         )
         ORDER BY familia_de_productos
@@ -498,18 +537,21 @@ class TDVQueries:
         version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
     ) -> List[str]:
         """✅ CORREGIDA: Obtiene tipos de prenda para una familia específica con fechas relativas"""
-        query = """
+        query = f"""
         SELECT DISTINCT tipo_de_producto
-        FROM TDV.saya.COSTO_OP_DETALLE
+        FROM {settings.db_schema}.costo_op_detalle
         WHERE familia_de_productos = ?
-        AND tipo_de_producto IS NOT NULL
-        AND tipo_de_producto != ''
-        AND version_calculo = ?
-        AND fecha_corrida = (SELECT MAX(fecha_corrida) FROM TDV.saya.COSTO_OP_DETALLE WHERE version_calculo = ?)
+          AND tipo_de_producto IS NOT NULL
+          AND tipo_de_producto != ''
+          AND version_calculo = ?
+          AND fecha_corrida = (
+          SELECT MAX(fecha_corrida)
+          FROM {settings.db_schema}.costo_op_detalle
+          WHERE version_calculo = ?)
         AND fecha_facturacion >= (
-            SELECT DATEADD(month, -24, MAX(fecha_facturacion))
-            FROM TDV.saya.COSTO_OP_DETALLE
-            WHERE version_calculo = ?
+          SELECT DATEADD(month, -24, MAX(fecha_facturacion))
+          FROM {settings.db_schema}.costo_op_detalle
+          WHERE version_calculo = ?
         )
         ORDER BY tipo_de_producto
         """
@@ -538,20 +580,23 @@ class TDVQueries:
 
         if cliente:
             # ✅ CORREGIDO: Fechas relativas en lugar de GETDATE()
-            query_exacta = """
+            query_exacta = f"""
             SELECT TOP 20
-                costo_textil, costo_manufactura, costo_avios, costo_materia_prima,
-                costo_indirecto_fijo, gasto_administracion, gasto_ventas,
-                esfuerzo_total, prendas_requeridas, fecha_facturacion
-            FROM TDV.saya.COSTO_OP_DETALLE
+              costo_textil, costo_manufactura, costo_avios, costo_materia_prima,
+              costo_indirecto_fijo, gasto_administracion, gasto_ventas,
+              esfuerzo_total, prendas_requeridas, fecha_facturacion
+            FROM {settings.db_schema}.costo_op_detalle
             WHERE familia_de_productos = ?
               AND tipo_de_producto = ?
               AND cliente = ?
               AND version_calculo = ?
-              AND fecha_corrida = (SELECT MAX(fecha_corrida) FROM TDV.saya.COSTO_OP_DETALLE WHERE version_calculo = ?)
+              AND fecha_corrida = (
+                SELECT MAX(fecha_corrida)
+                FROM {settings.db_schema}.costo_op_detalle
+                WHERE version_calculo = ?)
               AND fecha_facturacion >= (
                   SELECT DATEADD(month, -6, MAX(fecha_facturacion))
-                  FROM TDV.saya.COSTO_OP_DETALLE
+                  FROM {settings.db_schema}.costo_op_detalle
                   WHERE version_calculo = ?
               )
               AND prendas_requeridas > 0
@@ -580,20 +625,23 @@ class TDVQueries:
                 )
 
         # ✅ CORREGIDO: Fechas relativas en lugar de GETDATE()
-        query_familia = """
+        query_familia = f"""
         SELECT TOP 50
-            costo_textil, costo_manufactura, costo_avios, costo_materia_prima,
-            costo_indirecto_fijo, gasto_administracion, gasto_ventas,
-            esfuerzo_total, prendas_requeridas, fecha_facturacion
-        FROM TDV.saya.COSTO_OP_DETALLE
+          costo_textil, costo_manufactura, costo_avios, costo_materia_prima,
+          costo_indirecto_fijo, gasto_administracion, gasto_ventas,
+          esfuerzo_total, prendas_requeridas, fecha_facturacion
+        FROM {settings.db_schema}.costo_op_detalle
         WHERE familia_de_productos = ?
           AND tipo_de_producto = ?
           AND version_calculo = ?
-          AND fecha_corrida = (SELECT MAX(fecha_corrida) FROM TDV.saya.COSTO_OP_DETALLE WHERE version_calculo = ?)
+          AND fecha_corrida = (
+            SELECT MAX(fecha_corrida)
+            FROM {settings.db_schema}.costo_op_detalle
+            WHERE version_calculo = ?)
           AND fecha_facturacion >= (
-              SELECT DATEADD(month, -20, MAX(fecha_facturacion))
-              FROM TDV.saya.COSTO_OP_DETALLE
-              WHERE version_calculo = ?
+            SELECT DATEADD(month, -20, MAX(fecha_facturacion))
+            FROM {settings.db_schema}.costo_op_detalle
+            WHERE version_calculo = ?
           )
           AND prendas_requeridas > 0
         ORDER BY fecha_facturacion DESC,
@@ -634,28 +682,34 @@ class TDVQueries:
         """
 
         # ✅ QUERY CORREGIDA: Con fechas relativas
-        query = """
+        query = f"""
         SELECT TOP 50
-            COALESCE(costo_textil, 0) as costo_textil,
-            COALESCE(costo_manufactura, 0) as costo_manufactura,
-            COALESCE(costo_avios, 0) as costo_avios,
-            COALESCE(costo_materia_prima, 0) as costo_materia_prima,
-            COALESCE(costo_indirecto_fijo, 0) as costo_indirecto_fijo,
-            COALESCE(gasto_administracion, 0) as gasto_administracion,
-            COALESCE(gasto_ventas, 0) as gasto_ventas,
-            COALESCE(esfuerzo_total, 6) as esfuerzo_total,
-            prendas_requeridas, fecha_facturacion,
-            cod_ordpro, cliente
-        FROM TDV.saya.COSTO_OP_DETALLE c
-        INNER JOIN TDV.saya.HISTORIAL_ESTILOS h ON c.estilo_propio = h.codigo_estilo
+          COALESCE(costo_textil, 0) as costo_textil,
+          COALESCE(costo_manufactura, 0) as costo_manufactura,
+          COALESCE(costo_avios, 0) as costo_avios,
+          COALESCE(costo_materia_prima, 0) as costo_materia_prima,
+          COALESCE(costo_indirecto_fijo, 0) as costo_indirecto_fijo,
+          COALESCE(gasto_administracion, 0) as gasto_administracion,
+          COALESCE(gasto_ventas, 0) as gasto_ventas,
+          COALESCE(esfuerzo_total, 6) as esfuerzo_total,
+          prendas_requeridas, fecha_facturacion,
+          cod_ordpro, cliente
+        FROM {settings.db_schema}.costo_op_detalle c
+        INNER JOIN {settings.db_schema}.historial_estilos h
+          ON c.estilo_propio = h.codigo_estilo
         WHERE h.codigo_estilo = ?
-        AND c.version_calculo = ?
-        AND c.fecha_corrida = (SELECT MAX(fecha_corrida) FROM TDV.saya.COSTO_OP_DETALLE WHERE version_calculo = ?)
-        AND h.fecha_corrida = (SELECT MAX(fecha_corrida) FROM TDV.saya.HISTORIAL_ESTILOS)
+          AND c.version_calculo = ?
+          AND c.fecha_corrida = (
+            SELECT MAX(fecha_corrida)
+            FROM {settings.db_schema}.costo_op_detalle
+            WHERE version_calculo = ?)
+        AND h.fecha_corrida = (
+          SELECT MAX(fecha_corrida)
+          FROM {settings.db_schema}.historial_estilos)
         AND c.fecha_facturacion >= (
-            SELECT DATEADD(month, -?, MAX(fecha_facturacion))
-            FROM TDV.saya.COSTO_OP_DETALLE
-            WHERE version_calculo = ?
+          SELECT DATEADD(month, -?, MAX(fecha_facturacion))
+          FROM {settings.db_schema}.costo_op_detalle
+          WHERE version_calculo = ?
         )
         AND c.prendas_requeridas > 0
         ORDER BY c.fecha_facturacion DESC
@@ -682,23 +736,22 @@ class TDVQueries:
         )
 
     def _procesar_costos_historicos_con_limites_previos(
-        self, resultados: List[Dict], estrategia: str
+        self, recs: List[dict], strat: str
     ) -> Dict[str, Any]:
-        """Aplica límites de seguridad a cada valor ANTES de promediar"""
+        """Aplica límites de seguridad a valores antes de promediar."""
+        if not recs:
+            raise ValueError("Sin resultados")
 
-        if not resultados:
-            raise ValueError("Sin resultados para procesar")
-
-        df = pd.DataFrame(resultados)
-        fecha_actual = datetime.now()
-        df["peso_temporal"] = df["fecha_facturacion"].apply(
-            lambda x: max(0.1, 1.0 - (fecha_actual - x).days / 365.0)
-        )
-
-        resultado: Dict[str, Any] = {}
-        registros_ajustados = {}
-
-        for columna in [
+        now = datetime.now()
+        weights = [
+            0.1
+            if not isinstance(rec.get("fecha_facturacion"), datetime)
+            else max(0.1, 1.0 - (now - rec["fecha_facturacion"]).days / 365.0)
+            for rec in recs
+        ]
+        sum_weights = sum(weights) or 1e-10
+        out, adjust = {}, {}
+        cols = [
             "costo_textil",
             "costo_manufactura",
             "costo_avios",
@@ -706,58 +759,60 @@ class TDVQueries:
             "costo_indirecto_fijo",
             "gasto_administracion",
             "gasto_ventas",
-        ]:
-            df[columna] = (
-                pd.to_numeric(df[columna], errors="coerce").fillna(0).astype(float)
-            )
-            df["prendas_requeridas"] = (
-                pd.to_numeric(df["prendas_requeridas"], errors="coerce")
-                .fillna(1)
-                .astype(float)
-            )
-            df[f"{columna}_unitario"] = df[columna] / df["prendas_requeridas"].clip(
-                lower=1.0
-            )
+        ]
 
-            valores_originales = df[f"{columna}_unitario"].copy()
-            ajustados = 0
+        def safe_float(val, default):
+            return float(val) if isinstance(val, (int, float)) else default
 
-            if columna in factores.RANGOS_SEGURIDAD:
-                rango = factores.RANGOS_SEGURIDAD[columna]
-                df[f"{columna}_unitario"] = df[f"{columna}_unitario"].clip(
-                    lower=rango["min"], upper=rango["max"]
+        for col in cols:
+            vals = [
+                safe_float(rec.get(col, 0), 0)
+                / max(1.0, safe_float(rec.get("prendas_requeridas", 1), 1))
+                for rec in recs
+            ]
+            adj = 0
+            if col in factores.RANGOS_SEGURIDAD:
+                min_val, max_val = (
+                    factores.RANGOS_SEGURIDAD[col]["min"],
+                    factores.RANGOS_SEGURIDAD[col]["max"],
                 )
-                ajustados = (df[f"{columna}_unitario"] != valores_originales).sum()
+                for i, val in enumerate(vals):
+                    clipped = max(min_val, min(max_val, val))
+                    if clipped != val:
+                        adj += 1
+                    vals[i] = clipped
+            adjust[col], out[col] = (
+                adj,
+                sum(v * w for v, w in zip(vals, weights)) / sum_weights,
+            )
 
-            registros_ajustados[columna] = int(ajustados)
-
-            df["peso_temporal"] = df["peso_temporal"].astype(float)
-            suma_pesos = df["peso_temporal"].sum()
-            promedio_ponderado = (
-                df[f"{columna}_unitario"] * df["peso_temporal"]
-            ).sum() / suma_pesos
-            resultado[columna] = float(promedio_ponderado)
-
-        resultado.update(
+        out.update(
             {
-                "esfuerzo_promedio": float(
-                    df["esfuerzo_total"].mean() if "esfuerzo_total" in df.columns else 6
+                "esfuerzo_promedio": sum(
+                    safe_float(rec.get("esfuerzo_total", 6), 6) for rec in recs
+                )
+                / len(recs),
+                "registros_encontrados": len(recs),
+                "registros_ajustados_por_componente": adjust,
+                "total_ajustados": sum(adjust.values()),
+                "estrategia_usada": strat,
+                "fecha_mas_reciente": max(
+                    (
+                        rec["fecha_facturacion"]
+                        for rec in recs
+                        if isinstance(rec.get("fecha_facturacion"), datetime)
+                    ),
+                    default=None,
                 ),
-                "registros_encontrados": int(len(resultados)),
-                "registros_ajustados_por_componente": registros_ajustados,
-                "total_ajustados": int(sum(registros_ajustados.values())),
-                "estrategia_usada": estrategia,
-                "fecha_mas_reciente": df["fecha_facturacion"].max(),
-                "precision_estimada": float(min(1.0, len(resultados) / 20.0)),
+                "precision_estimada": min(1.0, len(recs) / 20.0),
                 "version_calculo": "FLUIDA",
             }
         )
 
         logger.info(
-            f"✅ Costos procesados: {len(resultados)} registros, {sum(registros_ajustados.values())} ajustes aplicados"
+            f"✅ {len(recs)} registros procesados con estrategia '{strat}', {sum(adjust.values())} ajustes"
         )
-
-        return resultado
+        return out
 
     # ========================================
     # 🔧 FUNCIONES DE WIPS (SIN CAMBIOS - YA USAN FECHAS RELATIVAS)
@@ -789,23 +844,26 @@ class TDVQueries:
         costos_wips = {}
 
         # ✅ QUERY YA CORRECTA: 12 meses desde MAX(mes), sin filtros de prendas
-        query_variabilidad = """
+        query_variabilidad = f"""
         SELECT
-            wip_id,
-            YEAR(mes) as año,
-            MONTH(mes) as mes,
-            AVG(CAST(costo_por_prenda AS FLOAT)) as costo_mensual,
-            AVG(CAST(total_prendas AS FLOAT)) as prendas_promedio
-        FROM TDV.saya.RESUMEN_WIP_POR_PRENDA
+          wip_id,
+          YEAR(mes) as año,
+          MONTH(mes) as mes,
+          AVG(CAST(costo_por_prenda AS FLOAT)) as costo_mensual,
+          AVG(CAST(total_prendas AS FLOAT)) as prendas_promedio
+        FROM {settings.db_schema}.resumen_wip_por_prenda
         WHERE tipo_de_producto = ?
-        AND version_calculo = ?
-        AND fecha_corrida = (SELECT MAX(fecha_corrida) FROM TDV.saya.RESUMEN_WIP_POR_PRENDA WHERE version_calculo = ?)
-        AND mes >= (
+          AND version_calculo = ?
+          AND fecha_corrida = (
+            SELECT MAX(fecha_corrida)
+            FROM {settings.db_schema}.resumen_wip_por_prenda
+            WHERE version_calculo = ?)
+          AND mes >= (
             SELECT DATEADD(month, -18, MAX(mes))
-            FROM TDV.saya.RESUMEN_WIP_POR_PRENDA
+            FROM {settings.db_schema}.resumen_wip_por_prenda
             WHERE version_calculo = ? AND tipo_de_producto = ?
-        )
-        AND costo_por_prenda > 0
+          )
+          AND costo_por_prenda > 0
         GROUP BY wip_id, YEAR(mes), MONTH(mes)
         ORDER BY wip_id, año DESC, mes DESC
         """
@@ -873,16 +931,20 @@ class TDVQueries:
             # ✅ QUERY ESPECÍFICA YA CORRECTA por período determinado
             if wip_id in ["37", "45"]:
                 # WIPs inestables: siempre promedio
-                query_wip = """
-                SELECT AVG(CAST(costo_por_prenda AS FLOAT)) as costo_promedio
-                FROM TDV.saya.RESUMEN_WIP_POR_PRENDA
+                query_wip = f"""
+                SELECT
+                  AVG(CAST(costo_por_prenda AS FLOAT)) as costo_promedio
+                FROM {settings.db_schema}.resumen_wip_por_prenda
                 WHERE wip_id = ? AND tipo_de_producto = ?
                 AND version_calculo = ?
-                AND fecha_corrida = (SELECT MAX(fecha_corrida) FROM TDV.saya.RESUMEN_WIP_POR_PRENDA WHERE version_calculo = ?)
+                AND fecha_corrida = (
+                  SELECT MAX(fecha_corrida)
+                  FROM {settings.db_schema}.resumen_wip_por_prenda
+                  WHERE version_calculo = ?)
                 AND mes >= (
-                    SELECT DATEADD(month, -?, MAX(mes))
-                    FROM TDV.saya.RESUMEN_WIP_POR_PRENDA
-                    WHERE version_calculo = ? AND tipo_de_producto = ?
+                  SELECT DATEADD(month, -?, MAX(mes))
+                  FROM {settings.db_schema}.resumen_wip_por_prenda
+                  WHERE version_calculo = ? AND tipo_de_producto = ?
                 )
                 AND costo_por_prenda > 0
                 """
@@ -901,12 +963,16 @@ class TDVQueries:
             else:
                 if coef_variacion <= 0.10:
                     # Estable: último costo
-                    query_wip = """
-                    SELECT TOP 1 CAST(costo_por_prenda AS FLOAT) as costo_promedio
-                    FROM TDV.saya.RESUMEN_WIP_POR_PRENDA
+                    query_wip = f"""
+                    SELECT TOP 1
+                      CAST(costo_por_prenda AS FLOAT) as costo_promedio
+                    FROM {settings.db_schema}.resumen_wip_por_prenda
                     WHERE wip_id = ? AND tipo_de_producto = ?
-                    AND version_calculo = ?
-                    AND fecha_corrida = (SELECT MAX(fecha_corrida) FROM TDV.saya.RESUMEN_WIP_POR_PRENDA WHERE version_calculo = ?)
+                      AND version_calculo = ?
+                      AND fecha_corrida = (
+                      SELECT MAX(fecha_corrida)
+                      FROM {settings.db_schema}.resumen_wip_por_prenda
+                      WHERE version_calculo = ?)
                     AND costo_por_prenda > 0
                     ORDER BY mes DESC
                     """
@@ -916,16 +982,19 @@ class TDVQueries:
                     )
                 else:
                     # Variable: promedio del período
-                    query_wip = """
+                    query_wip = f"""
                     SELECT AVG(CAST(costo_por_prenda AS FLOAT)) as costo_promedio
-                    FROM TDV.saya.RESUMEN_WIP_POR_PRENDA
+                    FROM {settings.db_schema}.resumen_wip_por_prenda
                     WHERE wip_id = ? AND tipo_de_producto = ?
                     AND version_calculo = ?
-                    AND fecha_corrida = (SELECT MAX(fecha_corrida) FROM TDV.saya.RESUMEN_WIP_POR_PRENDA WHERE version_calculo = ?)
+                    AND fecha_corrida = (
+                      SELECT MAX(fecha_corrida)
+                      FROM {settings.db_schema}.resumen_wip_por_prenda
+                      WHERE version_calculo = ?)
                     AND mes >= (
-                        SELECT DATEADD(month, -?, MAX(mes))
-                        FROM TDV.saya.RESUMEN_WIP_POR_PRENDA
-                        WHERE version_calculo = ? AND tipo_de_producto = ?
+                      SELECT DATEADD(month, -?, MAX(mes))
+                      FROM {settings.db_schema}.resumen_wip_por_prenda
+                      WHERE version_calculo = ? AND tipo_de_producto = ?
                     )
                     AND costo_por_prenda > 0
                     """
@@ -961,23 +1030,26 @@ class TDVQueries:
         """
 
         # ✅ QUERY YA CORRECTA: 12 meses, sin filtros de prendas
-        query_ruta = """
+        query_ruta = f"""
         SELECT TOP 25
-            w.wip_id,
-            COUNT(*) as frecuencia_uso,
-            AVG(w.costo_por_prenda) as costo_promedio,
-            MAX(w.mes) as ultimo_uso,
-            AVG(w.total_prendas) as prendas_promedio,
-            SUM(w.total_prendas) as total_prendas_acumulado,
-            w.wip_id as grupo_wip
-        FROM TDV.saya.RESUMEN_WIP_POR_PRENDA w
+          w.wip_id,
+          COUNT(*) as frecuencia_uso,
+          AVG(w.costo_por_prenda) as costo_promedio,
+          MAX(w.mes) as ultimo_uso,
+          AVG(w.total_prendas) as prendas_promedio,
+          SUM(w.total_prendas) as total_prendas_acumulado,
+          w.wip_id as grupo_wip
+        FROM {settings.db_schema}.resumen_wip_por_prenda w
         WHERE w.tipo_de_producto = ?
         AND w.version_calculo = ?
-        AND w.fecha_corrida = (SELECT MAX(fecha_corrida) FROM TDV.saya.RESUMEN_WIP_POR_PRENDA WHERE version_calculo = ?)
+        AND w.fecha_corrida = (
+          SELECT MAX(fecha_corrida)
+          FROM {settings.db_schema}.resumen_wip_por_prenda
+          WHERE version_calculo = ?)
         AND w.mes >= (
-            SELECT DATEADD(month, -18, MAX(mes))
-            FROM TDV.saya.RESUMEN_WIP_POR_PRENDA
-            WHERE version_calculo = ? AND tipo_de_producto = ?
+          SELECT DATEADD(month, -18, MAX(mes))
+          FROM {settings.db_schema}.resumen_wip_por_prenda
+          WHERE version_calculo = ? AND tipo_de_producto = ?
         )
         AND w.costo_por_prenda > 0
         GROUP BY w.wip_id
@@ -1063,17 +1135,20 @@ class TDVQueries:
         costos_wips = {}
 
         # ✅ WIPs inestables (37, 45): Promedio con fechas relativas, sin filtros de prendas
-        query_inestables = """
+        query_inestables = f"""
         SELECT wip_id, AVG(CAST(costo_por_prenda AS FLOAT)) as costo_promedio
-        FROM TDV.saya.RESUMEN_WIP_POR_PRENDA
+        FROM {settings.db_schema}.resumen_wip_por_prenda
         WHERE wip_id IN ('37', '45')
         AND tipo_de_producto = ?
         AND version_calculo = ?
-        AND fecha_corrida = (SELECT MAX(fecha_corrida) FROM TDV.saya.RESUMEN_WIP_POR_PRENDA WHERE version_calculo = ?)
+        AND fecha_corrida = (
+          SELECT MAX(fecha_corrida)
+          FROM {settings.db_schema}.resumen_wip_por_prenda
+          WHERE version_calculo = ?)
         AND mes >= (
-            SELECT DATEADD(month, -18, MAX(mes))
-            FROM TDV.saya.RESUMEN_WIP_POR_PRENDA
-            WHERE version_calculo = ? AND tipo_de_producto = ?
+          SELECT DATEADD(month, -18, MAX(mes))
+          FROM {settings.db_schema}.resumen_wip_por_prenda
+          WHERE version_calculo = ? AND tipo_de_producto = ?
         )
         AND costo_por_prenda > 0
         GROUP BY wip_id
@@ -1093,16 +1168,21 @@ class TDVQueries:
             costos_wips[row["wip_id"]] = float(row["costo_promedio"])
 
         # ✅ WIPs estables: Último costo, sin filtros de prendas
-        query_estables = """
+        query_estables = f"""
         WITH UltimosCostos AS (
-            SELECT wip_id, CAST(costo_por_prenda AS FLOAT) as costo_por_prenda,
-                ROW_NUMBER() OVER (PARTITION BY wip_id ORDER BY mes DESC) as rn
-            FROM TDV.saya.RESUMEN_WIP_POR_PRENDA
-            WHERE wip_id NOT IN ('37', '45')
+          SELECT
+            wip_id,
+            CAST(costo_por_prenda AS FLOAT) as costo_por_prenda,
+            ROW_NUMBER() OVER (PARTITION BY wip_id ORDER BY mes DESC) as rn
+          FROM {settings.db_schema}.resumen_wip_por_prenda
+          WHERE wip_id NOT IN ('37', '45')
             AND tipo_de_producto = ?
             AND version_calculo = ?
-            AND fecha_corrida = (SELECT MAX(fecha_corrida) FROM TDV.saya.RESUMEN_WIP_POR_PRENDA WHERE version_calculo = ?)
-            AND costo_por_prenda > 0
+            AND fecha_corrida = (
+              SELECT MAX(fecha_corrida)
+              FROM {settings.db_schema}.resumen_wip_por_prenda
+              WHERE version_calculo = ?)
+          AND costo_por_prenda > 0
         )
         SELECT wip_id, costo_por_prenda FROM UltimosCostos WHERE rn = 1
         """
@@ -1136,19 +1216,23 @@ class TDVQueries:
             else:
                 logger.info(f"🔍 Obteniendo WIPs genéricos ({version_calculo})")
                 # ✅ QUERY GENÉRICA YA CORRECTA: sin filtros de prendas
-                query = """
+                query = f"""
                 WITH UltimosCostos AS (
-                    SELECT
-                        wip_id,
-                        AVG(costo_por_prenda) as costo_promedio,
-                        ROW_NUMBER() OVER (PARTITION BY wip_id ORDER BY MAX(mes) DESC) as rn
-                    FROM TDV.saya.RESUMEN_WIP_POR_PRENDA
-                    WHERE costo_por_prenda > 0
+                  SELECT
+                    wip_id,
+                    AVG(costo_por_prenda) as costo_promedio,
+                    ROW_NUMBER() OVER (PARTITION BY wip_id ORDER BY MAX(mes) DESC) as rn
+                  FROM {settings.db_schema}.resumen_wip_por_prenda
+                  WHERE costo_por_prenda > 0
                     AND version_calculo = ?
-                    AND fecha_corrida = (SELECT MAX(fecha_corrida) FROM TDV.saya.RESUMEN_WIP_POR_PRENDA WHERE version_calculo = ?)
-                    GROUP BY wip_id
+                    AND fecha_corrida = (
+                      SELECT MAX(fecha_corrida)
+                      FROM {settings.db_schema}.resumen_wip_por_prenda
+                      WHERE version_calculo = ?)
+                  GROUP BY wip_id
                 )
-                SELECT wip_id, costo_promedio FROM UltimosCostos WHERE rn = 1
+                SELECT wip_id, costo_promedio
+                FROM UltimosCostos WHERE rn = 1
                 """
 
                 resultados = self.db.execute_query(
@@ -1211,18 +1295,21 @@ class TDVQueries:
     ) -> Dict[str, float]:
         """✅ CORREGIDA: Gastos indirectos UNITARIOS con fechas relativas"""
 
-        query = """
+        query = f"""
         SELECT
             AVG(costo_indirecto_fijo / NULLIF(prendas_requeridas, 0)) as indirecto_fijo,
             AVG(gasto_administracion / NULLIF(prendas_requeridas, 0)) as administracion,
             AVG(gasto_ventas / NULLIF(prendas_requeridas, 0)) as ventas
-        FROM TDV.saya.COSTO_OP_DETALLE
+        FROM {settings.db_schema}.costo_op_detalle
         WHERE version_calculo = ?
-        AND fecha_corrida = (SELECT MAX(fecha_corrida) FROM TDV.saya.COSTO_OP_DETALLE WHERE version_calculo = ?)
+        AND fecha_corrida = (
+          SELECT MAX(fecha_corrida)
+          FROM {settings.db_schema}.costo_op_detalle
+          WHERE version_calculo = ?)
         AND fecha_facturacion >= (
-            SELECT DATEADD(year, -1, MAX(fecha_facturacion))
-            FROM TDV.saya.COSTO_OP_DETALLE
-            WHERE version_calculo = ?
+          SELECT DATEADD(year, -1, MAX(fecha_facturacion))
+          FROM {settings.db_schema}.costo_op_detalle
+          WHERE version_calculo = ?
         )
         AND prendas_requeridas > 0
         AND costo_indirecto_fijo > 0
@@ -1252,19 +1339,22 @@ class TDVQueries:
     ) -> Dict[str, float]:
         """✅ SIN CAMBIOS: Ya usa lógica correcta con fecha_corrida"""
 
-        query = """
+        query = f"""
         SELECT TOP 1
             costo_materia_prima,
             costo_avios,
             prendas_requeridas,
             fecha_corrida,
             cod_ordpro
-        FROM TDV.saya.COSTO_OP_DETALLE
+        FROM {settings.db_schema}.costo_op_detalle
         WHERE costo_materia_prima > 0
-        AND costo_avios > 0
-        AND prendas_requeridas > 0
-        AND version_calculo = ?
-        AND fecha_corrida = (SELECT MAX(fecha_corrida) FROM TDV.saya.COSTO_OP_DETALLE WHERE version_calculo = ?)
+          AND costo_avios > 0
+          AND prendas_requeridas > 0
+          AND version_calculo = ?
+          AND fecha_corrida = (
+            SELECT MAX(fecha_corrida)
+            FROM {settings.db_schema}.costo_op_detalle
+            WHERE version_calculo = ?)
         ORDER BY fecha_facturacion DESC,
         prendas_requeridas DESC
         """
@@ -1308,15 +1398,21 @@ class TDVQueries:
         ✅ SIN CAMBIOS: Ya usa lógica correcta con fecha_corrida
         """
         # ✅ QUERY YA CORRECTA: Solo filtrar version_calculo en COSTO_OP_DETALLE
-        query = """
+        query = f"""
         SELECT COALESCE(SUM(prendas_requeridas), 0) as volumen_total
-        FROM TDV.saya.COSTO_OP_DETALLE c
-        INNER JOIN TDV.saya.HISTORIAL_ESTILOS h ON c.estilo_propio = h.codigo_estilo
+        FROM {settings.db_schema}.costo_op_detalle c
+        INNER JOIN {settings.db_schema}.historial_estilos h
+          ON c.estilo_propio = h.codigo_estilo
         WHERE h.codigo_estilo = ?
-        AND c.version_calculo = ?
-        AND c.fecha_corrida = (SELECT MAX(fecha_corrida) FROM TDV.saya.COSTO_OP_DETALLE WHERE version_calculo = ?)
-        AND h.fecha_corrida = (SELECT MAX(fecha_corrida) FROM TDV.saya.HISTORIAL_ESTILOS)
-        AND c.prendas_requeridas > 0
+          AND c.version_calculo = ?
+          AND c.fecha_corrida = (
+            SELECT MAX(fecha_corrida)
+            FROM {settings.db_schema}.costo_op_detalle
+            WHERE version_calculo = ?)
+          AND h.fecha_corrida = (
+            SELECT MAX(fecha_corrida)
+            FROM {settings.db_schema}.historial_estilos)
+          AND c.prendas_requeridas > 0
         """
 
         resultado = self.db.execute_query(
@@ -1337,9 +1433,9 @@ class TDVQueries:
         """Verifica estado de las tablas principales"""
 
         tablas_check = {
-            "costo_op_detalle": "SELECT COUNT(*) as total FROM TDV.saya.COSTO_OP_DETALLE",
-            "resumen_wip_por_prenda": "SELECT COUNT(*) as total FROM TDV.saya.RESUMEN_WIP_POR_PRENDA",
-            "historial_estilos": "SELECT COUNT(*) as total FROM TDV.saya.HISTORIAL_ESTILOS",
+            "costo_op_detalle": f"SELECT COUNT(*) as total FROM {settings.db_schema}.costo_op_detalle",
+            "resumen_wip_por_prenda": f"SELECT COUNT(*) as total FROM {settings.db_schema}.resumen_wip_por_prenda",
+            "historial_estilos": f"SELECT COUNT(*) as total FROM {settings.db_schema}.historial_estilos",
         }
 
         resultados = {}
@@ -1372,32 +1468,45 @@ class TDVQueries:
         # PASO 1: Intentar por estilo específico (si es recurrente)
         if codigo_estilo:
             try:
-                # ✅ CORREGIDO: Fechas relativas en lugar de GETDATE()
-                query_estilo = """
+                # Fechas relativas en lugar de GETDATE()
+                query_estilo = f"""
                 SELECT TOP 10
-                    c.cod_ordpro,
-                    c.cliente,
-                    c.fecha_facturacion,
-                    c.prendas_requeridas,
-                    c.monto_factura,
-                    c.esfuerzo_total,
-                    -- ✅ COSTOS UNITARIOS CALCULADOS
-                    COALESCE(c.costo_textil, 0) / NULLIF(c.prendas_requeridas, 0) as costo_textil_unit,
-                    COALESCE(c.costo_manufactura, 0) / NULLIF(c.prendas_requeridas, 0) as costo_manufactura_unit,
-                    COALESCE(c.costo_avios, 0) / NULLIF(c.prendas_requeridas, 0) as costo_avios_unit,
-                    COALESCE(c.costo_materia_prima, 0) / NULLIF(c.prendas_requeridas, 0) as costo_mp_unit,
-                    COALESCE(c.costo_indirecto_fijo, 0) / NULLIF(c.prendas_requeridas, 0) as costo_indirecto_unit,
-                    COALESCE(c.gasto_administracion, 0) / NULLIF(c.prendas_requeridas, 0) as gasto_admin_unit,
-                    COALESCE(c.gasto_ventas, 0) / NULLIF(c.prendas_requeridas, 0) as gasto_ventas_unit
-                FROM TDV.saya.COSTO_OP_DETALLE c
-                INNER JOIN TDV.saya.HISTORIAL_ESTILOS h ON c.estilo_propio = h.codigo_estilo
+                  c.cod_ordpro,
+                  c.cliente,
+                  c.fecha_facturacion,
+                  c.prendas_requeridas,
+                  c.monto_factura,
+                  c.esfuerzo_total,
+                  -- ✅ COSTOS UNITARIOS CALCULADOS
+                  COALESCE(c.costo_textil, 0)
+                    / NULLIF(c.prendas_requeridas, 0) as costo_textil_unit,
+                  COALESCE(c.costo_manufactura, 0)
+                    / NULLIF(c.prendas_requeridas, 0) as costo_manufactura_unit,
+                  COALESCE(c.costo_avios, 0)
+                    / NULLIF(c.prendas_requeridas, 0) as costo_avios_unit,
+                  COALESCE(c.costo_materia_prima, 0)
+                    / NULLIF(c.prendas_requeridas, 0) as costo_mp_unit,
+                  COALESCE(c.costo_indirecto_fijo, 0)
+                    / NULLIF(c.prendas_requeridas, 0) as costo_indirecto_unit,
+                  COALESCE(c.gasto_administracion, 0)
+                    / NULLIF(c.prendas_requeridas, 0) as gasto_admin_unit,
+                  COALESCE(c.gasto_ventas, 0)
+                    / NULLIF(c.prendas_requeridas, 0) as gasto_ventas_unit
+                FROM {settings.db_schema}.costo_op_detalle c
+                INNER JOIN {settings.db_schema}.historial_estilos h
+                  ON c.estilo_propio = h.codigo_estilo
                 WHERE h.codigo_estilo = ?
-                AND c.version_calculo = ?
-                AND c.fecha_corrida = (SELECT MAX(fecha_corrida) FROM TDV.saya.COSTO_OP_DETALLE WHERE version_calculo = ?)
-                AND h.fecha_corrida = (SELECT MAX(fecha_corrida) FROM TDV.saya.HISTORIAL_ESTILOS)
-                AND c.fecha_facturacion >= (
+                  AND c.version_calculo = ?
+                  AND c.fecha_corrida = (
+                    SELECT MAX(fecha_corrida)
+                    FROM {settings.db_schema}.costo_op_detalle
+                    WHERE version_calculo = ?)
+                  AND h.fecha_corrida = (
+                    SELECT MAX(fecha_corrida)
+                    FROM {settings.db_schema}.historial_estilos)
+                  AND c.fecha_facturacion >= (
                     SELECT DATEADD(month, -18, MAX(fecha_facturacion))
-                    FROM TDV.saya.COSTO_OP_DETALLE
+                    FROM {settings.db_schema}.costo_op_detalle
                     WHERE version_calculo = ?
                 )
                 AND c.prendas_requeridas > 0
@@ -1438,28 +1547,31 @@ class TDVQueries:
                 # ✅ CORREGIDO: Fechas relativas en lugar de GETDATE()
                 query_familia = f"""
                 SELECT TOP 10
-                    c.cod_ordpro,
-                    c.estilo_propio,
-                    c.cliente,
-                    c.fecha_facturacion,
-                    c.prendas_requeridas,
-                    c.monto_factura,
-                    c.costo_textil / NULLIF(c.prendas_requeridas, 0) as costo_textil_unit,
-                    c.costo_manufactura / NULLIF(c.prendas_requeridas, 0) as costo_manufactura_unit,
-                    COALESCE(c.costo_avios, 0) / NULLIF(c.prendas_requeridas, 0) as costo_avios_unit,
-                    COALESCE(c.costo_materia_prima, 0) / NULLIF(c.prendas_requeridas, 0) as costo_mp_unit,
-                    COALESCE(c.costo_indirecto_fijo, 0) / NULLIF(c.prendas_requeridas, 0) as costo_indirecto_unit,
-                    COALESCE(c.gasto_administracion, 0) / NULLIF(c.prendas_requeridas, 0) as gasto_admin_unit,
-                    COALESCE(c.gasto_ventas, 0) / NULLIF(c.prendas_requeridas, 0) as gasto_ventas_unit,
-                    c.esfuerzo_total
-                FROM TDV.saya.COSTO_OP_DETALLE c
+                  c.cod_ordpro,
+                  c.estilo_propio,
+                  c.cliente,
+                  c.fecha_facturacion,
+                  c.prendas_requeridas,
+                  c.monto_factura,
+                  c.costo_textil / NULLIF(c.prendas_requeridas, 0) as costo_textil_unit,
+                  c.costo_manufactura / NULLIF(c.prendas_requeridas, 0) as costo_manufactura_unit,
+                  COALESCE(c.costo_avios, 0) / NULLIF(c.prendas_requeridas, 0) as costo_avios_unit,
+                  COALESCE(c.costo_materia_prima, 0) / NULLIF(c.prendas_requeridas, 0) as costo_mp_unit,
+                  COALESCE(c.costo_indirecto_fijo, 0) / NULLIF(c.prendas_requeridas, 0) as costo_indirecto_unit,
+                  COALESCE(c.gasto_administracion, 0) / NULLIF(c.prendas_requeridas, 0) as gasto_admin_unit,
+                  COALESCE(c.gasto_ventas, 0) / NULLIF(c.prendas_requeridas, 0) as gasto_ventas_unit,
+                  c.esfuerzo_total
+                FROM {settings.db_schema}.costo_op_detalle c
                 WHERE c.familia_de_productos = ?
-                AND c.tipo_de_producto = ?
-                AND c.version_calculo = ?
-                AND c.fecha_corrida = (SELECT MAX(fecha_corrida) FROM TDV.saya.COSTO_OP_DETALLE WHERE version_calculo = ?)
-                AND c.fecha_facturacion >= (
+                  AND c.tipo_de_producto = ?
+                  AND c.version_calculo = ?
+                  AND c.fecha_corrida = (
+                    SELECT MAX(fecha_corrida)
+                    FROM {settings.db_schema}.costo_op_detalle
+                    WHERE version_calculo = ?)
+                  AND c.fecha_facturacion >= (
                     SELECT DATEADD(month, -18, MAX(fecha_facturacion))
-                    FROM TDV.saya.COSTO_OP_DETALLE
+                    FROM {settings.db_schema}.costo_op_detalle
                     WHERE version_calculo = ?
                 )
                 AND c.prendas_requeridas > 0
@@ -1646,18 +1758,21 @@ class TDVQueries:
         """✅ SIN CAMBIOS: Ya usa fecha_corrida correctamente"""
 
         # 1. Volumen histórico (6 meses)
-        query_volumen = """
+        query_volumen = f"""
         SELECT
-            COUNT(*) as ops_producidas,
-            SUM(prendas_requeridas) as volumen_total_6m,
-            AVG(CAST(prendas_requeridas AS FLOAT)) as volumen_promedio
-        FROM TDV.saya.COSTO_OP_DETALLE
+          COUNT(*) as ops_producidas,
+          SUM(prendas_requeridas) as volumen_total_6m,
+          AVG(CAST(prendas_requeridas AS FLOAT)) as volumen_promedio
+        FROM {settings.db_schema}.costo_op_detalle
         WHERE familia_de_productos = ?
-        AND tipo_de_producto = ?
-        AND version_calculo = ?
-        AND fecha_corrida = (SELECT MAX(fecha_corrida) FROM TDV.saya.COSTO_OP_DETALLE WHERE version_calculo = ?)
-        AND fecha_facturacion >= DATEADD(month, -6, GETDATE())
-        AND prendas_requeridas > 0
+          AND tipo_de_producto = ?
+          AND version_calculo = ?
+          AND fecha_corrida = (
+            SELECT MAX(fecha_corrida)
+            FROM {settings.db_schema}.costo_op_detalle
+            WHERE version_calculo = ?)
+          AND fecha_facturacion >= DATEADD(month, -6, GETDATE())
+          AND prendas_requeridas > 0
         """
 
         resultado_volumen = self.db.execute_query(
@@ -1667,20 +1782,25 @@ class TDVQueries:
         volumen = resultado_volumen[0] if resultado_volumen else {}
 
         # 2. Tendencias de costos
-        query_tendencias = """
+        query_tendencias = f"""
         SELECT
-            YEAR(fecha_facturacion) as año,
-            MONTH(fecha_facturacion) as mes,
-            COUNT(*) as ops_mes,
-            AVG(CAST(costo_textil AS FLOAT) / NULLIF(prendas_requeridas, 0)) as costo_textil_promedio,
-            AVG(CAST(costo_manufactura AS FLOAT) / NULLIF(prendas_requeridas, 0)) as costo_manufactura_promedio
-        FROM TDV.saya.COSTO_OP_DETALLE
+          YEAR(fecha_facturacion) as año,
+          MONTH(fecha_facturacion) as mes,
+          COUNT(*) as ops_mes,
+          AVG(CAST(costo_textil AS FLOAT)
+            / NULLIF(prendas_requeridas, 0)) as costo_textil_promedio,
+          AVG(CAST(costo_manufactura AS FLOAT)
+            / NULLIF(prendas_requeridas, 0)) as costo_manufactura_promedio
+        FROM {settings.db_schema}.costo_op_detalle
         WHERE familia_de_productos = ?
-        AND tipo_de_producto = ?
-        AND version_calculo = ?
-        AND fecha_corrida = (SELECT MAX(fecha_corrida) FROM TDV.saya.COSTO_OP_DETALLE WHERE version_calculo = ?)
-        AND fecha_facturacion >= DATEADD(month, -18, GETDATE())
-        AND prendas_requeridas > 0
+          AND tipo_de_producto = ?
+          AND version_calculo = ?
+          AND fecha_corrida = (
+            SELECT MAX(fecha_corrida)
+            FROM {settings.db_schema}.costo_op_detalle
+            WHERE version_calculo = ?)
+         AND fecha_facturacion >= DATEADD(month, -18, GETDATE())
+          AND prendas_requeridas > 0
         GROUP BY YEAR(fecha_facturacion), MONTH(fecha_facturacion)
         ORDER BY año DESC, mes DESC
         """
@@ -1691,19 +1811,23 @@ class TDVQueries:
         )
 
         # 3. Análisis competitivo
-        query_competitivo = """
+        query_competitivo = f"""
         SELECT TOP 5
-            cliente,
-            COUNT(*) as ops_cliente,
-            SUM(prendas_requeridas) as volumen_cliente,
-            AVG(CAST(monto_factura AS FLOAT) / NULLIF(prendas_requeridas, 0)) as precio_promedio_cliente
-        FROM TDV.saya.COSTO_OP_DETALLE
+          cliente,
+          COUNT(*) as ops_cliente,
+          SUM(prendas_requeridas) as volumen_cliente,
+          AVG(CAST(monto_factura AS FLOAT)
+            / NULLIF(prendas_requeridas, 0)) as precio_promedio_cliente
+        FROM {settings.db_schema}.costo_op_detalle
         WHERE familia_de_productos = ?
-        AND tipo_de_producto = ?
-        AND version_calculo = ?
-        AND fecha_corrida = (SELECT MAX(fecha_corrida) FROM TDV.saya.COSTO_OP_DETALLE WHERE version_calculo = ?)
-        AND fecha_facturacion >= DATEADD(month, -12, GETDATE())
-        AND prendas_requeridas > 0
+          AND tipo_de_producto = ?
+          AND version_calculo = ?
+          AND fecha_corrida = (
+            SELECT MAX(fecha_corrida)
+            FROM {settings.db_schema}.costo_op_detalle
+            WHERE version_calculo = ?)
+          AND fecha_facturacion >= DATEADD(month, -12, GETDATE())
+          AND prendas_requeridas > 0
         GROUP BY cliente
         ORDER BY SUM(prendas_requeridas) DESC
         """
@@ -1753,7 +1877,3 @@ class TDVQueries:
             f"✅ Info comercial obtenida para {familia_producto}/{tipo_prenda} ({version_calculo})"
         )
         return info_comercial
-
-
-# Instancia global del manager de queries
-tdv_queries = TDVQueries()

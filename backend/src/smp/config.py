@@ -5,19 +5,44 @@ CONFIGURACIÓN Y FACTORES - BACKEND TDV COTIZADOR v2.0
 Configuración centralizada basada en análisis real de TDV
 """
 
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 from pydantic_settings import BaseSettings
+from pydantic import ConfigDict, model_validator
 
 
 class Settings(BaseSettings):
     """Configuración principal de la aplicación"""
 
+    model_config = ConfigDict(env_file=".env")
+
     # Base de datos
-    db_server: str = "131.107.20.77"
-    db_port: int = 1433
-    db_username: str = "CHSAYA01"
-    db_password: str = "NewServerAz654@!"
-    db_database: str = "TDV"
+    db_host: str = "127.0.0.1"
+    db_port: int
+    db_user: str
+    db_password: str
+    db_name: str
+    schema_name: str
+
+    # Connection string
+    connection_string: Optional[str] = None
+    connection_driver: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _build(self):
+        if not self.connection_driver:
+            self.connection_driver = "{SQL Server}"
+        if not self.connection_string:
+            self.connection_string = (
+                f"DRIVER={self.connection_driver};"
+                f"SERVER={self.db_host},{self.db_port};"
+                f"UID={self.db_user};"
+                f"PWD={self.db_password};"
+                f"DATABASE={self.db_name};"
+                f"TrustServerCertificate=yes;"
+                f"Connection Timeout=30;"
+                f"Command Timeout=60"
+            )
+        return self
 
     # API
     api_title: str = "Cotizador TDV Expert"
@@ -32,9 +57,6 @@ class Settings(BaseSettings):
 
     # Cache
     cache_ttl: int = 3600
-
-    class Config:
-        env_file = ".env"
 
 
 # =====================================================================
@@ -174,30 +196,6 @@ class FactoresTDV:
         return valor, valor != valor_original
 
 
-# =====================================================================
-# CONFIGURACIÓN DE BASE DE DATOS
-# =====================================================================
-
-
-class DatabaseConfig:
-    """Configuración de conexión a base de datos"""
-
-    @staticmethod
-    def get_connection_string(settings: Settings) -> str:
-        """Genera string de conexión para SQL Server"""
-        return (
-            f"DRIVER={{SQL Server}};"
-            f"SERVER={settings.db_server},{settings.db_port};"
-            f"UID={settings.db_username};"
-            f"PWD={settings.db_password};"
-            f"DATABASE={settings.db_database};"
-            f"TrustServerCertificate=yes;"
-            f"Connection Timeout=30;"
-            f"Command Timeout=60"
-        )
-
-
 # Instancia global de configuración
 settings = Settings()
 factores = FactoresTDV()
-db_config = DatabaseConfig()

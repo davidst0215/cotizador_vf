@@ -23,12 +23,14 @@ from .models import (
     WipConfiguracion,
     InfoComercial,
     WipSeleccionada,
-    VersionCalculo
+    VersionCalculo,
 )
-from .database import tdv_queries
+from .database import TDVQueries
 from .config import factores
 
 logger = logging.getLogger(__name__)
+
+tdv_queries = TDVQueries.get_instance()
 
 
 class CotizadorTDV:

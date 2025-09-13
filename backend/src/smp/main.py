@@ -31,10 +31,11 @@ from .models import (
     WipsDisponiblesResponse,
     VersionCalculo,
 )
-from .database import tdv_queries
+from .database import TDVQueries
 from .utils import cotizador_tdv
 
 logger = logging.getLogger(__name__)
+tdv_queries = TDVQueries.get_instance()
 
 
 # SERIALIZADOR JSON PERSONALIZADO
@@ -1162,7 +1163,7 @@ async def startup_event():
     """Eventos de inicio de la aplicación"""
     logger.info("🚀 Iniciando Sistema Cotizador TDV CORREGIDO")
     logger.info(f"📋 Versión: {settings.api_version}")
-    logger.info(f"🗄️ Base de datos: {settings.db_server}")
+    logger.info(f"🗄️ Base de datos: {settings.db_host}")
     logger.info(f"🌐 CORS habilitado para: {settings.cors_origins}")
     logger.info("✅ CORRECCIONES APLICADAS:")
     logger.info(

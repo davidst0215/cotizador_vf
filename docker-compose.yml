@@ -1,13 +1,15 @@
 services:
   backend:
     build:
-      context: ..
-      dockerfile: backend/Dockerfile
+      context: backend
+      dockerfile: Dockerfile
     environment:
-      - DB_SERVER=${DB_SERVER}
-      - DB_USERNAME=${DB_USERNAME}
+      - DB_HOST=${DB_HOST}
+      - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
-      - DB_DATABASE=${DB_DATABASE}
+      - DB_NAME=${DB_NAME}
+      - DB_SCHEMA=${DB_SCHEMA}
+      - CONNECTION_STRING=Driver={PostgreSQL};Server=${DB_HOST};Port=${DB_PORT};Database=${DB_NAME};Uid=${DB_USER};Pwd=${DB_PASSWORD};Sslmode=${SSLMODE};Pooling=1;Timeout=30;ConnectTimeout=10
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -18,14 +20,11 @@ services:
       - "8000:8000"
     volumes:
       - ./backend:/app
-    depends_on:
-      db:
-        condition: service_healthy
 
   frontend:
     build:
-      context: ..
-      dockerfile: frontend/Dockerfile
+      context: frontend
+      dockerfile: Dockerfile
     environment:
       - NEXT_PUBLIC_API_URL=http://backend:8000
     healthcheck:
@@ -41,20 +40,3 @@ services:
     depends_on:
       backend:
         condition: service_healthy
-
-  # db:
-  #   image: postgres:16-alpine
-  #   environment:
-  #     - POSTGRES_USER=${DB_USERNAME}
-  #     - POSTGRES_PASSWORD=${DB_PASSWORD}
-  #     - POSTGRES_DB=${DB_DATABASE}
-  #   healthcheck:
-  #     test: ["CMD", "pg_isready", "-U", "${DB_USERNAME}"]
-  #     interval: 10s
-  #     timeout: 5s
-  #     retries: 5
-  #     start_period: 10s
-  #   volumes:
-  #     - pgdata:/var/lib/postgresql/data
-# volumes:
-#   pgdata:

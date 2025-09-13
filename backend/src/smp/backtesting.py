@@ -2,12 +2,13 @@
 # Ejecuta esto para encontrar el problema exacto
 
 import pyodbc
-from config import settings, db_config
+from config import settings
+
 
 def diagnosticar_version_calculo():
     """Diagnóstica qué está mal con version_calculo"""
 
-    connection_string = db_config.get_connection_string(settings)
+    connection_string = settings.connection_string(settings)
 
     try:
         conn = pyodbc.connect(connection_string)
@@ -49,8 +50,12 @@ def diagnosticar_version_calculo():
             print(f"   - {col} ({tipo})")
 
         # 5. PRUEBA ESPECÍFICA: ¿Existe version_calculo?
-        version_calculo_existe = any(col[0] == 'version_calculo' for col in columnas_costo)
-        print(f"🎯 ¿Existe version_calculo en COSTO_OP_DETALLE? {version_calculo_existe}")
+        version_calculo_existe = any(
+            col[0] == "version_calculo" for col in columnas_costo
+        )
+        print(
+            f"🎯 ¿Existe version_calculo en COSTO_OP_DETALLE? {version_calculo_existe}"
+        )
 
         # 6. Si existe, probar consulta simple
         if version_calculo_existe:
@@ -68,13 +73,18 @@ def diagnosticar_version_calculo():
             # 7. Probar consulta con parámetro (la que falla)
             print("\n🧪 PROBANDO CONSULTA PROBLEMÁTICA:")
             try:
-                cursor.execute("""
+                cursor.execute(
+                    """
                     SELECT COUNT(*)
                     FROM TDV.saya.COSTO_OP_DETALLE
                     WHERE version_calculo = ?
-                """, ('FLUIDA',))
+                """,
+                    ("FLUIDA",),
+                )
                 resultado = cursor.fetchone()[0]
-                print(f"✅ Query con parámetro FUNCIONA: {resultado:,} registros FLUIDA")
+                print(
+                    f"✅ Query con parámetro FUNCIONA: {resultado:,} registros FLUIDA"
+                )
 
             except Exception as e:
                 print(f"❌ Query con parámetro FALLA: {e}")
@@ -82,11 +92,14 @@ def diagnosticar_version_calculo():
             # 8. Probar consulta con fecha_corrida (la problemática completa)
             print("\n🧪 PROBANDO CONSULTA CON fecha_corrida:")
             try:
-                cursor.execute("""
+                cursor.execute(
+                    """
                     SELECT MAX(fecha_corrida) as fecha_max
                     FROM TDV.saya.COSTO_OP_DETALLE
                     WHERE version_calculo = ?
-                """, ('FLUIDA',))
+                """,
+                    ("FLUIDA",),
+                )
                 resultado = cursor.fetchone()[0]
                 print(f"✅ Query completa FUNCIONA: {resultado}")
 
@@ -94,7 +107,7 @@ def diagnosticar_version_calculo():
                 print(f"❌ Query completa FALLA: {e}")
 
         # 9. Verificar otras tablas problemáticas
-        for tabla in ['HISTORIAL_ESTILOS', 'RESUMEN_WIP_POR_PRENDA']:
+        for tabla in ["HISTORIAL_ESTILOS", "RESUMEN_WIP_POR_PRENDA"]:
             try:
                 cursor.execute(f"""
                     SELECT COLUMN_NAME
@@ -107,7 +120,9 @@ def diagnosticar_version_calculo():
                 print(f"🎯 {tabla} tiene version_calculo: {existe is not None}")
 
                 if existe:
-                    cursor.execute(f"SELECT DISTINCT version_calculo FROM TDV.saya.{tabla}")
+                    cursor.execute(
+                        f"SELECT DISTINCT version_calculo FROM TDV.saya.{tabla}"
+                    )
                     versiones = [row[0] for row in cursor.fetchall()]
                     print(f"   Versiones: {versiones}")
 
@@ -119,6 +134,7 @@ def diagnosticar_version_calculo():
     except Exception as e:
         print(f"❌ ERROR DE CONEXIÓN: {e}")
         print(f"   Connection string: {connection_string}")
+
 
 if __name__ == "__main__":
     diagnosticar_version_calculo()

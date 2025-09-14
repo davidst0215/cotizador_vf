@@ -4,8 +4,8 @@ services:
       context: backend
       dockerfile: Dockerfile
     environment:
-      - API_HOST=0.0.0.0
-      - API_PORT=8000
+      - API_HOST=${API_HOST}
+      - API_PORT=${API_PORT}
       - DB_HOST=${DB_HOST}
       - DB_PORT=${DB_PORT}
       - DB_USER=${DB_USER}

@@ -12,10 +12,12 @@ CONEXIÓN BASE DE DATOS Y QUERIES - BACKEND TDV COTIZADOR - COMPLETAMENTE CORREG
 
 import pyodbc
 import statistics
+import asyncio
 from typing import List, Dict, Any, Optional, Tuple
-from contextlib import contextmanager
-import logging
+from contextlib import contextmanager, asynccontextmanager
 from datetime import datetime
+
+import logging
 
 from .config import factores
 from .config import settings
@@ -36,7 +38,7 @@ class DatabaseManager:
     def _test_connection(self):
         """Prueba inicial de conexión"""
         try:
-            with self.get_connection() as conn:
+            with self.connect() as conn:
                 cursor = conn.cursor()
                 cursor.execute("SELECT 1")
                 logger.info("✅ Conexión TDV establecida exitosamente")
@@ -45,7 +47,7 @@ class DatabaseManager:
             raise
 
     @contextmanager
-    def get_connection(self):
+    def connect(self):
         """Context manager para conexiones de BD"""
         conn = None
         try:
@@ -59,11 +61,9 @@ class DatabaseManager:
             if conn:
                 conn.close()
 
-    def execute_query(
-        self, query: str, params: Optional[tuple] = None
-    ) -> List[Dict[str, Any]]:
+    def query(self, query: str, params: Optional[tuple] = None) -> List[Dict[str, Any]]:
         """Ejecuta query y retorna resultados como lista de diccionarios"""
-        with self.get_connection() as conn:
+        with self.connect() as conn:
             cursor = conn.cursor()
 
             if params:
@@ -84,6 +84,46 @@ class DatabaseManager:
             return results
 
 
+class AsyncDatabaseManager:
+    def __init__(self, conn_str: str):
+        self.conn_str = conn_str
+
+    @asynccontextmanager
+    async def connect(self):
+        conn = None
+        try:
+            conn = await asyncio.to_thread(pyodbc.connect, self.conn_str)
+            conn.autocommit = True
+            yield conn
+        finally:
+            await asyncio.to_thread(conn.close)
+
+    @asynccontextmanager
+    async def cursor(self, conn):
+        cur = await asyncio.to_thread(conn.cursor)
+        try:
+            yield cur
+        finally:
+            await asyncio.to_thread(cur.close)
+
+    async def query(
+        self, sql: str, params: Optional[tuple] = None
+    ) -> List[Dict[str, Any]]:
+        async with self.connect() as conn:
+            async with self.cursor(conn) as cur:
+                # execute in thread
+                if params:
+                    await asyncio.to_thread(cur.execute, sql, params)
+                else:
+                    await asyncio.to_thread(cur.execute, sql)
+
+                desc = cur.description or []
+                cols = [c[0] for c in desc]  # column names
+
+                rows = await asyncio.to_thread(cur.fetchall)
+                return [dict(zip(cols, row)) for row in rows]
+
+
 class TDVQueries:
     """Queries específicas para TDV - CORREGIDAS PARA FECHAS RELATIVAS"""
 
@@ -98,7 +138,7 @@ class TDVQueries:
     def __init__(self):
         # Only initialize if not already done
         if not hasattr(self, "_initialized"):
-            self.db = DatabaseManager()
+            self.db = AsyncDatabaseManager(settings.connection_string)
             self._initialized = True
 
     @classmethod
@@ -107,7 +147,7 @@ class TDVQueries:
             cls._instance = cls()
         return cls._instance
 
-    def obtener_fecha_maxima_corrida(
+    async def obtener_fecha_maxima_corrida(
         self,
         tabla: str,
         version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
@@ -117,7 +157,7 @@ class TDVQueries:
         # historial_estilos no tiene version_calculo
         if tabla == "historial_estilos":
             query = f"SELECT MAX(fecha_corrida) as fecha_max FROM {settings.db_schema}.historial_estilos"
-            resultado = self.db.execute_query(query)
+            resultado = await self.db.query(query)
         else:
             # Para las otras tablas que SÍ tienen version_calculo
             queries = {
@@ -127,7 +167,7 @@ class TDVQueries:
             }
 
             if tabla in queries:
-                resultado = self.db.execute_query(queries[tabla], (version_calculo,))
+                resultado = await self.db.query(queries[tabla], (version_calculo,))
             else:
                 resultado = None
 
@@ -137,7 +177,7 @@ class TDVQueries:
     # 🔧 FUNCIÓN CRÍTICA CORREGIDA: VERIFICACIÓN DE ESTILOS
     # ========================================
 
-    def verificar_estilo_existente(
+    async def verificar_estilo_existente(
         self,
         codigo_estilo: str,
         version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
@@ -163,9 +203,7 @@ class TDVQueries:
                 FROM {settings.db_schema}.historial_estilos)
             """
 
-            resultado_historial = self.db.execute_query(
-                query_historial, (codigo_estilo,)
-            )
+            resultado_historial = await self.db.query(query_historial, (codigo_estilo,))
             existe_en_historial = (
                 (resultado_historial[0]["total_historial"] > 0)
                 if resultado_historial
@@ -190,7 +228,7 @@ class TDVQueries:
               )
             """
 
-            resultado_ops = self.db.execute_query(
+            resultado_ops = await self.db.query(
                 query_ops,
                 (codigo_estilo, version_calculo, version_calculo, version_calculo),
             )
@@ -224,7 +262,7 @@ class TDVQueries:
     # 🔧 FUNCIÓN NUEVA: INFORMACIÓN DETALLADA - CORREGIDA
     # ========================================
 
-    def obtener_info_detallada_estilo(
+    async def obtener_info_detallada_estilo(
         self,
         codigo_estilo: str,
         version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
@@ -272,7 +310,7 @@ class TDVQueries:
             ORDER BY c.fecha_facturacion DESC
             """
 
-            resultado = self.db.execute_query(
+            resultado = await self.db.query(
                 query,
                 (codigo_estilo, version_calculo, version_calculo, version_calculo),
             )
@@ -330,7 +368,7 @@ class TDVQueries:
             ORDER BY c.fecha_facturacion DESC
             """
 
-            resultado_fallback = self.db.execute_query(
+            resultado_fallback = await self.db.query(
                 query_fallback,
                 (codigo_estilo, version_calculo, version_calculo, version_calculo),
             )
@@ -397,7 +435,7 @@ class TDVQueries:
     # 🔧 FUNCIÓN CORREGIDA: BÚSQUEDA DE ESTILOS SIMILARES
     # ========================================
 
-    def buscar_estilos_similares(
+    async def buscar_estilos_similares(
         self,
         codigo_estilo: str,
         cliente: str,
@@ -449,7 +487,7 @@ class TDVQueries:
             version_calculo,
             version_calculo,
         )
-        resultados = self.db.execute_query(query, params)
+        resultados = await self.db.query(query, params)
 
         estilos = []
         for row in resultados[:limite]:
@@ -473,7 +511,7 @@ class TDVQueries:
     # 🔧 FUNCIONES DE DATOS MAESTROS CORREGIDAS
     # ========================================
 
-    def obtener_clientes_disponibles(
+    async def obtener_clientes_disponibles(
         self, version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA
     ) -> List[str]:
         """Obtiene lista de clientes únicos con fechas relativas"""
@@ -494,14 +532,14 @@ class TDVQueries:
         ORDER BY cliente
         """
 
-        resultados = self.db.execute_query(
+        resultados = await self.db.query(
             query, (version_calculo, version_calculo, version_calculo)
         )
         clientes = [row["cliente"] for row in resultados]
         logger.info(f"✅ Clientes cargados para {version_calculo}: {len(clientes)}")
         return clientes
 
-    def obtener_familias_productos(
+    async def obtener_familias_productos(
         self, version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA
     ) -> List[str]:
         """✅ CORREGIDA: Obtiene familias de productos disponibles con fechas relativas"""
@@ -523,14 +561,14 @@ class TDVQueries:
         ORDER BY familia_de_productos
         """
 
-        resultados = self.db.execute_query(
+        resultados = await self.db.query(
             query, (version_calculo, version_calculo, version_calculo)
         )
         familias = [row["familia_de_productos"] for row in resultados]
         logger.info(f"✅ Familias cargadas para {version_calculo}: {len(familias)}")
         return familias
 
-    def obtener_tipos_prenda(
+    async def obtener_tipos_prenda(
         self,
         familia: str,
         version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
@@ -555,7 +593,7 @@ class TDVQueries:
         ORDER BY tipo_de_producto
         """
 
-        resultados = self.db.execute_query(
+        resultados = await self.db.query(
             query, (familia, version_calculo, version_calculo, version_calculo)
         )
         tipos = [row["tipo_de_producto"] for row in resultados]
@@ -568,7 +606,7 @@ class TDVQueries:
     # 🔧 FUNCIONES DE COSTOS CORREGIDAS
     # ========================================
 
-    def buscar_costos_historicos(
+    async def buscar_costos_historicos(
         self,
         familia_producto: str,
         tipo_prenda: str,
@@ -603,7 +641,7 @@ class TDVQueries:
             prendas_requeridas DESC
             """
 
-            resultados = self.db.execute_query(
+            resultados = await self.db.query(
                 query_exacta,
                 (
                     familia_producto,
@@ -647,7 +685,7 @@ class TDVQueries:
         prendas_requeridas DESC
         """
 
-        resultados = self.db.execute_query(
+        resultados = await self.db.query(
             query_familia,
             (
                 familia_producto,
@@ -670,7 +708,7 @@ class TDVQueries:
             f"No se encontraron costos históricos para {familia_producto} - {tipo_prenda}"
         )
 
-    def buscar_costos_estilo_especifico(
+    async def buscar_costos_estilo_especifico(
         self,
         codigo_estilo: str,
         meses: int = 12,
@@ -714,7 +752,7 @@ class TDVQueries:
         ORDER BY c.fecha_facturacion DESC
         """
 
-        resultados = self.db.execute_query(
+        resultados = await self.db.query(
             query,
             (codigo_estilo, version_calculo, version_calculo, meses, version_calculo),
         )
@@ -817,21 +855,23 @@ class TDVQueries:
     # 🔧 FUNCIONES DE WIPS (SIN CAMBIOS - YA USAN FECHAS RELATIVAS)
     # ========================================
 
-    def obtener_costos_wips_por_estabilidad(
+    async def obtener_costos_wips_por_estabilidad(
         self,
         tipo_prenda: str,
         version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
     ) -> Dict[str, float]:
         """Usar análisis inteligente de variación"""
         try:
-            return self.obtener_costos_wips_inteligente(tipo_prenda, version_calculo)
+            return await self.obtener_costos_wips_inteligente(
+                tipo_prenda, version_calculo
+            )
         except Exception as e:
             logger.warning(
                 f"⚠️ Error en análisis inteligente, usando método legacy: {e}"
             )
-            return self._obtener_costos_wips_legacy(tipo_prenda, version_calculo)
+            return await self._obtener_costos_wips_legacy(tipo_prenda, version_calculo)
 
-    def obtener_costos_wips_inteligente(
+    async def obtener_costos_wips_inteligente(
         self,
         tipo_prenda: str,
         version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
@@ -867,7 +907,7 @@ class TDVQueries:
         ORDER BY wip_id, año DESC, mes DESC
         """
 
-        resultados_variabilidad = self.db.execute_query(
+        resultados_variabilidad = await self.db.query(
             query_variabilidad,
             (
                 tipo_prenda,
@@ -948,7 +988,7 @@ class TDVQueries:
                   )
                   AND costo_por_prenda > 0
                 """
-                resultado_wip = self.db.execute_query(
+                resultado_wip = await self.db.query(
                     query_wip,
                     (
                         wip_id,
@@ -976,7 +1016,7 @@ class TDVQueries:
                     AND costo_por_prenda > 0
                     ORDER BY mes DESC
                     """
-                    resultado_wip = self.db.execute_query(
+                    resultado_wip = await self.db.query(
                         query_wip,
                         (wip_id, tipo_prenda, version_calculo, version_calculo),
                     )
@@ -998,7 +1038,7 @@ class TDVQueries:
                       )
                       AND costo_por_prenda > 0
                     """
-                    resultado_wip = self.db.execute_query(
+                    resultado_wip = await self.db.query(
                         query_wip,
                         (
                             wip_id,
@@ -1020,7 +1060,7 @@ class TDVQueries:
         )
         return costos_wips
 
-    def obtener_ruta_textil_recomendada(
+    async def obtener_ruta_textil_recomendada(
         self,
         tipo_prenda: str,
         version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
@@ -1057,7 +1097,7 @@ class TDVQueries:
         ORDER BY COUNT(*) DESC, AVG(w.costo_por_prenda) ASC
         """
 
-        resultados = self.db.execute_query(
+        resultados = await self.db.query(
             query_ruta,
             (
                 tipo_prenda,
@@ -1126,7 +1166,7 @@ class TDVQueries:
             },
         }
 
-    def _obtener_costos_wips_legacy(
+    async def _obtener_costos_wips_legacy(
         self,
         tipo_prenda: str,
         version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
@@ -1154,7 +1194,7 @@ class TDVQueries:
         GROUP BY wip_id
         """
 
-        resultados_inestables = self.db.execute_query(
+        resultados_inestables = await self.db.query(
             query_inestables,
             (
                 tipo_prenda,
@@ -1188,7 +1228,7 @@ class TDVQueries:
         FROM UltimosCostos WHERE rn = 1
         """
 
-        resultados_estables = self.db.execute_query(
+        resultados_estables = await self.db.query(
             query_estables, (tipo_prenda, version_calculo, version_calculo)
         )
         for row in resultados_estables:
@@ -1199,7 +1239,7 @@ class TDVQueries:
         )
         return costos_wips
 
-    def obtener_wips_disponibles_estructurado(
+    async def obtener_wips_disponibles_estructurado(
         self,
         tipo_prenda: Optional[str] = None,
         version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
@@ -1211,7 +1251,7 @@ class TDVQueries:
                 logger.info(
                     f"🔍 Obteniendo WIPs específicos para {tipo_prenda} ({version_calculo})"
                 )
-                costos_wips = self.obtener_costos_wips_por_estabilidad(
+                costos_wips = await self.obtener_costos_wips_por_estabilidad(
                     tipo_prenda, version_calculo
                 )
             else:
@@ -1236,7 +1276,7 @@ class TDVQueries:
                 FROM UltimosCostos WHERE rn = 1
                 """
 
-                resultados = self.db.execute_query(
+                resultados = await self.db.query(
                     query, (version_calculo, version_calculo)
                 )
                 costos_wips = {}
@@ -1246,7 +1286,7 @@ class TDVQueries:
             logger.info(f"✅ Costos WIP obtenidos: {len(costos_wips)} WIPs disponibles")
 
             # Estructurar WIPs textiles
-            wips_textiles = []
+            wips_textiles: List[WipDisponible] = []
             for wip_id in factores.WIPS_TEXTILES:
                 costo_actual = costos_wips.get(wip_id, 0.0)
                 wips_textiles.append(
@@ -1262,7 +1302,7 @@ class TDVQueries:
                 )
 
             # Estructurar WIPs manufactura
-            wips_manufactura = []
+            wips_manufactura: List[WipDisponible] = []
             for wip_id in factores.WIPS_MANUFACTURA:
                 costo_actual = costos_wips.get(wip_id, 0.0)
                 wips_manufactura.append(
@@ -1291,7 +1331,7 @@ class TDVQueries:
     # ========================================
 
     # ✅ CÓDIGO CORREGIDO
-    def obtener_gastos_indirectos_formula(
+    async def obtener_gastos_indirectos_formula(
         self, version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA
     ) -> Dict[str, float]:
         """✅ CORREGIDA: Gastos indirectos UNITARIOS con fechas relativas"""
@@ -1318,7 +1358,7 @@ class TDVQueries:
         AND gasto_ventas > 0
         """
 
-        resultado = self.db.execute_query(
+        resultado = await self.db.query(
             query, (version_calculo, version_calculo, version_calculo)
         )
         if resultado:
@@ -1335,7 +1375,7 @@ class TDVQueries:
         logger.warning(f"⚠️ No se encontraron gastos indirectos para {version_calculo}")
         return {"costo_indirecto_fijo": 0, "gasto_administracion": 0, "gasto_ventas": 0}
 
-    def obtener_ultimo_costo_materiales(
+    async def obtener_ultimo_costo_materiales(
         self, version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA
     ) -> Dict[str, float]:
         """✅ SIN CAMBIOS: Ya usa lógica correcta con fecha_corrida"""
@@ -1360,7 +1400,7 @@ class TDVQueries:
         prendas_requeridas DESC
         """
 
-        resultado = self.db.execute_query(query, (version_calculo, version_calculo))
+        resultado = await self.db.query(query, (version_calculo, version_calculo))
         if resultado:
             registro = resultado[0]
             prendas = (
@@ -1390,7 +1430,7 @@ class TDVQueries:
         )
         return {"costo_materia_prima": 0, "costo_avios": 0}
 
-    def obtener_volumen_historico_estilo(
+    async def obtener_volumen_historico_estilo(
         self,
         codigo_estilo: str,
         version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
@@ -1413,7 +1453,7 @@ class TDVQueries:
           AND c.prendas_requeridas > 0
         """
 
-        resultado = self.db.execute_query(
+        resultado = await self.db.query(
             query, (codigo_estilo, version_calculo, version_calculo)
         )
         volumen = (
@@ -1427,7 +1467,7 @@ class TDVQueries:
         )
         return volumen
 
-    def health_check(self) -> Dict[str, Any]:
+    async def health_check(self) -> Dict[str, Any]:
         """Verifica estado de las tablas principales"""
 
         tablas_check = {
@@ -1439,7 +1479,7 @@ class TDVQueries:
         resultados = {}
         for tabla, query in tablas_check.items():
             try:
-                resultado = self.db.execute_query(query)
+                resultado = await self.db.query(query)
                 resultados[tabla] = resultado[0]["total"] if resultado else 0
             except Exception as e:
                 logger.error(f"Error verificando tabla {tabla}: {e}")
@@ -1448,7 +1488,7 @@ class TDVQueries:
         logger.info(f"✅ Health check completado: {resultados}")
         return resultados
 
-    def obtener_ops_utilizadas_cotizacion(
+    async def obtener_ops_utilizadas_cotizacion(
         self,
         codigo_estilo: Optional[str] = None,
         familia_producto: Optional[str] = None,
@@ -1511,7 +1551,7 @@ class TDVQueries:
                 ORDER BY c.fecha_facturacion DESC, c.prendas_requeridas DESC
                 """
 
-                resultados = self.db.execute_query(
+                resultados = await self.db.query(
                     query_estilo,
                     (codigo_estilo, version_calculo, version_calculo, version_calculo),
                 )
@@ -1577,7 +1617,7 @@ class TDVQueries:
                 ORDER BY c.fecha_facturacion DESC, c.prendas_requeridas DESC
                 """
 
-                resultados = self.db.execute_query(query_familia, tuple(params))
+                resultados = await self.db.query(query_familia, tuple(params))
 
                 if resultados:
                     ops_utilizadas = resultados
@@ -1747,7 +1787,7 @@ class TDVQueries:
             "rangos_aplicados": True,  # ✅ INDICADOR DE QUE SE APLICARON RANGOS
         }
 
-    def obtener_info_comercial(
+    async def obtener_info_comercial(
         self,
         familia_producto: str,
         tipo_prenda: str,
@@ -1773,7 +1813,7 @@ class TDVQueries:
           AND prendas_requeridas > 0
         """
 
-        resultado_volumen = self.db.execute_query(
+        resultado_volumen = await self.db.query(
             query_volumen,
             (familia_producto, tipo_prenda, version_calculo, version_calculo),
         )
@@ -1803,7 +1843,7 @@ class TDVQueries:
         ORDER BY año DESC, mes DESC
         """
 
-        tendencias = self.db.execute_query(
+        tendencias = await self.db.query(
             query_tendencias,
             (familia_producto, tipo_prenda, version_calculo, version_calculo),
         )
@@ -1830,7 +1870,7 @@ class TDVQueries:
         ORDER BY SUM(prendas_requeridas) DESC
         """
 
-        competitivo = self.db.execute_query(
+        competitivo = await self.db.query(
             query_competitivo,
             (familia_producto, tipo_prenda, version_calculo, version_calculo),
         )

@@ -166,7 +166,7 @@ async def root():
 async def health_check():
     """Verificación de estado del sistema y BD"""
     try:
-        tablas_status = tdv_queries.health_check()
+        tablas_status = await tdv_queries.health_check()
 
         estado_general = (
             "healthy"
@@ -212,7 +212,9 @@ async def verificar_estilo_completo_con_autocompletado(
     """
     try:
         # PASO 1: Verificación básica
-        existe = tdv_queries.verificar_estilo_existente(codigo_estilo, version_calculo)
+        existe = await tdv_queries.verificar_estilo_existente(
+            codigo_estilo, version_calculo
+        )
         es_nuevo = not existe
 
         # PASO 2: Información detallada si existe
@@ -222,7 +224,7 @@ async def verificar_estilo_completo_con_autocompletado(
 
         if not es_nuevo:
             try:
-                info_detallada = tdv_queries.obtener_info_detallada_estilo(
+                info_detallada = await tdv_queries.obtener_info_detallada_estilo(
                     codigo_estilo, version_calculo
                 )
 
@@ -253,7 +255,7 @@ async def verificar_estilo_completo_con_autocompletado(
         elif not es_nuevo:
             # Fallback: obtener volumen directamente
             try:
-                volumen_historico = tdv_queries.obtener_volumen_historico_estilo(
+                volumen_historico = await tdv_queries.obtener_volumen_historico_estilo(
                     codigo_estilo, version_calculo
                 )
                 categoria = (
@@ -310,7 +312,7 @@ async def obtener_ops_utilizadas_cotizacion(input_data: CotizacionInput):
         )
 
         # Obtener OPs utilizadas desde database
-        ops_data = tdv_queries.obtener_ops_utilizadas_cotizacion(
+        ops_data = await tdv_queries.obtener_ops_utilizadas_cotizacion(
             codigo_estilo=input_data.codigo_estilo
             if input_data.codigo_estilo
             else None,
@@ -378,10 +380,11 @@ async def obtener_wips_disponibles(
             f"🔍 Obteniendo WIPs disponibles: tipo_prenda={tipo_prenda}, version={version_calculo}"
         )
 
-        wips_textiles, wips_manufactura = (
-            tdv_queries.obtener_wips_disponibles_estructurado(
-                tipo_prenda, version_calculo
-            )
+        (
+            wips_textiles,
+            wips_manufactura,
+        ) = await tdv_queries.obtener_wips_disponibles_estructurado(
+            tipo_prenda, version_calculo
         )
 
         metodo_usado = "analisis_inteligente_variacion" if tipo_prenda else "generico"
@@ -420,7 +423,7 @@ async def obtener_ruta_textil_recomendada(
             f"🧵 Obteniendo ruta textil para: {tipo_prenda} ({version_calculo})"
         )
 
-        ruta_textil = tdv_queries.obtener_ruta_textil_recomendada(
+        ruta_textil = await tdv_queries.obtener_ruta_textil_recomendada(
             tipo_prenda, version_calculo
         )
 
@@ -462,7 +465,7 @@ async def obtener_clientes(
     try:
         logger.info(f"👥 Cargando clientes para versión: {version_calculo}")
 
-        clientes = tdv_queries.obtener_clientes_disponibles(version_calculo)
+        clientes = await tdv_queries.obtener_clientes_disponibles(version_calculo)
 
         respuesta = {
             "clientes": clientes,
@@ -490,7 +493,7 @@ async def obtener_familias_productos(
     try:
         logger.info(f"📁 Cargando familias para versión: {version_calculo}")
 
-        familias = tdv_queries.obtener_familias_productos(version_calculo)
+        familias = await tdv_queries.obtener_familias_productos(version_calculo)
 
         respuesta = {
             "familias": familias,
@@ -518,7 +521,7 @@ async def obtener_tipos_prenda(
     try:
         logger.info(f"🏷️ Cargando tipos para familia: {familia} ({version_calculo})")
 
-        tipos = tdv_queries.obtener_tipos_prenda(familia, version_calculo)
+        tipos = await tdv_queries.obtener_tipos_prenda(familia, version_calculo)
 
         respuesta = {
             "tipos": tipos,
@@ -564,7 +567,7 @@ async def buscar_estilos_similares(
             f"🔍 Buscando estilos similares: {codigo_estilo} para {cliente or 'cualquier cliente'} ({version_calculo})"
         )
 
-        estilos = tdv_queries.buscar_estilos_similares(
+        estilos = await tdv_queries.buscar_estilos_similares(
             codigo_estilo, cliente or "", limite, version_calculo
         )
 
@@ -585,7 +588,9 @@ async def verificar_estilo_existente(
 ):
     """✅ MANTENIDO: Verificación básica de estilo (compatibilidad)"""
     try:
-        existe = tdv_queries.verificar_estilo_existente(codigo_estilo, version_calculo)
+        existe = await tdv_queries.verificar_estilo_existente(
+            codigo_estilo, version_calculo
+        )
         es_nuevo = not existe
 
         # Determinar categoría específica si es recurrente
@@ -594,7 +599,7 @@ async def verificar_estilo_existente(
 
         if not es_nuevo:
             try:
-                volumen_total = tdv_queries.obtener_volumen_historico_estilo(
+                volumen_total = await tdv_queries.obtener_volumen_historico_estilo(
                     codigo_estilo, version_calculo
                 )
                 volumen_historico = volumen_total
@@ -712,7 +717,7 @@ async def obtener_analisis_historico(
             base_query += " AND tipo_de_producto = ?"
             base_params.append(tipo)
 
-        resultado = tdv_queries.db.execute_query(base_query, tuple(base_params))
+        resultado = await tdv_queries.db.query(base_query, tuple(base_params))
 
         respuesta = {
             "analisis": resultado[0] if resultado else {},
@@ -797,7 +802,7 @@ async def obtener_info_fechas_corrida(
 
         for tabla in tablas:
             try:
-                fecha_max = tdv_queries.obtener_fecha_maxima_corrida(
+                fecha_max = await tdv_queries.obtener_fecha_maxima_corrida(
                     tabla, version_calculo
                 )
                 info_fechas[tabla] = {
@@ -851,7 +856,9 @@ async def verificar_estilo_completo(
         )
 
         # PASO 1: Verificación básica
-        existe = tdv_queries.verificar_estilo_existente(codigo_estilo, version_calculo)
+        existe = await tdv_queries.verificar_estilo_existente(
+            codigo_estilo, version_calculo
+        )
         es_nuevo = not existe
 
         logger.info(
@@ -859,7 +866,7 @@ async def verificar_estilo_completo(
         )
 
         # PASO 2: Información detallada si existe
-        info_detallada = tdv_queries.obtener_info_detallada_estilo(
+        info_detallada = await tdv_queries.obtener_info_detallada_estilo(
             codigo_estilo, version_calculo
         )
 
@@ -904,13 +911,14 @@ async def verificar_estilo_completo(
         # PASO 5: Ruta automática para estilos nuevos (si se proporcionan familia/tipo)
         if es_nuevo and familia_producto and tipo_prenda:
             try:
-                ruta_recomendada = tdv_queries.obtener_ruta_textil_recomendada(
+                ruta_recomendada = await tdv_queries.obtener_ruta_textil_recomendada(
                     tipo_prenda, version_calculo
                 )
-                wips_textiles, wips_manufactura = (
-                    tdv_queries.obtener_wips_disponibles_estructurado(
-                        tipo_prenda, version_calculo
-                    )
+                (
+                    wips_textiles,
+                    wips_manufactura,
+                ) = await tdv_queries.obtener_wips_disponibles_estructurado(
+                    tipo_prenda, version_calculo
                 )
 
                 resultado.update(
@@ -976,7 +984,7 @@ async def autocompletar_estilo_recurrente(
         )
 
         # Obtener información detallada
-        info_detallada = tdv_queries.obtener_info_detallada_estilo(
+        info_detallada = await tdv_queries.obtener_info_detallada_estilo(
             codigo_estilo, version_calculo
         )
 
@@ -1035,7 +1043,7 @@ async def debug_estilo_clasificacion(
         FROM {settings.db_schema}.historial_estilos
         WHERE codigo_estilo = ? AND version_calculo = ?
         """
-        resultado_historial = tdv_queries.db.execute_query(
+        resultado_historial = await tdv_queries.db.query(
             query_historial, (codigo_estilo, version_calculo)
         )
         debug_info["historial_estilos"] = (
@@ -1052,7 +1060,7 @@ async def debug_estilo_clasificacion(
         FROM {settings.db_schema}.costo_op_detalle
         WHERE estilo_propio = ? AND version_calculo = ?
         """
-        resultado_ops = tdv_queries.db.execute_query(
+        resultado_ops = await tdv_queries.db.query(
             query_ops, (codigo_estilo, version_calculo)
         )
         debug_info["costo_op_detalle"] = resultado_ops[0] if resultado_ops else {}
@@ -1065,19 +1073,19 @@ async def debug_estilo_clasificacion(
         GROUP BY codigo_estilo
         ORDER BY codigo_estilo
         """
-        resultado_like = tdv_queries.db.execute_query(
+        resultado_like = await tdv_queries.db.query(
             query_like, (f"%{codigo_estilo}%", version_calculo)
         )
         debug_info["busqueda_similar"] = resultado_like
 
         # 4. Función actual de verificación
-        existe_actual = tdv_queries.verificar_estilo_existente(
+        existe_actual = await tdv_queries.verificar_estilo_existente(
             codigo_estilo, version_calculo
         )
         debug_info["verificacion_actual"] = existe_actual
 
         # 5. Info detallada
-        info_detallada = tdv_queries.obtener_info_detallada_estilo(
+        info_detallada = await tdv_queries.obtener_info_detallada_estilo(
             codigo_estilo, version_calculo
         )
         debug_info["info_detallada"] = info_detallada
@@ -1119,7 +1127,7 @@ async def obtener_versiones_calculo():
                 FROM {settings.db_schema}.costo_op_detalle
                 WHERE version_calculo = ?
                 """
-                resultado = tdv_queries.db.execute_query(query, (version,))
+                resultado = await tdv_queries.db.query(query, (version,))
 
                 if resultado and resultado[0]:
                     stats = resultado[0]
@@ -1186,7 +1194,7 @@ async def startup_event():
 
     # Verificar conexión inicial
     try:
-        tablas = tdv_queries.health_check()
+        tablas = await tdv_queries.health_check()
         logger.info(f"📋 Tablas verificadas: {tablas}")
 
         # Verificar versiones disponibles
@@ -1197,7 +1205,7 @@ async def startup_event():
             GROUP BY version_calculo
             ORDER BY registros DESC
             """
-            versiones_resultado = tdv_queries.db.execute_query(versiones_query)
+            versiones_resultado = await tdv_queries.db.query(versiones_query)
 
             if versiones_resultado:
                 logger.info("📊 Versiones de cálculo disponibles:")
@@ -1217,7 +1225,7 @@ async def startup_event():
             try:
                 for version in ["FLUIDA", "truncado"]:
                     try:
-                        fecha_max = tdv_queries.obtener_fecha_maxima_corrida(
+                        fecha_max = await tdv_queries.obtener_fecha_maxima_corrida(
                             tabla, version
                         )
                         if fecha_max:
@@ -1247,6 +1255,7 @@ async def shutdown_event():
 
 if __name__ == "__main__":
     import uvicorn
+
     logger.info(f"🚀 Iniciando servidor en {settings.api_host}:{settings.api_port}")
     uvicorn.run(
         "app",

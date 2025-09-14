@@ -890,8 +890,8 @@ class TDVQueries:
         query_variabilidad = f"""
         SELECT
           wip_id,
-          YEAR(mes) as año,
-          MONTH(mes) as mes,
+          EXTRACT(YEAR FROM mes) as año,
+          EXTRACT(MONTH FROM mes) as mes,
           AVG(CAST(costo_por_prenda AS FLOAT)) as costo_mensual,
           AVG(CAST(total_prendas AS FLOAT)) as prendas_promedio
         FROM {settings.db_schema}.resumen_wip_por_prenda
@@ -907,7 +907,7 @@ class TDVQueries:
             WHERE version_calculo = ? AND tipo_de_producto = ?
           )
           AND costo_por_prenda > 0
-        GROUP BY wip_id, YEAR(mes), MONTH(mes)
+        GROUP BY wip_id, EXTRACT(YEAR FROM mes), EXTRACT(MONTH FROM mes)
         ORDER BY wip_id, año DESC, mes DESC
         """
 

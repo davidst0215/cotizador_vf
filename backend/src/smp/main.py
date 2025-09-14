@@ -658,7 +658,7 @@ async def crear_cotizacion(input_data: CotizacionInput):
             input_data.version_calculo = VersionCalculo.FLUIDA
 
         # Procesar cotización
-        resultado = cotizador_tdv.procesar_cotizacion(input_data)
+        resultado = await cotizador_tdv.procesar_cotizacion(input_data)
 
         logger.info(
             f"✅ Cotización completada: {resultado.id_cotizacion} | ${resultado.precio_final:.2f} | Versión: {resultado.version_calculo_usada}"

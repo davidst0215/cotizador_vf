@@ -20,10 +20,11 @@ RUN set -eux; \
 FROM ${NODE_BASE_IMAGE}
 ARG APP_USER
 ARG APP_UID
+ARG PORT
 
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
-    PORT=3000
+    PORT=${PORT}
 
 # Install only production dependencies
 WORKDIR /app

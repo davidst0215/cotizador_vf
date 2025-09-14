@@ -279,7 +279,7 @@ class TDVQueries:
         try:
             # ✅ QUERY PRINCIPAL CORREGIDA: Con fechas relativas
             query = f"""
-            SELECT TOP 1
+            SELECT
               h.codigo_estilo,
               c.familia_de_productos,
               c.tipo_de_producto,
@@ -308,6 +308,7 @@ class TDVQueries:
                 WHERE version_calculo = ?
               )
             ORDER BY c.fecha_facturacion DESC
+            LIMIT 1
             """
 
             resultado = await self.db.query(
@@ -343,7 +344,7 @@ class TDVQueries:
             )
 
             query_fallback = f"""
-            SELECT TOP 1
+            SELECT
               c.estilo_propio as codigo_estilo,
               c.familia_de_productos,
               c.tipo_de_producto,
@@ -366,6 +367,7 @@ class TDVQueries:
                 WHERE version_calculo = ?
               )
             ORDER BY c.fecha_facturacion DESC
+            LIMIT 1
             """
 
             resultado_fallback = await self.db.query(
@@ -618,7 +620,7 @@ class TDVQueries:
         if cliente:
             # ✅ CORREGIDO: Fechas relativas en lugar de GETDATE()
             query_exacta = f"""
-            SELECT TOP 20
+            SELECT
               costo_textil, costo_manufactura, costo_avios, costo_materia_prima,
               costo_indirecto_fijo, gasto_administracion, gasto_ventas,
               esfuerzo_total, prendas_requeridas, fecha_facturacion
@@ -639,6 +641,7 @@ class TDVQueries:
               AND prendas_requeridas > 0
             ORDER BY fecha_facturacion DESC,
             prendas_requeridas DESC
+            LIMIT 20
             """
 
             resultados = await self.db.query(
@@ -663,7 +666,7 @@ class TDVQueries:
 
         # ✅ CORREGIDO: Fechas relativas en lugar de GETDATE()
         query_familia = f"""
-        SELECT TOP 50
+        SELECT
           costo_textil, costo_manufactura, costo_avios, costo_materia_prima,
           costo_indirecto_fijo, gasto_administracion, gasto_ventas,
           esfuerzo_total, prendas_requeridas, fecha_facturacion
@@ -681,8 +684,8 @@ class TDVQueries:
             WHERE version_calculo = ?
           )
           AND prendas_requeridas > 0
-        ORDER BY fecha_facturacion DESC,
-        prendas_requeridas DESC
+        ORDER BY fecha_facturacion DESC, prendas_requeridas DESC
+        LIMIT 50
         """
 
         resultados = await self.db.query(
@@ -720,7 +723,7 @@ class TDVQueries:
 
         # ✅ QUERY CORREGIDA: Con fechas relativas
         query = f"""
-        SELECT TOP 50
+        SELECT
           COALESCE(costo_textil, 0) as costo_textil,
           COALESCE(costo_manufactura, 0) as costo_manufactura,
           COALESCE(costo_avios, 0) as costo_avios,
@@ -750,6 +753,7 @@ class TDVQueries:
         )
         AND c.prendas_requeridas > 0
         ORDER BY c.fecha_facturacion DESC
+        LIMIT 50
         """
 
         resultados = await self.db.query(
@@ -1004,7 +1008,7 @@ class TDVQueries:
                 if coef_variacion <= 0.10:
                     # Estable: último costo
                     query_wip = f"""
-                    SELECT TOP 1
+                    SELECT
                       CAST(costo_por_prenda AS FLOAT) as costo_promedio
                     FROM {settings.db_schema}.resumen_wip_por_prenda
                     WHERE wip_id = ? AND tipo_de_producto = ?
@@ -1015,6 +1019,7 @@ class TDVQueries:
                       WHERE version_calculo = ?)
                     AND costo_por_prenda > 0
                     ORDER BY mes DESC
+                    LIMIT 1
                     """
                     resultado_wip = await self.db.query(
                         query_wip,
@@ -1071,7 +1076,7 @@ class TDVQueries:
 
         # ✅ QUERY YA CORRECTA: 12 meses, sin filtros de prendas
         query_ruta = f"""
-        SELECT TOP 25
+        SELECT
           w.wip_id,
           COUNT(*) as frecuencia_uso,
           AVG(w.costo_por_prenda) as costo_promedio,
@@ -1095,6 +1100,7 @@ class TDVQueries:
         GROUP BY w.wip_id
         HAVING COUNT(*) >= 1
         ORDER BY COUNT(*) DESC, AVG(w.costo_por_prenda) ASC
+        LIMIT 25
         """
 
         resultados = await self.db.query(
@@ -1381,7 +1387,7 @@ class TDVQueries:
         """✅ SIN CAMBIOS: Ya usa lógica correcta con fecha_corrida"""
 
         query = f"""
-        SELECT TOP 1
+        SELECT
             costo_materia_prima,
             costo_avios,
             prendas_requeridas,
@@ -1398,6 +1404,7 @@ class TDVQueries:
             WHERE version_calculo = ?)
         ORDER BY fecha_facturacion DESC,
         prendas_requeridas DESC
+        LIMIT 1
         """
 
         resultado = await self.db.query(query, (version_calculo, version_calculo))
@@ -1508,7 +1515,7 @@ class TDVQueries:
             try:
                 # Fechas relativas en lugar de GETDATE()
                 query_estilo = f"""
-                SELECT TOP 10
+                SELECT
                   c.cod_ordpro,
                   c.cliente,
                   c.fecha_facturacion,
@@ -1549,6 +1556,7 @@ class TDVQueries:
                 )
                 AND c.prendas_requeridas > 0
                 ORDER BY c.fecha_facturacion DESC, c.prendas_requeridas DESC
+                LIMIT 10
                 """
 
                 resultados = await self.db.query(
@@ -1584,7 +1592,7 @@ class TDVQueries:
 
                 # ✅ CORREGIDO: Fechas relativas en lugar de GETDATE()
                 query_familia = f"""
-                SELECT TOP 10
+                SELECT
                   c.cod_ordpro,
                   c.estilo_propio,
                   c.cliente,
@@ -1615,6 +1623,7 @@ class TDVQueries:
                 AND c.prendas_requeridas > 0
                 {cliente_filter}
                 ORDER BY c.fecha_facturacion DESC, c.prendas_requeridas DESC
+                LIMIT 10
                 """
 
                 resultados = await self.db.query(query_familia, tuple(params))
@@ -1850,7 +1859,7 @@ class TDVQueries:
 
         # 3. Análisis competitivo
         query_competitivo = f"""
-        SELECT TOP 5
+        SELECT
           cliente,
           COUNT(*) as ops_cliente,
           SUM(prendas_requeridas) as volumen_cliente,
@@ -1868,6 +1877,7 @@ class TDVQueries:
           AND prendas_requeridas > 0
         GROUP BY cliente
         ORDER BY SUM(prendas_requeridas) DESC
+        LIMIT 5
         """
 
         competitivo = await self.db.query(

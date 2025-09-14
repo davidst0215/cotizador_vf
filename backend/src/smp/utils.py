@@ -30,7 +30,7 @@ from .config import factores
 
 logger = logging.getLogger(__name__)
 
-tdv_queries = TDVQueries.get_instance()
+tdv_queries: TDVQueries = TDVQueries.get_instance()
 
 
 class CotizadorTDV:
@@ -41,7 +41,9 @@ class CotizadorTDV:
         self.tdv_queries = tdv_queries
         logger.info(f"🚀 Cotizador TDV iniciado - Versión {self.version}")
 
-    def procesar_cotizacion(self, input_data: CotizacionInput) -> CotizacionResponse:
+    async def procesar_cotizacion(
+        self, input_data: CotizacionInput
+    ) -> CotizacionResponse:
         """
         ✅ FUNCIÓN PRINCIPAL COMPLETAMENTE CORREGIDA
 
@@ -67,9 +69,11 @@ class CotizadorTDV:
             self._validar_input_completo(input_data)
 
             # ✅ DETECCIÓN INTELIGENTE DE CATEGORÍA DE ESTILO
-            categoria_estilo, volumen_historico, info_autocompletado = (
-                self._determinar_categoria_estilo_completa(input_data)
-            )
+            (
+                categoria_estilo,
+                volumen_historico,
+                info_autocompletado,
+            ) = await self._determinar_categoria_estilo_completa(input_data)
             logger.info(
                 f"🔍 Estilo {input_data.codigo_estilo}: categoría={categoria_estilo}, volumen={volumen_historico}"
             )
@@ -103,14 +107,14 @@ class CotizadorTDV:
                 logger.info(
                     f"🆕 Procesando como ESTILO NUEVO: {input_data.codigo_estilo}"
                 )
-                resultado = self._procesar_estilo_nuevo_mejorado(
+                resultado = await self._procesar_estilo_nuevo_mejorado(
                     input_data, id_cotizacion, categoria_lote, factor_lote, factor_marca
                 )
             else:
                 logger.info(
                     f"🔄 Procesando como ESTILO RECURRENTE: {input_data.codigo_estilo}"
                 )
-                resultado = self._procesar_estilo_recurrente_mejorado(
+                resultado = await self._procesar_estilo_recurrente_mejorado(
                     input_data, id_cotizacion, categoria_lote, factor_lote, factor_marca
                 )
 
@@ -125,7 +129,9 @@ class CotizadorTDV:
                 and input_data.familia_producto
                 and input_data.tipo_prenda
             ):
-                ruta_automatica = self._obtener_ruta_automatica_mejorada(input_data)
+                ruta_automatica = await self._obtener_ruta_automatica_mejorada(
+                    input_data
+                )
                 if ruta_automatica:
                     resultado.metadatos_adicionales = (
                         resultado.metadatos_adicionales or {}
@@ -224,7 +230,7 @@ class CotizadorTDV:
 
         logger.info(f"✅ Validación completa exitosa para {input_data.codigo_estilo}")
 
-    def _determinar_categoria_estilo_completa(
+    async def _determinar_categoria_estilo_completa(
         self, input_data: CotizacionInput
     ) -> Tuple[TipoEstilo, int, Optional[Dict]]:
         """
@@ -241,7 +247,7 @@ class CotizadorTDV:
         if input_data.codigo_estilo:
             try:
                 # ✅ USAR NUEVA FUNCIÓN DE INFORMACIÓN DETALLADA
-                info_detallada = tdv_queries.obtener_info_detallada_estilo(
+                info_detallada = await tdv_queries.obtener_info_detallada_estilo(
                     input_data.codigo_estilo, input_data.version_calculo
                 )
 
@@ -290,7 +296,7 @@ class CotizadorTDV:
 
         return categoria_estilo, volumen_historico, info_autocompletado
 
-    def _obtener_ruta_automatica_mejorada(
+    async def _obtener_ruta_automatica_mejorada(
         self, input_data: CotizacionInput
     ) -> Optional[Dict[str, Any]]:
         """
@@ -299,7 +305,7 @@ class CotizadorTDV:
 
         try:
             # Obtener ruta textil recomendada
-            ruta_textil = tdv_queries.obtener_ruta_textil_recomendada(
+            ruta_textil = await tdv_queries.obtener_ruta_textil_recomendada(
                 input_data.tipo_prenda, input_data.version_calculo
             )
 
@@ -310,10 +316,11 @@ class CotizadorTDV:
                 return None
 
             # Obtener WIPs disponibles estructurados
-            wips_textiles, wips_manufactura = (
-                tdv_queries.obtener_wips_disponibles_estructurado(
-                    input_data.tipo_prenda, input_data.version_calculo
-                )
+            (
+                wips_textiles,
+                wips_manufactura,
+            ) = await tdv_queries.obtener_wips_disponibles_estructurado(
+                input_data.tipo_prenda, input_data.version_calculo
             )
 
             # Filtrar solo WIPs disponibles
@@ -369,7 +376,7 @@ class CotizadorTDV:
             )
             return None
 
-    def _procesar_estilo_recurrente_mejorado(
+    async def _procesar_estilo_recurrente_mejorado(
         self,
         input_data: CotizacionInput,
         id_cotizacion: str,
@@ -389,7 +396,7 @@ class CotizadorTDV:
         # ✅ ESTRATEGIA CORREGIDA: TODOS LOS COSTOS DEL ESTILO ESPECÍFICO
         try:
             # ÚNICA FUENTE: histórico del estilo específico
-            costos_hist = tdv_queries.buscar_costos_estilo_especifico(
+            costos_hist = await tdv_queries.buscar_costos_estilo_especifico(
                 input_data.codigo_estilo,
                 meses=24,
                 version_calculo=input_data.version_calculo,
@@ -499,7 +506,7 @@ class CotizadorTDV:
         _, factor_esfuerzo = factores.obtener_factor_esfuerzo(esfuerzo_historico)
 
         # Determinar categoría estilo para factor
-        volumen = tdv_queries.obtener_volumen_historico_estilo(
+        volumen = await tdv_queries.obtener_volumen_historico_estilo(
             input_data.codigo_estilo, input_data.version_calculo
         )
         categoria_estilo = "Muy Recurrente" if volumen >= 4000 else "Recurrente"
@@ -511,7 +518,7 @@ class CotizadorTDV:
         margen_aplicado = 15 * vector_total
 
         # ✅ OBTENER INFORMACIÓN COMERCIAL
-        info_comercial = self._obtener_info_comercial_mejorada(input_data)
+        info_comercial = await self._obtener_info_comercial_mejorada(input_data)
 
         # ✅ VALIDACIONES Y ALERTAS MEJORADAS
         validaciones = [
@@ -580,7 +587,7 @@ class CotizadorTDV:
             },
         )
 
-    def _procesar_estilo_nuevo_mejorado(
+    async def _procesar_estilo_nuevo_mejorado(
         self,
         input_data: CotizacionInput,
         id_cotizacion: str,
@@ -606,7 +613,7 @@ class CotizadorTDV:
 
         # ✅ OBTENER COSTOS WIPS CON ANÁLISIS INTELIGENTE
         try:
-            costos_wips = tdv_queries.obtener_costos_wips_por_estabilidad(
+            costos_wips = await tdv_queries.obtener_costos_wips_por_estabilidad(
                 input_data.tipo_prenda, input_data.version_calculo
             )
             logger.info(
@@ -654,7 +661,7 @@ class CotizadorTDV:
             )
 
         # ✅ OBTENER COSTOS COMPLEMENTARIOS
-        costos_complementarios = self._obtener_costos_complementarios_mejorados(
+        costos_complementarios = await self._obtener_costos_complementarios_mejorados(
             input_data, componentes, alertas
         )
 
@@ -676,7 +683,7 @@ class CotizadorTDV:
         margen_aplicado = 15 * vector_total
 
         # ✅ INFORMACIÓN COMERCIAL
-        info_comercial = self._obtener_info_comercial_mejorada(input_data)
+        info_comercial = await self._obtener_info_comercial_mejorada(input_data)
 
         # ✅ VALIDACIONES Y CONFIGURACIÓN WIPS
         validaciones = [
@@ -804,7 +811,7 @@ class CotizadorTDV:
         )
         return costo_total
 
-    def _obtener_costos_complementarios_mejorados(
+    async def _obtener_costos_complementarios_mejorados(
         self,
         input_data: CotizacionInput,
         componentes: List[ComponenteCosto],
@@ -816,7 +823,7 @@ class CotizadorTDV:
 
         # ✅ OBTENER ÚLTIMO COSTO DE MATERIALES
         try:
-            costos_materiales = tdv_queries.obtener_ultimo_costo_materiales(
+            costos_materiales = await tdv_queries.obtener_ultimo_costo_materiales(
                 input_data.version_calculo
             )
             for comp in ["costo_materia_prima", "costo_avios"]:
@@ -860,7 +867,7 @@ class CotizadorTDV:
 
         # ✅ OBTENER GASTOS INDIRECTOS
         try:
-            gastos = tdv_queries.obtener_gastos_indirectos_formula(
+            gastos = await tdv_queries.obtener_gastos_indirectos_formula(
                 input_data.version_calculo
             )
             for comp in [
@@ -913,12 +920,12 @@ class CotizadorTDV:
 
         return costos_validados
 
-    def _obtener_info_comercial_mejorada(
+    async def _obtener_info_comercial_mejorada(
         self, input_data: CotizacionInput
     ) -> InfoComercial:
         """✅ Obtiene información comercial con manejo robusto de errores"""
         try:
-            info_raw = tdv_queries.obtener_info_comercial(
+            info_raw = await tdv_queries.obtener_info_comercial(
                 input_data.familia_producto,
                 input_data.tipo_prenda,
                 input_data.version_calculo,

@@ -126,10 +126,10 @@ npm run dev
 
 - **Desglose Detallado:** Textil, manufactura, avíos, materia prima, gastos indirectos
 - **Factores de Ajuste:**
-    - **Lote:** Micro/Pequeño/Mediano/Grande/Masivo
-    - **Esfuerzo:** Bajo/Medio/Alto (basado en complejidad)
-    - **Estilo:** Nuevo/Recurrente/Muy Recurrente
-    - **Marca:** Factores específicos por cliente
+  - **Lote:** Micro/Pequeño/Mediano/Grande/Masivo
+  - **Esfuerzo:** Bajo/Medio/Alto (basado en complejidad)
+  - **Estilo:** Nuevo/Recurrente/Muy Recurrente
+  - **Marca:** Factores específicos por cliente
 
 ### 3. Rutas Textiles
 

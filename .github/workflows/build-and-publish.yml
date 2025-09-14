@@ -2,7 +2,7 @@ name: Build & Publish Backend & Frontend Images
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
 
 concurrency:
   group: build-and-push-${{ github.ref }}

@@ -1,5 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  basePath: '/cotizador',
+  assetPrefix: '/cotizador',
   output: "standalone",
   env: {
     NEXT_PUBLIC_API_BASE_URL:

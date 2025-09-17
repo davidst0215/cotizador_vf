@@ -33,7 +33,7 @@ services:
     environment:
       - NEXT_PUBLIC_API_URL=http://backend:${API_PORT}
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000"]
+      test: ["CMD", "wget", "-q", "--spider", "http://frontend:3000/health/"]
       interval: 30s
       timeout: 5s
       retries: 3

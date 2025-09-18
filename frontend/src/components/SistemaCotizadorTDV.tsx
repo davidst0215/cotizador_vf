@@ -7,7 +7,7 @@ import React, {
   useRef,
   useMemo,
 } from "react";
-import { get, post } from "../libs/api";
+import { get, post } from "@/libs/api";
 import {
   Settings,
   DollarSign,

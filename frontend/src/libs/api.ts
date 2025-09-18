@@ -1,7 +1,30 @@
-const BASE = (process.env.NEXT_PUBLIC_API_BASE_URL || "").replace(/\/$/, "");
+// src/libs/api.ts
+const rawBase =
+  // client-visible first (used by browser bundles)
+  process.env.NEXT_PUBLIC_API_BASE_URL ??
+  // server-only (used by server components / routes)
+  process.env.INTERNAL_API_BASE_URL ??
+  // sensible runtime fallback for client if nothing is injected
+  "/api/proxy";
+
+const BASE = String(rawBase).replace(/\/$/, "");
 
 function joinPath(path: string) {
   return `${BASE}/${path.replace(/^\//, "")}`;
+}
+
+async function createHttpError(res: Response) {
+  let message = `HTTP ${res.status} ${res.statusText}`;
+  try {
+    const payload = await res.json();
+    message = payload?.mensaje || payload?.message || JSON.stringify(payload);
+  } catch {
+    // ignore parse errors
+  }
+  const err: any = new Error(message);
+  err.status = res.status;
+  err.response = res;
+  return err;
 }
 
 export async function get<T = unknown>(
@@ -36,16 +59,3 @@ export async function post<T = unknown>(
   return (await res.json()) as T;
 }
 
-async function createHttpError(res: Response) {
-  let message = `HTTP ${res.status} ${res.statusText}`;
-  try {
-    const payload = await res.json();
-    message = payload?.mensaje || payload?.message || JSON.stringify(payload);
-  } catch {
-    // ignore parse errors
-  }
-  const err: any = new Error(message);
-  err.status = res.status;
-  err.response = res;
-  return err;
-}

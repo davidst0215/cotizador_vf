@@ -1,14 +1,13 @@
 // src/libs/api.ts
-const rawBase =
-  // client-visible first (used by browser bundles)
-  process.env.NEXT_PUBLIC_API_URL ??
-  // server-only (used by server components / routes)
-  process.env.INTERNAL_API_URL ??
-  // sensible runtime fallback for client if nothing is injected
-  "/api/proxy";
+const rawPublic = process.env.NEXT_PUBLIC_API_URL; // optional
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? ""; // bake if basePath
+const rawServer = process.env.INTERNAL_API_URL; // runtime-only server upstream
 
-const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
-const BASE = `${basePath}${String(rawBase)}`.replace(/\/$/, "");
+const BASE = rawPublic
+  ? String(rawPublic).replace(/\/$/, "")
+  : String(rawServer).startsWith("http")
+    ? String(rawServer).replace(/\/$/, "")
+    : `${basePath}/api/proxy`.replace(/\/$/, "");
 
 function joinPath(path: string) {
   return `${BASE}/${path.replace(/^\//, "")}`;
@@ -59,4 +58,3 @@ export async function post<T = unknown>(
   if (!res.ok) throw await createHttpError(res);
   return (await res.json()) as T;
 }
-

@@ -25,8 +25,10 @@ function invalidPath(path: string) {
   if (!path) return true;
   if (path.includes("..")) return true;
   if (/^https?:\/\//i.test(path)) return true;
-  // allow only simple safe chars (letters, digits, dash, underscore, slash)
-  if (!/^[\w\-\/]+$/.test(path)) return true;
+
+  // allow URL-encoded characters
+  if (!/^[\w\-\/%]+$/.test(path)) return true;
+
   if (PROXY_ALLOWLIST.length) {
     return !PROXY_ALLOWLIST.some((p) => path.startsWith(p));
   }

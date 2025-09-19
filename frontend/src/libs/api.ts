@@ -1,13 +1,10 @@
 // src/libs/api.ts
-const rawPublic = process.env.NEXT_PUBLIC_API_URL; // optional
-const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? ""; // bake if basePath
-const rawServer = process.env.INTERNAL_API_URL; // runtime-only server upstream
+import getConfig from "next/config";
 
-const BASE = rawPublic
-  ? String(rawPublic).replace(/\/$/, "")
-  : (typeof window === "undefined" && String(rawServer).startsWith("http")
-      ? String(rawServer).replace(/\/$/, "")
-      : `${basePath}/api/proxy`.replace(/\/$/, ""));
+const BASE =
+  process.env.NEXT_PUBLIC_API_URL ||
+  process.env.INTERNAL_API_URL ||
+  `${getConfig()?.basePath ?? "/"}api/proxy`.replace(/\/{2,}/g, "/");
 
 function joinPath(path: string) {
   return `${BASE}/${path.replace(/^\//, "")}`;

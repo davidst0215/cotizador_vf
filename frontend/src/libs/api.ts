@@ -7,7 +7,8 @@ const rawBase =
   // sensible runtime fallback for client if nothing is injected
   "/api/proxy";
 
-const BASE = String(rawBase).replace(/\/$/, "");
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
+const BASE = `${basePath}${String(rawBase)}`.replace(/\/$/, "");
 
 function joinPath(path: string) {
   return `${BASE}/${path.replace(/^\//, "")}`;

@@ -1,10 +1,9 @@
 // src/libs/api.ts
-import getConfig from "next/config";
-
 const BASE =
-  process.env.NEXT_PUBLIC_API_URL ||
-  process.env.INTERNAL_API_URL ||
-  `${getConfig()?.basePath ?? "/"}api/proxy`.replace(/\/{2,}/g, "/");
+  (typeof window === "undefined"
+    ? process.env.INTERNAL_API_URL
+    : process.env.NEXT_PUBLIC_API_URL) ||
+  `${process.env.NEXT_PUBLIC_BASE_PATH}/api/proxy`.replace(/\/{2,}/g, "/");
 
 function joinPath(path: string) {
   return `${BASE}/${path.replace(/^\//, "")}`;

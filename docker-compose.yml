@@ -33,7 +33,6 @@ services:
     environment:
       - NEXT_PUBLIC_BASE_PATH=/cotizador
       - INTERNAL_API_URL=http://backend:${API_PORT}
-      - PROXY_BASE=/api/proxy
       - PROXY_TIMEOUT_MS=10000
       - PROXY_ALLOWLIST=
     healthcheck:

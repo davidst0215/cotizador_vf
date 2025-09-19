@@ -5,9 +5,9 @@ const rawServer = process.env.INTERNAL_API_URL; // runtime-only server upstream
 
 const BASE = rawPublic
   ? String(rawPublic).replace(/\/$/, "")
-  : String(rawServer).startsWith("http")
-    ? String(rawServer).replace(/\/$/, "")
-    : `${basePath}/api/proxy`.replace(/\/$/, "");
+  : (typeof window === "undefined" && String(rawServer).startsWith("http")
+      ? String(rawServer).replace(/\/$/, "")
+      : `${basePath}/api/proxy`.replace(/\/$/, ""));
 
 function joinPath(path: string) {
   return `${BASE}/${path.replace(/^\//, "")}`;

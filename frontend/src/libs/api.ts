@@ -1,9 +1,9 @@
 // src/libs/api.ts
 const rawBase =
   // client-visible first (used by browser bundles)
-  process.env.NEXT_PUBLIC_API_BASE_URL ??
+  process.env.NEXT_PUBLIC_API_URL ??
   // server-only (used by server components / routes)
-  process.env.INTERNAL_API_BASE_URL ??
+  process.env.INTERNAL_API_URL ??
   // sensible runtime fallback for client if nothing is injected
   "/api/proxy";
 

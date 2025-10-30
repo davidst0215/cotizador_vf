@@ -2,7 +2,8 @@
 
 **Versión:** 2.0
 **Arquitectura:** FastAPI + Next.js + TypeScript
-**Base de Datos:** SQL Server (TDV Real Database)
+**Base de Datos:** PostgreSQL (TDV Real Database)
+**Colaborador:** davidst0215
 
 ## 📋 Descripción del Proyecto
 

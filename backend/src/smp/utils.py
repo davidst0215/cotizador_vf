@@ -886,10 +886,14 @@ class CotizadorTDV:
                     costos_validados[comp] = valor_default
                     alertas.append(f"⚠️ {comp}: usando valor promedio por error en BD")
 
-        # ✅ OBTENER GASTOS INDIRECTOS
+        # ✅ OBTENER GASTOS INDIRECTOS (ahora retorna tupla con OPs excluidas)
         try:
-            gastos = await tdv_queries.obtener_gastos_indirectos_formula(
-                input_data.version_calculo
+            gastos, ops_excluidas = await tdv_queries.obtener_gastos_indirectos_formula(
+                version_calculo=input_data.version_calculo,
+                codigo_estilo=input_data.codigo_estilo,
+                cliente_marca=input_data.cliente_marca,
+                familia_producto=input_data.familia_producto,
+                tipo_prenda=input_data.tipo_prenda,
             )
             for comp in [
                 "costo_indirecto_fijo",
@@ -897,13 +901,10 @@ class CotizadorTDV:
                 "gasto_ventas",
             ]:
                 valor = gastos.get(comp, 0)
-                valor_validado, fue_ajustado = factores.validar_rango_seguridad(
-                    valor, comp
-                )
-                costos_validados[comp] = valor_validado
-
-                if fue_ajustado:
-                    alertas.append(f"⚠️ {comp}: ajustado por límites de seguridad")
+                # ⚠️ NOTA: Los límites de seguridad ya NO se aplican a estos 3 costos
+                # porque usamos MODA con filtrado de outliers (10x)
+                costos_validados[comp] = valor
+                logger.info(f"✅ {comp}: ${valor:.4f} (por MODA, sin rango_seguridad)")
 
                 componentes.append(
                     ComponenteCosto(

@@ -75,6 +75,66 @@ def normalize_version_calculo(version: Optional[VersionCalculo]) -> str:
     return version_value
 
 
+def calculate_mode(values: List[float]) -> Optional[float]:
+    """
+    Calcula la moda (modo) de una lista de valores.
+    Si hay múltiples modas o no hay datos, retorna None.
+
+    Args:
+        values: Lista de números flotantes
+
+    Returns:
+        La moda de los valores o None si no hay datos suficientes
+    """
+    if not values or len(values) < 1:
+        return None
+
+    try:
+        mode_value = statistics.mode(values)
+        return float(mode_value)
+    except statistics.StatisticsError:
+        # Si no hay moda única (todos los valores aparecen igual número de veces)
+        # retornar la media como fallback
+        return float(sum(values) / len(values)) if values else None
+
+
+def filter_by_mode_threshold(
+    values: List[float],
+    threshold: float = 10.0
+) -> Tuple[List[float], List[int]]:
+    """
+    Filtra valores que exceden 'threshold' veces la moda.
+
+    Args:
+        values: Lista de valores a filtrar
+        threshold: Múltiplo de la moda para considerar outlier (default: 10x)
+
+    Returns:
+        Tupla (valores_filtrados, indices_excluidos)
+        - valores_filtrados: Lista con los valores que pasaron el filtro
+        - indices_excluidos: Índices de los valores que fueron excluidos
+    """
+    if not values:
+        return [], []
+
+    mode_value = calculate_mode(values)
+    if mode_value is None or mode_value == 0:
+        # Si no hay moda válida, retornar todos los valores
+        return values, []
+
+    max_threshold = mode_value * threshold
+    filtered_values = []
+    excluded_indices = []
+
+    for idx, value in enumerate(values):
+        if value <= max_threshold:
+            filtered_values.append(value)
+        else:
+            excluded_indices.append(idx)
+
+    return filtered_values, excluded_indices
+
+
 class DatabaseManager:
     """Manager centralizado para conexiones y queries de TDV - Soporta SQL Server y PostgreSQL"""
 
@@ -1427,16 +1487,278 @@ class TDVQueries:
             logger.error(f"❌ Error en obtener_wips_disponibles_estructurado: {e}")
             return [], []
 
+    async def obtener_gastos_por_estilo_recurrente(
+        self,
+        codigo_estilo: str,
+        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
+    ) -> Tuple[Dict[str, float], List[str]]:
+        """
+        Obtiene gastos indirectos para estilos RECURRENTES usando MODA.
+
+        Busca todas las OPs que fueron producidas con ese código_estilo exacto,
+        calcula la MODA de los tres costos, filtra outliers (máx 10x la moda),
+        y retorna los gastos con los índices de OPs excluidas.
+
+        Args:
+            codigo_estilo: El código de estilo propio exacto
+            version_calculo: FLUIDO o truncado
+
+        Returns:
+            Tupla (gastos_dict, ops_excluidas_indices)
+            - gastos_dict: {"costo_indirecto_fijo": float, "gasto_administracion": float, "gasto_ventas": float}
+            - ops_excluidas_indices: Lista de índices de OPs que fueron excluidas
+        """
+        try:
+            query = f"""
+            SELECT
+                costo_indirecto_fijo,
+                gasto_administracion,
+                gasto_ventas,
+                prendas_requeridas,
+                cod_ordpro,
+                ROW_NUMBER() OVER (ORDER BY fecha_facturacion DESC) as rn
+            FROM {settings.db_schema}.costo_op_detalle
+            WHERE codigo_estilo = ?
+                AND version_calculo = ?
+                AND fecha_facturacion >= (
+                    SELECT (MAX(fecha_facturacion) - INTERVAL '12 months')
+                    FROM {settings.db_schema}.costo_op_detalle
+                    WHERE version_calculo = ?
+                )
+                AND prendas_requeridas > 0
+                AND costo_indirecto_fijo > 0
+                AND gasto_administracion > 0
+                AND gasto_ventas > 0
+            ORDER BY fecha_facturacion DESC
+            """
+
+            params = (
+                codigo_estilo,
+                normalize_version_calculo(version_calculo),
+                normalize_version_calculo(version_calculo),
+            )
+            resultado = await self.db.query(query, params)
+
+            if not resultado:
+                logger.warning(f"⚠️ No se encontraron OPs para estilo recurrente: {codigo_estilo}")
+                return {
+                    "costo_indirecto_fijo": 0,
+                    "gasto_administracion": 0,
+                    "gasto_ventas": 0,
+                }, []
+
+            # Extraer los tres valores unitarios y calcular la moda
+            indirectos = []
+            admins = []
+            ventas = []
+            ops_info = []
+
+            for row in resultado:
+                prenda_qty = row["prendas_requeridas"]
+                indirectos.append(float(row["costo_indirecto_fijo"]) / prenda_qty)
+                admins.append(float(row["gasto_administracion"]) / prenda_qty)
+                ventas.append(float(row["gasto_ventas"]) / prenda_qty)
+                ops_info.append({
+                    "rn": row["rn"],
+                    "cod_ordpro": row["cod_ordpro"],
+                })
+
+            # Filtrar por threshold de moda (10x)
+            indirectos_filtrados, indices_excluidos_ind = filter_by_mode_threshold(indirectos, threshold=10.0)
+            admins_filtrados, indices_excluidos_adm = filter_by_mode_threshold(admins, threshold=10.0)
+            ventas_filtrados, indices_excluidos_ven = filter_by_mode_threshold(ventas, threshold=10.0)
+
+            # Combinar índices excluidos de los tres costos
+            indices_excluidos_totales = set(indices_excluidos_ind) | set(indices_excluidos_adm) | set(indices_excluidos_ven)
+
+            # Obtener los códigos de OPs excluidas
+            ops_excluidas = [ops_info[idx]["cod_ordpro"] for idx in indices_excluidos_totales]
+
+            # Calcular promedios de los valores filtrados
+            gastos = {
+                "costo_indirecto_fijo": float(sum(indirectos_filtrados) / len(indirectos_filtrados)) if indirectos_filtrados else 0,
+                "gasto_administracion": float(sum(admins_filtrados) / len(admins_filtrados)) if admins_filtrados else 0,
+                "gasto_ventas": float(sum(ventas_filtrados) / len(ventas_filtrados)) if ventas_filtrados else 0,
+            }
+
+            logger.info(
+                f"✅ Gastos recurrentes (estilo {codigo_estilo}): {gastos} | OPs excluidas: {len(ops_excluidas)}"
+            )
+            return gastos, ops_excluidas
+
+        except Exception as e:
+            logger.error(f"❌ Error en obtener_gastos_por_estilo_recurrente: {e}")
+            return {
+                "costo_indirecto_fijo": 0,
+                "gasto_administracion": 0,
+                "gasto_ventas": 0,
+            }, []
+
+    async def obtener_gastos_por_estilo_nuevo(
+        self,
+        marca: str,
+        familia_prenda: str,
+        tipo_prenda: str,
+        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
+    ) -> Tuple[Dict[str, float], List[str]]:
+        """
+        Obtiene gastos indirectos para estilos NUEVOS usando MODA.
+
+        Busca todas las OPs que tengan la misma marca + familia_prenda + tipo_prenda,
+        calcula la MODA de los tres costos, filtra outliers (máx 10x la moda),
+        y retorna los gastos con los índices de OPs excluidas.
+
+        Args:
+            marca: Cliente/marca
+            familia_prenda: Familia de la prenda
+            tipo_prenda: Tipo de prenda
+            version_calculo: FLUIDO o truncado
+
+        Returns:
+            Tupla (gastos_dict, ops_excluidas_indices)
+        """
+        try:
+            query = f"""
+            SELECT
+                costo_indirecto_fijo,
+                gasto_administracion,
+                gasto_ventas,
+                prendas_requeridas,
+                cod_ordpro,
+                ROW_NUMBER() OVER (ORDER BY fecha_facturacion DESC) as rn
+            FROM {settings.db_schema}.costo_op_detalle
+            WHERE cliente = ?
+                AND familia_prenda = ?
+                AND tipo_prenda = ?
+                AND version_calculo = ?
+                AND fecha_facturacion >= (
+                    SELECT (MAX(fecha_facturacion) - INTERVAL '12 months')
+                    FROM {settings.db_schema}.costo_op_detalle
+                    WHERE version_calculo = ?
+                )
+                AND prendas_requeridas > 0
+                AND costo_indirecto_fijo > 0
+                AND gasto_administracion > 0
+                AND gasto_ventas > 0
+            ORDER BY fecha_facturacion DESC
+            """
+
+            params = (
+                marca,
+                familia_prenda,
+                tipo_prenda,
+                normalize_version_calculo(version_calculo),
+                normalize_version_calculo(version_calculo),
+            )
+            resultado = await self.db.query(query, params)
+
+            if not resultado:
+                logger.warning(
+                    f"⚠️ No se encontraron OPs para estilo nuevo: {marca} | {familia_prenda} | {tipo_prenda}"
+                )
+                return {
+                    "costo_indirecto_fijo": 0,
+                    "gasto_administracion": 0,
+                    "gasto_ventas": 0,
+                }, []
+
+            # Extraer los tres valores unitarios y calcular la moda
+            indirectos = []
+            admins = []
+            ventas = []
+            ops_info = []
+
+            for row in resultado:
+                prenda_qty = row["prendas_requeridas"]
+                indirectos.append(float(row["costo_indirecto_fijo"]) / prenda_qty)
+                admins.append(float(row["gasto_administracion"]) / prenda_qty)
+                ventas.append(float(row["gasto_ventas"]) / prenda_qty)
+                ops_info.append({
+                    "rn": row["rn"],
+                    "cod_ordpro": row["cod_ordpro"],
+                })
+
+            # Filtrar por threshold de moda (10x)
+            indirectos_filtrados, indices_excluidos_ind = filter_by_mode_threshold(indirectos, threshold=10.0)
+            admins_filtrados, indices_excluidos_adm = filter_by_mode_threshold(admins, threshold=10.0)
+            ventas_filtrados, indices_excluidos_ven = filter_by_mode_threshold(ventas, threshold=10.0)
+
+            # Combinar índices excluidos de los tres costos
+            indices_excluidos_totales = set(indices_excluidos_ind) | set(indices_excluidos_adm) | set(indices_excluidos_ven)
+
+            # Obtener los códigos de OPs excluidas
+            ops_excluidas = [ops_info[idx]["cod_ordpro"] for idx in indices_excluidos_totales]
+
+            # Calcular promedios de los valores filtrados
+            gastos = {
+                "costo_indirecto_fijo": float(sum(indirectos_filtrados) / len(indirectos_filtrados)) if indirectos_filtrados else 0,
+                "gasto_administracion": float(sum(admins_filtrados) / len(admins_filtrados)) if admins_filtrados else 0,
+                "gasto_ventas": float(sum(ventas_filtrados) / len(ventas_filtrados)) if ventas_filtrados else 0,
+            }
+
+            logger.info(
+                f"✅ Gastos nuevos ({marca} | {familia_prenda} | {tipo_prenda}): {gastos} | OPs excluidas: {len(ops_excluidas)}"
+            )
+            return gastos, ops_excluidas
+
+        except Exception as e:
+            logger.error(
+                f"❌ Error en obtener_gastos_por_estilo_nuevo ({marca} | {familia_prenda} | {tipo_prenda}): {e}"
+            )
+            return {
+                "costo_indirecto_fijo": 0,
+                "gasto_administracion": 0,
+                "gasto_ventas": 0,
+            }, []
+
     # ========================================
     # 🔧 FUNCIONES DE SOPORTE CORREGIDAS
     # ========================================
 
-    # ✅ CÓDIGO CORREGIDO
+    # ✅ CÓDIGO CORREGIDO - Ahora usa MODA en lugar de PROMEDIO
     async def obtener_gastos_indirectos_formula(
-        self, version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO
-    ) -> Dict[str, float]:
-        """✅ CORREGIDA: Gastos indirectos UNITARIOS con fechas relativas"""
+        self,
+        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
+        codigo_estilo: Optional[str] = None,
+        cliente_marca: Optional[str] = None,
+        familia_producto: Optional[str] = None,
+        tipo_prenda: Optional[str] = None,
+    ) -> Tuple[Dict[str, float], List[str]]:
+        """
+        ✅ CORREGIDA: Gastos indirectos UNITARIOS usando MODA y filtrado de outliers.
 
+        Estrategia:
+        1. Si codigo_estilo está disponible → buscar OPs de ese estilo recurrente
+        2. Si no → usar marca+familia+tipo para buscar OPs de estilo nuevo
+        3. Si no se encuentran → usar fórmula genérica (fallback)
+
+        Retorna: (gastos_dict, ops_excluidas)
+        """
+
+        # 🔍 OPCIÓN 1: Intentar con ESTILO RECURRENTE (por código_estilo exacto)
+        if codigo_estilo:
+            logger.info(f"🔍 Buscando gastos para ESTILO RECURRENTE: {codigo_estilo}")
+            gastos, ops_excluidas = await self.obtener_gastos_por_estilo_recurrente(
+                codigo_estilo, version_calculo
+            )
+            if any(gastos.values()):  # Si se encontraron datos
+                logger.info(f"✅ Gastos obtenidos por ESTILO RECURRENTE")
+                return gastos, ops_excluidas
+
+        # 🔍 OPCIÓN 2: Intentar con ESTILO NUEVO (marca + familia + tipo)
+        if cliente_marca and familia_producto and tipo_prenda:
+            logger.info(
+                f"🔍 Buscando gastos para ESTILO NUEVO: {cliente_marca} | {familia_producto} | {tipo_prenda}"
+            )
+            gastos, ops_excluidas = await self.obtener_gastos_por_estilo_nuevo(
+                cliente_marca, familia_producto, tipo_prenda, version_calculo
+            )
+            if any(gastos.values()):  # Si se encontraron datos
+                logger.info(f"✅ Gastos obtenidos por ESTILO NUEVO")
+                return gastos, ops_excluidas
+
+        # 🔍 OPCIÓN 3: FALLBACK - Fórmula genérica (promedio general)
+        logger.info(f"🔍 Usando FÓRMULA GENÉRICA como fallback")
         query = f"""
         SELECT
             AVG(costo_indirecto_fijo / NULLIF(prendas_requeridas, 0)) as indirecto_fijo,
@@ -1469,12 +1791,12 @@ class TDVQueries:
                 "gasto_ventas": float(resultado[0]["ventas"] or 0),
             }
             logger.info(
-                f"✅ Gastos indirectos UNITARIOS obtenidos ({version_calculo}): {gastos}"
+                f"✅ Gastos indirectos (FÓRMULA GENÉRICA) obtenidos ({version_calculo}): {gastos}"
             )
-            return gastos
+            return gastos, []
 
         logger.warning(f"⚠️ No se encontraron gastos indirectos para {version_calculo}")
-        return {"costo_indirecto_fijo": 0, "gasto_administracion": 0, "gasto_ventas": 0}
+        return {"costo_indirecto_fijo": 0, "gasto_administracion": 0, "gasto_ventas": 0}, []
 
     async def obtener_ultimo_costo_materiales(
         self, version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO

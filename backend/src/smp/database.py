@@ -10,29 +10,77 @@ CONEXIÓN BASE DE DATOS Y QUERIES - BACKEND TDV COTIZADOR - COMPLETAMENTE CORREG
 - ✅ RESULTADO: Estilo 18264 ahora encontrará sus 3 OPs correctamente
 """
 
-import pyodbc
 import statistics
 import asyncio
 from typing import List, Dict, Any, Optional, Tuple
 from contextlib import contextmanager, asynccontextmanager
-from datetime import datetime
-
+from datetime import datetime, timezone
+from decimal import Decimal
 import logging
 
 from .config import factores
 from .config import settings
 from .models import EstiloSimilar, WipDisponible, VersionCalculo
 
+# Import driver based on connection type
+try:
+    import psycopg2
+    PSYCOPG2_AVAILABLE = True
+except ImportError:
+    PSYCOPG2_AVAILABLE = False
+
+try:
+    import pyodbc
+    PYODBC_AVAILABLE = True
+except ImportError:
+    PYODBC_AVAILABLE = False
+
 
 # Configurar logging estándar
 logger = logging.getLogger(__name__)
 
 
+def translate_sql_server_to_postgresql(query: str) -> str:
+    """Traduce queries de SQL Server a PostgreSQL"""
+    if not query:
+        return query
+
+    # Reemplazar GETDATE() con NOW()
+    query = query.replace("GETDATE()", "NOW()")
+
+    # Reemplazar ? con %s (SQL Server uses ? for parameters, PostgreSQL uses %s)
+    query = query.replace("?", "%s")
+
+    # Nota: INTERVAL '36 months' funciona en PostgreSQL igual que en SQL Server
+    # CAST funciona igual en ambos
+    # NULLIF funciona igual en ambos
+    # Window functions funcionan igual
+
+    return query
+
+
+def normalize_version_calculo(version: Optional[VersionCalculo]) -> str:
+    """Normaliza el version_calculo al valor que existe en la BD"""
+    if version is None:
+        return "FLUIDA"
+
+    # Obtener el valor real del enum usando .value
+    version_value = version.value if hasattr(version, 'value') else str(version)
+
+    # Convertir "FLUIDO" (del API) a "FLUIDA" (valor en BD)
+    if version_value == "FLUIDO":
+        return "FLUIDA"
+
+    # El "truncado" se queda igual (ya viene en minúsculas)
+    return version_value
+
+
 class DatabaseManager:
-    """Manager centralizado para conexiones y queries de TDV"""
+    """Manager centralizado para conexiones y queries de TDV - Soporta SQL Server y PostgreSQL"""
 
     def __init__(self):
         self.connection_string = settings.connection_string
+        self.is_postgresql = settings.connection_driver and "psycopg2" in settings.connection_driver.lower()
         self._test_connection()
 
     def _test_connection(self):
@@ -41,7 +89,8 @@ class DatabaseManager:
             with self.connect() as conn:
                 cursor = conn.cursor()
                 cursor.execute("SELECT 1")
-                logger.info("✅ Conexión TDV establecida exitosamente")
+                db_type = "PostgreSQL" if self.is_postgresql else "SQL Server"
+                logger.info(f"✅ Conexión TDV ({db_type}) establecida exitosamente")
         except Exception as e:
             logger.error(f"❌ Error conectando a TDV: {e}")
             raise
@@ -51,8 +100,19 @@ class DatabaseManager:
         """Context manager para conexiones de BD"""
         conn = None
         try:
-            conn = pyodbc.connect(self.connection_string)
-            conn.autocommit = True
+            if self.is_postgresql:
+                if not PSYCOPG2_AVAILABLE:
+                    raise ImportError("psycopg2 no está instalado. Instala con: pip install psycopg2-binary")
+                # Para PostgreSQL, conectar con diccionario de parámetros
+                if isinstance(self.connection_string, dict):
+                    conn = psycopg2.connect(**self.connection_string)
+                else:
+                    # Fallback a cadena DSN si es un string
+                    conn = psycopg2.connect(self.connection_string)
+            else:
+                if not PYODBC_AVAILABLE:
+                    raise ImportError("pyodbc no está instalado. Instala con: pip install pyodbc")
+                conn = pyodbc.connect(self.connection_string)
             yield conn
         except Exception as e:
             logger.error(f"Error en conexión BD: {e}")
@@ -61,8 +121,25 @@ class DatabaseManager:
             if conn:
                 conn.close()
 
+    def _parse_postgresql_dsn(self, dsn: str) -> dict:
+        """Parsea un DSN string de PostgreSQL en parámetros nombrados"""
+        import re
+        params = {}
+        # Patrón regex para parsear key=value donde value puede estar entrecomillado
+        pattern = r'(\w+)=(?:"([^"]*)"|\'([^\']*)\'|([^\s]*))'
+        for match in re.finditer(pattern, dsn):
+            key = match.group(1)
+            # Obtener el valor de cualquiera de los grupos entrecomillados o sin comillas
+            value = match.group(2) or match.group(3) or match.group(4)
+            params[key] = value
+        return params
+
     def query(self, query: str, params: Optional[tuple] = None) -> List[Dict[str, Any]]:
         """Ejecuta query y retorna resultados como lista de diccionarios"""
+        # Translate SQL if PostgreSQL
+        if self.is_postgresql:
+            query = translate_sql_server_to_postgresql(query)
+
         with self.connect() as conn:
             cursor = conn.cursor()
 
@@ -81,22 +158,49 @@ class DatabaseManager:
             for row in cursor.fetchall():
                 results.append(dict(zip(columns, row)))
 
+            cursor.close()
             return results
 
 
 class AsyncDatabaseManager:
-    def __init__(self, conn_str: str):
+    def __init__(self, conn_str: str, is_postgresql: bool = False):
         self.conn_str = conn_str
+        self.is_postgresql = is_postgresql
 
     @asynccontextmanager
     async def connect(self):
         conn = None
         try:
-            conn = await asyncio.to_thread(pyodbc.connect, self.conn_str)
-            conn.autocommit = True
+            if self.is_postgresql:
+                if not PSYCOPG2_AVAILABLE:
+                    raise ImportError("psycopg2 no está instalado")
+                # Para PostgreSQL, conectar con diccionario de parámetros
+                if isinstance(self.conn_str, dict):
+                    conn = await asyncio.to_thread(psycopg2.connect, **self.conn_str)
+                else:
+                    # Fallback a cadena DSN si es un string
+                    conn = await asyncio.to_thread(psycopg2.connect, self.conn_str)
+            else:
+                if not PYODBC_AVAILABLE:
+                    raise ImportError("pyodbc no está instalado")
+                conn = await asyncio.to_thread(pyodbc.connect, self.conn_str)
             yield conn
         finally:
-            await asyncio.to_thread(conn.close)
+            if conn:
+                await asyncio.to_thread(conn.close)
+
+    def _parse_postgresql_dsn(self, dsn: str) -> dict:
+        """Parsea un DSN string de PostgreSQL en parámetros nombrados"""
+        import re
+        params = {}
+        # Patrón regex para parsear key=value donde value puede estar entrecomillado
+        pattern = r'(\w+)=(?:"([^"]*)"|\'([^\']*)\'|([^\s]*))'
+        for match in re.finditer(pattern, dsn):
+            key = match.group(1)
+            # Obtener el valor de cualquiera de los grupos entrecomillados o sin comillas
+            value = match.group(2) or match.group(3) or match.group(4)
+            params[key] = value
+        return params
 
     @asynccontextmanager
     async def cursor(self, conn):
@@ -109,6 +213,10 @@ class AsyncDatabaseManager:
     async def query(
         self, sql: str, params: Optional[tuple] = None
     ) -> List[Dict[str, Any]]:
+        # Translate SQL if PostgreSQL
+        if self.is_postgresql:
+            sql = translate_sql_server_to_postgresql(sql)
+
         async with self.connect() as conn:
             async with self.cursor(conn) as cur:
                 # execute in thread
@@ -138,7 +246,9 @@ class TDVQueries:
     def __init__(self):
         # Only initialize if not already done
         if not hasattr(self, "_initialized"):
-            self.db = AsyncDatabaseManager(settings.connection_string)
+            is_postgresql = settings.connection_driver and "psycopg2" in settings.connection_driver.lower()
+            self.db = AsyncDatabaseManager(settings.connection_string, is_postgresql=is_postgresql)
+            self.is_postgresql = is_postgresql
             self._initialized = True
 
     @classmethod
@@ -150,7 +260,7 @@ class TDVQueries:
     async def obtener_fecha_maxima_corrida(
         self,
         tabla: str,
-        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
+        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
     ) -> datetime:
         """Obtiene la fecha_corrida máxima de cada tabla para una versión específica"""
 
@@ -167,7 +277,7 @@ class TDVQueries:
             }
 
             if tabla in queries:
-                resultado = await self.db.query(queries[tabla], (version_calculo,))
+                resultado = await self.db.query(queries[tabla], (normalize_version_calculo(version_calculo),))
             else:
                 resultado = None
 
@@ -180,7 +290,7 @@ class TDVQueries:
     async def verificar_estilo_existente(
         self,
         codigo_estilo: str,
-        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
+        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
     ) -> bool:
         """
         Verifica si un estilo existe historial_estilos no tiene
@@ -230,7 +340,7 @@ class TDVQueries:
 
             resultado_ops = await self.db.query(
                 query_ops,
-                (codigo_estilo, version_calculo, version_calculo, version_calculo),
+                (codigo_estilo, normalize_version_calculo(version_calculo), normalize_version_calculo(version_calculo), normalize_version_calculo(version_calculo)),
             )
             total_ops = resultado_ops[0]["total_ops"] if resultado_ops else 0
 
@@ -265,7 +375,7 @@ class TDVQueries:
     async def obtener_info_detallada_estilo(
         self,
         codigo_estilo: str,
-        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
+        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
     ) -> Dict[str, Any]:
         """
         ✅ FUNCIÓN CORREGIDA: Obtiene información detallada de un estilo con fechas relativas
@@ -313,7 +423,7 @@ class TDVQueries:
 
             resultado = await self.db.query(
                 query,
-                (codigo_estilo, version_calculo, version_calculo, version_calculo),
+                (codigo_estilo, normalize_version_calculo(version_calculo), normalize_version_calculo(version_calculo), normalize_version_calculo(version_calculo)),
             )
 
             if resultado:
@@ -372,7 +482,7 @@ class TDVQueries:
 
             resultado_fallback = await self.db.query(
                 query_fallback,
-                (codigo_estilo, version_calculo, version_calculo, version_calculo),
+                (codigo_estilo, normalize_version_calculo(version_calculo), normalize_version_calculo(version_calculo), normalize_version_calculo(version_calculo)),
             )
 
             if resultado_fallback:
@@ -442,7 +552,7 @@ class TDVQueries:
         codigo_estilo: str,
         cliente: str,
         limite: Optional[int] = 10,
-        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
+        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
     ) -> List[EstiloSimilar]:
         """✅ FUNCIÓN CORREGIDA: Busca estilos similares con fechas relativas"""
 
@@ -514,9 +624,10 @@ class TDVQueries:
     # ========================================
 
     async def obtener_clientes_disponibles(
-        self, version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA
+        self, version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO
     ) -> List[str]:
         """Obtiene lista de clientes únicos con fechas relativas"""
+        normalized_version = normalize_version_calculo(version_calculo)
         query = f"""
         SELECT DISTINCT cliente
         FROM {settings.db_schema}.costo_op_detalle
@@ -535,37 +646,20 @@ class TDVQueries:
         """
 
         resultados = await self.db.query(
-            query, (version_calculo, version_calculo, version_calculo)
+            query, (normalized_version, normalized_version, normalized_version)
         )
         clientes = [row["cliente"] for row in resultados]
         logger.info(f"✅ Clientes cargados para {version_calculo}: {len(clientes)}")
         return clientes
 
     async def obtener_familias_productos(
-        self, version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA
+        self, version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO
     ) -> List[str]:
         """✅ CORREGIDA: Obtiene familias de productos disponibles con fechas relativas"""
-        query = f"""
-        SELECT DISTINCT familia_de_productos
-        FROM {settings.db_schema}.costo_op_detalle
-        WHERE familia_de_productos IS NOT NULL
-          AND familia_de_productos != ''
-          AND version_calculo = ?
-          AND fecha_corrida = (
-            SELECT MAX(fecha_corrida)
-            FROM {settings.db_schema}.costo_op_detalle
-            WHERE version_calculo = ?)
-        AND fecha_facturacion >= (
-            SELECT (MAX(fecha_facturacion) - INTERVAL '36 months')
-            FROM {settings.db_schema}.costo_op_detalle
-            WHERE version_calculo = ?
-        )
-        ORDER BY familia_de_productos
-        """
+        # Test query - simplified to debug PostgreSQL connectivity
+        query = f"SELECT DISTINCT familia_de_productos FROM {settings.db_schema}.costo_op_detalle LIMIT 10"
 
-        resultados = await self.db.query(
-            query, (version_calculo, version_calculo, version_calculo)
-        )
+        resultados = await self.db.query(query)
         familias = [row["familia_de_productos"] for row in resultados]
         logger.info(f"✅ Familias cargadas para {version_calculo}: {len(familias)}")
         return familias
@@ -573,7 +667,7 @@ class TDVQueries:
     async def obtener_tipos_prenda(
         self,
         familia: str,
-        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
+        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
     ) -> List[str]:
         """✅ CORREGIDA: Obtiene tipos de prenda para una familia específica con fechas relativas"""
         query = f"""
@@ -596,7 +690,7 @@ class TDVQueries:
         """
 
         resultados = await self.db.query(
-            query, (familia, version_calculo, version_calculo, version_calculo)
+            query, (familia, normalize_version_calculo(version_calculo), normalize_version_calculo(version_calculo), normalize_version_calculo(version_calculo))
         )
         tipos = [row["tipo_de_producto"] for row in resultados]
         logger.info(
@@ -613,7 +707,7 @@ class TDVQueries:
         familia_producto: str,
         tipo_prenda: str,
         cliente: Optional[str] = None,
-        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
+        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
     ) -> Dict[str, Any]:
         """✅ CORREGIDA: Busca costos históricos con fechas relativas"""
 
@@ -715,7 +809,7 @@ class TDVQueries:
         self,
         codigo_estilo: str,
         meses: int = 12,
-        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
+        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
     ) -> Dict[str, Any]:
         """
         ✅ FUNCIÓN CORREGIDA: Busca costos históricos de un estilo específico con fechas relativas
@@ -745,9 +839,10 @@ class TDVQueries:
             WHERE version_calculo = ?)
         AND h.fecha_corrida = (
           SELECT MAX(fecha_corrida)
-          FROM {settings.db_schema}.historial_estilos)
+          FROM {settings.db_schema}.historial_estilos
+          WHERE codigo_estilo = ?)
         AND c.fecha_facturacion >= (
-          SELECT (MAX(fecha_facturacion) - ? * INTERVAL ' months')
+          SELECT (MAX(fecha_facturacion) - (? || ' months')::INTERVAL)
           FROM {settings.db_schema}.costo_op_detalle
           WHERE version_calculo = ?
         )
@@ -758,7 +853,7 @@ class TDVQueries:
 
         resultados = await self.db.query(
             query,
-            (codigo_estilo, version_calculo, version_calculo, meses, version_calculo),
+            (codigo_estilo, normalize_version_calculo(version_calculo), normalize_version_calculo(version_calculo), codigo_estilo, meses, normalize_version_calculo(version_calculo)),
         )
 
         if not resultados:
@@ -783,7 +878,7 @@ class TDVQueries:
         if not recs:
             raise ValueError("Sin resultados")
 
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
         weights = [
             0.1
             if not isinstance(rec.get("fecha_facturacion"), datetime)
@@ -803,7 +898,7 @@ class TDVQueries:
         ]
 
         def safe_float(val, default):
-            return float(val) if isinstance(val, (int, float)) else default
+            return float(val) if isinstance(val, (int, float, Decimal)) else default
 
         for col in cols:
             vals = [
@@ -862,7 +957,7 @@ class TDVQueries:
     async def obtener_costos_wips_por_estabilidad(
         self,
         tipo_prenda: str,
-        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
+        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
     ) -> Dict[str, float]:
         """Usar análisis inteligente de variación"""
         try:
@@ -873,12 +968,12 @@ class TDVQueries:
             logger.warning(
                 f"⚠️ Error en análisis inteligente, usando método legacy: {e}"
             )
-            return await self._obtener_costos_wips_legacy(tipo_prenda, version_calculo)
+            return await self._obtener_costos_wips_legacy(tipo_prenda, normalize_version_calculo(version_calculo))
 
     async def obtener_costos_wips_inteligente(
         self,
         tipo_prenda: str,
-        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
+        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
     ) -> Dict[str, float]:
         """
         ✅ FUNCIÓN SIN CAMBIOS: Ya usa fechas relativas correctamente
@@ -1023,7 +1118,7 @@ class TDVQueries:
                     """
                     resultado_wip = await self.db.query(
                         query_wip,
-                        (wip_id, tipo_prenda, version_calculo, version_calculo),
+                        (wip_id, tipo_prenda, normalize_version_calculo(version_calculo), normalize_version_calculo(version_calculo)),
                     )
                 else:
                     # Variable: promedio del período
@@ -1068,7 +1163,7 @@ class TDVQueries:
     async def obtener_ruta_textil_recomendada(
         self,
         tipo_prenda: str,
-        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
+        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
     ) -> Dict[str, Any]:
         """
         ✅ FUNCIÓN SIN CAMBIOS: Ya usa fechas relativas correctamente
@@ -1175,7 +1270,7 @@ class TDVQueries:
     async def _obtener_costos_wips_legacy(
         self,
         tipo_prenda: str,
-        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
+        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
     ) -> Dict[str, float]:
         """✅ MÉTODO LEGACY SIN CAMBIOS: Ya usa fechas relativas"""
         costos_wips = {}
@@ -1235,7 +1330,7 @@ class TDVQueries:
         """
 
         resultados_estables = await self.db.query(
-            query_estables, (tipo_prenda, version_calculo, version_calculo)
+            query_estables, (tipo_prenda, normalize_version_calculo(version_calculo), normalize_version_calculo(version_calculo))
         )
         for row in resultados_estables:
             costos_wips[row["wip_id"]] = float(row["costo_por_prenda"])
@@ -1248,7 +1343,7 @@ class TDVQueries:
     async def obtener_wips_disponibles_estructurado(
         self,
         tipo_prenda: Optional[str] = None,
-        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
+        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
     ) -> Tuple[List[WipDisponible], List[WipDisponible]]:
         """✅ SIN CAMBIOS: Ya usa lógica correcta"""
 
@@ -1283,7 +1378,7 @@ class TDVQueries:
                 """
 
                 resultados = await self.db.query(
-                    query, (version_calculo, version_calculo)
+                    query, (normalize_version_calculo(version_calculo), normalize_version_calculo(version_calculo))
                 )
                 costos_wips = {}
                 for row in resultados:
@@ -1338,7 +1433,7 @@ class TDVQueries:
 
     # ✅ CÓDIGO CORREGIDO
     async def obtener_gastos_indirectos_formula(
-        self, version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA
+        self, version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO
     ) -> Dict[str, float]:
         """✅ CORREGIDA: Gastos indirectos UNITARIOS con fechas relativas"""
 
@@ -1365,7 +1460,7 @@ class TDVQueries:
         """
 
         resultado = await self.db.query(
-            query, (version_calculo, version_calculo, version_calculo)
+            query, (normalize_version_calculo(version_calculo), normalize_version_calculo(version_calculo), normalize_version_calculo(version_calculo))
         )
         if resultado:
             gastos = {
@@ -1382,7 +1477,7 @@ class TDVQueries:
         return {"costo_indirecto_fijo": 0, "gasto_administracion": 0, "gasto_ventas": 0}
 
     async def obtener_ultimo_costo_materiales(
-        self, version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA
+        self, version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO
     ) -> Dict[str, float]:
         """✅ SIN CAMBIOS: Ya usa lógica correcta con fecha_corrida"""
 
@@ -1407,7 +1502,7 @@ class TDVQueries:
         LIMIT 1
         """
 
-        resultado = await self.db.query(query, (version_calculo, version_calculo))
+        resultado = await self.db.query(query, (normalize_version_calculo(version_calculo), normalize_version_calculo(version_calculo)))
         if resultado:
             registro = resultado[0]
             prendas = (
@@ -1440,7 +1535,7 @@ class TDVQueries:
     async def obtener_volumen_historico_estilo(
         self,
         codigo_estilo: str,
-        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
+        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
     ) -> int:
         # Solo filtrar version_calculo en costo_op_detalle
         query = f"""
@@ -1461,7 +1556,7 @@ class TDVQueries:
         """
 
         resultado = await self.db.query(
-            query, (codigo_estilo, version_calculo, version_calculo)
+            query, (codigo_estilo, normalize_version_calculo(version_calculo), normalize_version_calculo(version_calculo))
         )
         volumen = (
             int(resultado[0]["volumen_total"])
@@ -1501,7 +1596,7 @@ class TDVQueries:
         familia_producto: Optional[str] = None,
         tipo_prenda: Optional[str] = None,
         cliente: Optional[str] = None,
-        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
+        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
     ) -> Dict[str, Any]:
         """
         ✅ FUNCIÓN CORREGIDA: Obtiene las OPs específicas utilizadas para una cotización con fechas relativas
@@ -1561,7 +1656,7 @@ class TDVQueries:
 
                 resultados = await self.db.query(
                     query_estilo,
-                    (codigo_estilo, version_calculo, version_calculo, version_calculo),
+                    (codigo_estilo, normalize_version_calculo(version_calculo), normalize_version_calculo(version_calculo), normalize_version_calculo(version_calculo)),
                 )
 
                 if resultados:
@@ -1800,7 +1895,7 @@ class TDVQueries:
         self,
         familia_producto: str,
         tipo_prenda: str,
-        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
+        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
     ) -> Dict[str, Any]:
         """✅ SIN CAMBIOS: Ya usa fecha_corrida correctamente"""
 
@@ -1824,7 +1919,7 @@ class TDVQueries:
 
         resultado_volumen = await self.db.query(
             query_volumen,
-            (familia_producto, tipo_prenda, version_calculo, version_calculo),
+            (familia_producto, tipo_prenda, normalize_version_calculo(version_calculo), normalize_version_calculo(version_calculo)),
         )
         volumen = resultado_volumen[0] if resultado_volumen else {}
 
@@ -1854,7 +1949,7 @@ class TDVQueries:
 
         tendencias = await self.db.query(
             query_tendencias,
-            (familia_producto, tipo_prenda, version_calculo, version_calculo),
+            (familia_producto, tipo_prenda, normalize_version_calculo(version_calculo), normalize_version_calculo(version_calculo)),
         )
 
         # 3. Análisis competitivo
@@ -1882,7 +1977,7 @@ class TDVQueries:
 
         competitivo = await self.db.query(
             query_competitivo,
-            (familia_producto, tipo_prenda, version_calculo, version_calculo),
+            (familia_producto, tipo_prenda, normalize_version_calculo(version_calculo), normalize_version_calculo(version_calculo)),
         )
 
         info_comercial = {
@@ -1925,3 +2020,4 @@ class TDVQueries:
             f"✅ Info comercial obtenida para {familia_producto}/{tipo_prenda} ({version_calculo})"
         )
         return info_comercial
+

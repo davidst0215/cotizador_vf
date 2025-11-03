@@ -30,6 +30,314 @@ const CATEGORIAS_LOTE = {
   "Lote Masivo": { rango: "4001+" },
 };
 
+// Componente puro para el input de código de estilo - evita re-renders innecesarios
+interface InputCodigoEstiloProps {
+  value: string;
+  buscandoEstilo: boolean;
+  onChange: (valor: string) => void;
+  onBuscar: () => void;
+}
+
+const InputCodigoEstilo = React.memo(({ value, buscandoEstilo, onChange, onBuscar }: InputCodigoEstiloProps) => (
+  <div className="relative">
+    <input
+      type="text"
+      value={value}
+      onChange={(e) => onChange(e.target.value.toUpperCase().trim())}
+      className="w-full p-4 pr-12 border-2 border-gray-200 rounded-xl focus:border-red-500 focus:border-opacity-50 transition-colors"
+      placeholder="ej: LAC001-V25, GRY2024-P01"
+      autoComplete="off"
+      spellCheck={false}
+    />
+    <button
+      type="button"
+      onClick={onBuscar}
+      disabled={buscandoEstilo || value.length < 3}
+      className="absolute right-2 top-3 p-1 rounded-lg hover:bg-red-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+      title={value.length < 3 ? "Ingresa al menos 3 caracteres" : "Buscar estilo"}
+    >
+      {buscandoEstilo ? (
+        <RefreshCw className="h-5 w-5 text-red-500 animate-spin" />
+      ) : (
+        <svg className="h-5 w-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+        </svg>
+      )}
+    </button>
+  </div>
+));
+
+// Componente CampoCodigoEstilo completo como React.memo - evita que se remonte en cada keystroke
+interface CampoCodigoEstiloProps {
+  value: string;
+  buscandoEstilo: boolean;
+  estilosEncontrados: any[];
+  esEstiloNuevo: boolean;
+  infoAutoCompletado: any;
+  onChange: (valor: string) => void;
+  onBuscar: () => void;
+  onSelectStyle: (estilo: any) => void;
+}
+
+const CampoCodigoEstiloComponent = React.memo(
+  ({
+    value,
+    buscandoEstilo,
+    estilosEncontrados,
+    esEstiloNuevo,
+    infoAutoCompletado,
+    onChange,
+    onBuscar,
+    onSelectStyle,
+  }: CampoCodigoEstiloProps) => (
+    <div className="space-y-2">
+      <label className="block text-sm font-semibold text-red-900">
+        Código de estilo propio
+      </label>
+      <InputCodigoEstilo
+        value={value}
+        buscandoEstilo={buscandoEstilo}
+        onChange={onChange}
+        onBuscar={onBuscar}
+      />
+
+      {/* Información de auto-completado */}
+      {infoAutoCompletado?.autocompletado_disponible && (
+        <div className="mt-2 p-3 rounded-xl border-2 bg-green-100 border-green-400">
+          <div className="text-sm font-semibold mb-2 text-green-700">
+            ✅ Auto-completado aplicado:
+          </div>
+          <div className="text-xs text-green-700">
+            📁 Familia:{" "}
+            <strong>
+              {infoAutoCompletado.campos_sugeridos?.familia_producto}
+            </strong>{" "}
+            | 🏷️ Tipo:{" "}
+            <strong>{infoAutoCompletado.campos_sugeridos?.tipo_prenda}</strong> | 📊
+            Categoría: <strong>{infoAutoCompletado.info_estilo?.categoria}</strong>
+          </div>
+        </div>
+      )}
+
+      {/* Estilos similares */}
+      {estilosEncontrados.length > 0 && (
+        <div className="mt-2 p-3 rounded-xl border-2 bg-orange-50 border-orange-400">
+          <div className="text-sm font-semibold mb-2 text-red-900">
+            Estilos similares encontrados:
+          </div>
+          {estilosEncontrados.map((estilo, idx) => (
+            <button
+              key={idx}
+              onClick={() => onSelectStyle(estilo)}
+              className="w-full text-left p-2 rounded-lg hover:shadow-md transition-all mb-2 bg-orange-200"
+            >
+              <div className="font-semibold text-sm text-red-900">
+                {estilo.codigo}
+              </div>
+              <div className="text-xs text-red-500">
+                {estilo.familia_producto} - {estilo.tipo_prenda} |{" "}
+                {estilo.ops_encontradas} OPs | ${estilo.costo_promedio.toFixed(2)}
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Indicador de estado del estilo */}
+      {value && !buscandoEstilo && (
+        <div className="flex items-center gap-2">
+          <div
+            className={`text-xs px-2 py-1 rounded-full inline-block text-white ${
+              esEstiloNuevo ? "bg-red-500" : "bg-red-600"
+            }`}
+          >
+            {esEstiloNuevo ? "🆕 Estilo Nuevo" : "🔄 Estilo Recurrente"}
+          </div>
+
+          {infoAutoCompletado?.info_estilo?.volumen_total && (
+            <div className="text-xs text-gray-600">
+              📦 Volumen histórico:{" "}
+              {infoAutoCompletado.info_estilo.volumen_total.toLocaleString()}{" "}
+              prendas
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+);
+CampoCodigoEstiloComponent.displayName = "CampoCodigoEstiloComponent";
+
+// ========================================
+// 📋 FORM INPUT COMPONENTS - Memoized para evitar re-renders innecesarios
+// ========================================
+
+// Cliente/Marca select input
+interface ClienteSelectProps {
+  value: string;
+  clientesDisponibles: string[];
+  onChange: (value: string) => void;
+}
+
+const ClienteSelect = React.memo(({ value, clientesDisponibles, onChange }: ClienteSelectProps) => (
+  <div className="space-y-2">
+    <label className="block text-sm font-semibold text-red-900">
+      Cliente/Marca
+    </label>
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="w-full p-4 border-2 border-gray-200 rounded-xl focus:border-red-500 focus:border-opacity-50 transition-colors"
+    >
+      {clientesDisponibles.map((cliente) => (
+        <option key={cliente} value={cliente}>
+          {cliente}
+        </option>
+      ))}
+    </select>
+  </div>
+));
+ClienteSelect.displayName = "ClienteSelect";
+
+// Temporada text input
+interface TemporadaInputProps {
+  value: string;
+  onChange: (value: string) => void;
+}
+
+const TemporadaInput = React.memo(({ value, onChange }: TemporadaInputProps) => (
+  <div className="space-y-2">
+    <label className="block text-sm font-semibold text-red-900">
+      Temporada
+    </label>
+    <input
+      type="text"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="w-full p-4 border-2 border-gray-200 rounded-xl focus:border-red-500 focus:border-opacity-50 transition-colors"
+      placeholder="ej: Verano 2025, Otoño 2024"
+    />
+  </div>
+));
+TemporadaInput.displayName = "TemporadaInput";
+
+// Categoría de Lote select
+interface CategoriaLoteSelectProps {
+  value: string;
+  onChange: (value: string) => void;
+}
+
+const CategoriaLoteSelect = React.memo(({ value, onChange }: CategoriaLoteSelectProps) => (
+  <div className="space-y-2">
+    <label className="block text-sm font-semibold text-red-900">
+      Categoría de Lote
+    </label>
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="w-full p-4 border-2 border-gray-200 rounded-xl focus:border-red-500 focus:border-opacity-50 transition-colors"
+    >
+      {Object.entries(CATEGORIAS_LOTE).map(([categoria, info]) => (
+        <option key={categoria} value={categoria}>
+          {categoria} ({info.rango} prendas)
+        </option>
+      ))}
+    </select>
+  </div>
+));
+CategoriaLoteSelect.displayName = "CategoriaLoteSelect";
+
+// Familia de Producto select con loading state
+interface FamiliaProductoSelectProps {
+  value: string;
+  familiasDisponibles: string[];
+  cargandoFamilias: boolean;
+  onChange: (value: string) => void;
+}
+
+const FamiliaProductoSelect = React.memo(
+  ({ value, familiasDisponibles, cargandoFamilias, onChange }: FamiliaProductoSelectProps) => (
+    <div className="space-y-2">
+      <label className="block text-sm font-semibold text-red-900">
+        Familia de Producto
+      </label>
+      <div className="relative">
+        <select
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="w-full p-4 border-2 border-gray-200 rounded-xl focus:border-red-500 focus:border-opacity-50 transition-colors appearance-none"
+          disabled={cargandoFamilias}
+        >
+          <option value="">
+            {cargandoFamilias
+              ? "Cargando familias..."
+              : familiasDisponibles.length === 0
+                ? "⚠️ Error cargando familias - Verifique backend"
+                : "Seleccionar familia"}
+          </option>
+          {familiasDisponibles.map((familia) => (
+            <option key={familia} value={familia}>
+              {familia}
+            </option>
+          ))}
+        </select>
+        {cargandoFamilias && (
+          <div className="absolute right-3 top-4">
+            <RefreshCw className="h-5 w-5 animate-spin text-red-500" />
+          </div>
+        )}
+      </div>
+    </div>
+  )
+);
+FamiliaProductoSelect.displayName = "FamiliaProductoSelect";
+
+// Tipo de Prenda select con loading state
+interface TipoPrendaSelectProps {
+  value: string;
+  tiposDisponibles: string[];
+  cargandoTipos: boolean;
+  familiaSelectorPrimero: boolean;
+  onChange: (value: string) => void;
+}
+
+const TipoPrendaSelect = React.memo(
+  ({ value, tiposDisponibles, cargandoTipos, familiaSelectorPrimero, onChange }: TipoPrendaSelectProps) => (
+    <div className="space-y-2">
+      <label className="block text-sm font-semibold text-red-900">
+        Tipo de Prenda
+      </label>
+      <div className="relative">
+        <select
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="w-full p-4 border-2 border-gray-200 rounded-xl focus:border-red-500 focus:border-opacity-50 transition-colors appearance-none"
+          disabled={cargandoTipos || familiaSelectorPrimero}
+        >
+          <option value="">
+            {familiaSelectorPrimero
+              ? "Primero selecciona familia"
+              : cargandoTipos
+                ? "Cargando tipos..."
+                : "Seleccionar tipo"}
+          </option>
+          {tiposDisponibles.map((tipo) => (
+            <option key={tipo} value={tipo}>
+              {tipo}
+            </option>
+          ))}
+        </select>
+        {cargandoTipos && (
+          <div className="absolute right-3 top-4">
+            <RefreshCw className="h-5 w-5 animate-spin text-red-500" />
+          </div>
+        )}
+      </div>
+    </div>
+  )
+);
+TipoPrendaSelect.displayName = "TipoPrendaSelect";
+
 // Interfaces TypeScript
 interface WipDisponible {
   wip_id: string;
@@ -207,6 +515,7 @@ const SistemaCotizadorTDV = () => {
   const [cargandoOps, setCargandoOps] = useState(false);
   const [errorOps, setErrorOps] = useState<string | null>(null);
 
+  // Estados para formulario - separados para evitar pérdida de foco
   const [formData, setFormData] = useState<FormData>({
     cliente_marca: "LACOSTE",
     temporada: "",
@@ -215,8 +524,11 @@ const SistemaCotizadorTDV = () => {
     tipo_prenda: "",
     codigo_estilo: "",
     usuario: "Usuario Demo",
-    version_calculo: "FLUIDA",
+    version_calculo: "FLUIDO",
   });
+
+  // Estado debounced para los efectos - evita que se disparen en cada keystroke
+  const [debouncedFormData, setDebouncedFormData] = useState<FormData>(formData);
 
   // Estados para búsqueda de estilos
   const [estilosEncontrados, setEstilosEncontrados] = useState<EstiloSimilar[]>(
@@ -232,8 +544,10 @@ const SistemaCotizadorTDV = () => {
   const [wipsTextiles, setWipsTextiles] = useState<WipSeleccionada[]>([]);
   const [wipsManufactura, setWipsManufactura] = useState<WipSeleccionada[]>([]);
 
-  // Referencias para evitar re-renders
+  // Referencias para evitar re-renders y debouncing
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const familiaDebounceRef = useRef<NodeJS.Timeout | null>(null);
+  const tipoDebounceRef = useRef<NodeJS.Timeout | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   // Memoized validation
@@ -245,7 +559,7 @@ const SistemaCotizadorTDV = () => {
     if (!formData.familia_producto)
       errores.push("Familia de Producto es requerida");
     if (!formData.tipo_prenda) errores.push("Tipo de Prenda es requerido");
-    if (!formData.codigo_estilo) errores.push("Código de Estilo es requerido");
+    if (!formData.codigo_estilo) errores.push("Código de estilo propio es requerido");
 
     if (esEstiloNuevo && formData.codigo_estilo) {
       if (wipsTextiles.length === 0 && wipsManufactura.length === 0) {
@@ -256,117 +570,99 @@ const SistemaCotizadorTDV = () => {
     return errores;
   }, [formData, esEstiloNuevo, wipsTextiles.length, wipsManufactura.length]);
 
+  // Manejador de cambio de formulario con actualización inmediata
   const manejarCambioFormulario = useCallback(
     (campo: keyof FormData, valor: string) => {
-      // console.log(`📝 Cambiando ${campo}: ${valor}`);
-
+      // Actualizar formData inmediatamente para que el input muestre el valor
       setFormData((prev) => ({
         ...prev,
         [campo]: valor,
         // Limpiar tipo si cambia familia
         ...(campo === "familia_producto" ? { tipo_prenda: "" } : {}),
       }));
+
+      // Para familia_producto y tipo_prenda, debounce triggers disparará el re-render después
+      // Esto evita que los efectos se disparen en cada keystroke
     },
     [],
   );
 
-  // Efecto 1: Recargar cuando cambia version_calculo
+  // Handler memoizado específicamente para el código de estilo
+  const handleCodigoEstiloChange = useCallback(
+    (valor: string) => {
+      manejarCambioFormulario("codigo_estilo", valor);
+    },
+    [manejarCambioFormulario],
+  );
+
+  // Efecto 1: Recargar cuando cambia version_calculo (usando debouncedFormData)
   useEffect(() => {
     const recargarDatosVersion = async () => {
-      // console.log(
-      //   `🔄 Recargando datos para versión: ${formData.version_calculo}`,
-      // );
-
       try {
         // Cargar datos principales
         await Promise.all([
-          cargarWipsDisponibles(formData.version_calculo),
-          cargarClientesDisponibles(formData.version_calculo),
-          cargarFamiliasProductos(formData.version_calculo),
+          cargarWipsDisponibles(debouncedFormData.version_calculo),
+          cargarClientesDisponibles(debouncedFormData.version_calculo),
+          cargarFamiliasProductos(debouncedFormData.version_calculo),
         ]);
 
         // Recargar tipos si hay familia
-        if (formData.familia_producto) {
+        if (debouncedFormData.familia_producto) {
           await cargarTiposPrenda(
-            formData.familia_producto,
-            formData.version_calculo,
+            debouncedFormData.familia_producto,
+            debouncedFormData.version_calculo,
           );
         }
 
         // Recargar WIPs si hay tipo y es nuevo
-        if (formData.tipo_prenda && esEstiloNuevo) {
+        if (debouncedFormData.tipo_prenda && esEstiloNuevo) {
           await cargarWipsPorTipoPrenda(
-            formData.tipo_prenda,
-            formData.version_calculo,
+            debouncedFormData.tipo_prenda,
+            debouncedFormData.version_calculo,
           );
         }
 
         // Re-verificar estilo si existe
-        if (formData.codigo_estilo && formData.codigo_estilo.length >= 3) {
+        if (debouncedFormData.codigo_estilo && debouncedFormData.codigo_estilo.length >= 3) {
           await verificarYBuscarEstilo(
-            formData.codigo_estilo,
-            formData.cliente_marca,
-            formData.version_calculo,
+            debouncedFormData.codigo_estilo,
+            debouncedFormData.cliente_marca,
+            debouncedFormData.version_calculo,
           );
         }
-
-        // console.log(
-        //   `✅ Datos recargados para versión: ${formData.version_calculo}`,
-        // );
       } catch (error) {
         console.error(`❌ Error recargando datos:`, error);
       }
     };
 
     recargarDatosVersion();
-  }, [formData.version_calculo]); // Solo depende de version_calculo
+  }, [debouncedFormData.version_calculo]); // Usa debouncedFormData para evitar actualizaciones frecuentes
 
-  // Efecto 2: Cargar tipos cuando cambia familia
+  // Efecto 2: Cargar tipos cuando cambia familia (usando debouncedFormData)
   useEffect(() => {
-    if (formData.familia_producto) {
-      cargarTiposPrenda(formData.familia_producto, formData.version_calculo);
+    if (debouncedFormData.familia_producto) {
+      cargarTiposPrenda(debouncedFormData.familia_producto, debouncedFormData.version_calculo);
     } else {
       setTiposDisponibles([]);
     }
-  }, [formData.familia_producto, formData.version_calculo]);
+  }, [debouncedFormData.familia_producto, debouncedFormData.version_calculo]);
 
-  // Efecto 3: Cargar WIPs cuando cambia tipo (solo para estilos nuevos)
+  // Efecto 3: Cargar WIPs cuando cambia tipo (usando debouncedFormData, solo para estilos nuevos)
   useEffect(() => {
-    if (formData.tipo_prenda && esEstiloNuevo) {
-      cargarWipsPorTipoPrenda(formData.tipo_prenda, formData.version_calculo);
+    if (debouncedFormData.tipo_prenda && esEstiloNuevo) {
+      cargarWipsPorTipoPrenda(debouncedFormData.tipo_prenda, debouncedFormData.version_calculo);
     }
-  }, [formData.tipo_prenda, formData.version_calculo, esEstiloNuevo]);
+  }, [debouncedFormData.tipo_prenda, debouncedFormData.version_calculo, esEstiloNuevo]);
 
-  // Efecto 4: Búsqueda debounced de estilos
+  // Efecto 4 (removido): Búsqueda debounced de estilos - Ahora se busca con botón manual
+  // Limpieza de búsqueda cuando el código se vacía
   useEffect(() => {
-    if (debounceTimeoutRef.current) {
-      clearTimeout(debounceTimeoutRef.current);
-    }
-
-    if (formData.codigo_estilo && formData.codigo_estilo.length >= 3) {
-      debounceTimeoutRef.current = setTimeout(() => {
-        verificarYBuscarEstilo(
-          formData.codigo_estilo,
-          formData.cliente_marca,
-          formData.version_calculo,
-        );
-      }, 300);
-    } else {
+    if (!formData.codigo_estilo || formData.codigo_estilo.length < 3) {
       setEstilosEncontrados([]);
       setEsEstiloNuevo(true);
       setInfoAutoCompletado(null);
     }
-
-    return () => {
-      if (debounceTimeoutRef.current) {
-        clearTimeout(debounceTimeoutRef.current);
-      }
-    };
-  }, [
-    formData.codigo_estilo,
-    formData.cliente_marca,
-    formData.version_calculo,
-  ]);
+  }, [formData.codigo_estilo]);
 
   // Cargar datos iniciales
   useEffect(() => {
@@ -392,12 +688,23 @@ const SistemaCotizadorTDV = () => {
     };
   }, []);
 
+  // Debounce formData para evitar pérdida de foco - actualiza debouncedFormData después de 3 segundos sin cambios
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedFormData(formData);
+    }, 3000); // 3 segundos de espera sin escribir
+
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [formData]);
+
   // ========================================
   // 🔧 FUNCIONES DE CARGA CORREGIDAS
   // ========================================
 
   const cargarWipsDisponibles = useCallback(
-    async (versionCalculo: string = "FLUIDA") => {
+    async (versionCalculo: string = "FLUIDO") => {
       try {
         const data = await get<{
           wips_textiles: any[];
@@ -449,7 +756,7 @@ const SistemaCotizadorTDV = () => {
   );
 
   const cargarClientesDisponibles = useCallback(
-    async (versionCalculo: string = "FLUIDA") => {
+    async (versionCalculo: string = "FLUIDO") => {
       try {
         const data = await get<{ clientes: any[] }>(
           `clientes?version_calculo=${encodeURIComponent(versionCalculo)}`,
@@ -467,7 +774,7 @@ const SistemaCotizadorTDV = () => {
   );
 
   const cargarFamiliasProductos = useCallback(
-    async (versionCalculo: string = "FLUIDA") => {
+    async (versionCalculo: string = "FLUIDO") => {
       setCargandoFamilias(true);
       try {
         const data = await get<{ familias: any[] }>(
@@ -488,7 +795,7 @@ const SistemaCotizadorTDV = () => {
   );
 
   const cargarTiposPrenda = useCallback(
-    async (familia: string, versionCalculo: string = "FLUIDA") => {
+    async (familia: string, versionCalculo: string = "FLUIDO") => {
       if (!familia) {
         setTiposDisponibles([]);
         return;
@@ -603,6 +910,17 @@ const SistemaCotizadorTDV = () => {
     },
     [cargarTiposPrenda],
   );
+
+  // Handler para buscar estilo manualmente (sin debounce)
+  const onBuscarEstilo = useCallback(() => {
+    if (formData.codigo_estilo && formData.codigo_estilo.length >= 3) {
+      verificarYBuscarEstilo(
+        formData.codigo_estilo,
+        formData.cliente_marca,
+        formData.version_calculo,
+      );
+    }
+  }, [formData.codigo_estilo, formData.cliente_marca, formData.version_calculo, verificarYBuscarEstilo]);
 
   // cargarOpsReales (POST)
   const cargarOpsReales = useCallback(
@@ -779,23 +1097,23 @@ const SistemaCotizadorTDV = () => {
           <div className="flex items-center gap-4 bg-gray-50 px-4 py-2 rounded-lg">
             <span
               className={`font-medium transition-colors ${
-                formData.version_calculo === "FLUIDA"
+                formData.version_calculo === "FLUIDO"
                   ? "text-gray-900"
                   : "text-gray-400"
               }`}
               style={{
                 fontWeight:
-                  formData.version_calculo === "FLUIDA" ? "600" : "400",
+                  formData.version_calculo === "FLUIDO" ? "600" : "400",
                 textTransform: "uppercase",
               }}
             >
-              FLUIDA
+              FLUIDO
             </span>
             <button
               type="button"
               onClick={() => {
                 const nuevaVersion =
-                  formData.version_calculo === "FLUIDA" ? "truncado" : "FLUIDA";
+                  formData.version_calculo === "FLUIDO" ? "truncado" : "FLUIDO";
                 // console.log(
                 //   `🔄 Cambiando versión: ${formData.version_calculo} → ${nuevaVersion}`,
                 // );
@@ -804,14 +1122,14 @@ const SistemaCotizadorTDV = () => {
               className="relative inline-flex h-8 w-16 items-center rounded-full transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2"
               style={{
                 backgroundColor:
-                  formData.version_calculo === "FLUIDA" ? "#821417" : "#bd4c42",
+                  formData.version_calculo === "FLUIDO" ? "#821417" : "#bd4c42",
               }}
             >
               <span
                 className="inline-block h-6 w-6 transform rounded-full bg-white shadow-lg transition-transform duration-300"
                 style={{
                   transform:
-                    formData.version_calculo === "FLUIDA"
+                    formData.version_calculo === "FLUIDO"
                       ? "translateX(2px)"
                       : "translateX(34px)",
                 }}
@@ -837,7 +1155,7 @@ const SistemaCotizadorTDV = () => {
         <div className="mt-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div
-              className={`w-2 h-2 rounded-full ${formData.version_calculo === "FLUIDA" ? "bg-green-500" : "bg-blue-500"}`}
+              className={`w-2 h-2 rounded-full ${formData.version_calculo === "FLUIDO" ? "bg-green-500" : "bg-blue-500"}`}
             ></div>
             <span className="text-xs text-gray-600">
               Usando datos:{" "}
@@ -862,113 +1180,6 @@ const SistemaCotizadorTDV = () => {
     ],
   );
 
-  // Memoized CampoCodigoEstilo
-  const CampoCodigoEstilo = useMemo(
-    () => (
-      <div className="space-y-2">
-        <label className="block text-sm font-semibold text-red-900">
-          Código de Estilo
-        </label>
-        <div className="relative">
-          <input
-            type="text"
-            value={formData.codigo_estilo}
-            onChange={(e) =>
-              manejarCambioFormulario(
-                "codigo_estilo",
-                e.target.value.toUpperCase().trim(),
-              )
-            }
-            className="w-full p-4 border-2 border-gray-200 rounded-xl focus:border-red-500 focus:border-opacity-50 transition-colors"
-            placeholder="ej: LAC001-V25, GRY2024-P01"
-            autoComplete="off"
-            spellCheck={false}
-          />
-          {buscandoEstilo && (
-            <div className="absolute right-3 top-4">
-              <RefreshCw className="h-5 w-5 animate-spin text-red-500" />
-            </div>
-          )}
-        </div>
-
-        {/* Información de auto-completado */}
-        {infoAutoCompletado?.autocompletado_disponible && (
-          <div className="mt-2 p-3 rounded-xl border-2 bg-green-100 border-green-400">
-            <div className="text-sm font-semibold mb-2 text-green-700">
-              ✅ Auto-completado aplicado:
-            </div>
-            <div className="text-xs text-green-700">
-              📁 Familia:{" "}
-              <strong>
-                {infoAutoCompletado.campos_sugeridos?.familia_producto}
-              </strong>{" "}
-              | 🏷️ Tipo:{" "}
-              <strong>
-                {infoAutoCompletado.campos_sugeridos?.tipo_prenda}
-              </strong>{" "}
-              | 📊 Categoría:{" "}
-              <strong>{infoAutoCompletado.info_estilo?.categoria}</strong>
-            </div>
-          </div>
-        )}
-
-        {/* Estilos similares */}
-        {estilosEncontrados.length > 0 && (
-          <div className="mt-2 p-3 rounded-xl border-2 bg-orange-50 border-orange-400">
-            <div className="text-sm font-semibold mb-2 text-red-900">
-              Estilos similares encontrados:
-            </div>
-            {estilosEncontrados.map((estilo, idx) => (
-              <button
-                key={idx}
-                onClick={() => seleccionarEstiloSimilar(estilo)}
-                className="w-full text-left p-2 rounded-lg hover:shadow-md transition-all mb-2 bg-orange-200"
-              >
-                <div className="font-semibold text-sm text-red-900">
-                  {estilo.codigo}
-                </div>
-                <div className="text-xs text-red-500">
-                  {estilo.familia_producto} - {estilo.tipo_prenda} |{" "}
-                  {estilo.ops_encontradas} OPs | $
-                  {estilo.costo_promedio.toFixed(2)}
-                </div>
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* Indicador de estado del estilo */}
-        {formData.codigo_estilo && !buscandoEstilo && (
-          <div className="flex items-center gap-2">
-            <div
-              className={`text-xs px-2 py-1 rounded-full inline-block text-white ${
-                esEstiloNuevo ? "bg-red-500" : "bg-red-600"
-              }`}
-            >
-              {esEstiloNuevo ? "🆕 Estilo Nuevo" : "🔄 Estilo Recurrente"}
-            </div>
-
-            {infoAutoCompletado?.info_estilo?.volumen_total && (
-              <div className="text-xs text-gray-600">
-                📦 Volumen histórico:{" "}
-                {infoAutoCompletado.info_estilo.volumen_total.toLocaleString()}{" "}
-                prendas
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-    ),
-    [
-      formData.codigo_estilo,
-      buscandoEstilo,
-      estilosEncontrados,
-      esEstiloNuevo,
-      infoAutoCompletado,
-      manejarCambioFormulario,
-      seleccionarEstiloSimilar,
-    ],
-  );
 
   // Memoized RutaTextilRecomendada
   const RutaTextilRecomendada = React.memo(() => {
@@ -1490,134 +1701,57 @@ const SistemaCotizadorTDV = () => {
 
         <div className="p-6">
           <div className="grid grid-cols-2 gap-6">
-            {/* Cliente/Marca */}
-            <div className="space-y-2">
-              <label className="block text-sm font-semibold text-red-900">
-                Cliente/Marca
-              </label>
-              <select
-                value={formData.cliente_marca}
-                onChange={(e) =>
-                  manejarCambioFormulario("cliente_marca", e.target.value)
-                }
-                className="w-full p-4 border-2 border-gray-200 rounded-xl focus:border-red-500 focus:border-opacity-50 transition-colors"
-              >
-                {clientesDisponibles.map((cliente) => (
-                  <option key={cliente} value={cliente}>
-                    {cliente}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <ClienteSelect
+              value={formData.cliente_marca}
+              clientesDisponibles={clientesDisponibles}
+              onChange={(valor) =>
+                manejarCambioFormulario("cliente_marca", valor)
+              }
+            />
 
-            {/* Temporada */}
-            <div className="space-y-2">
-              <label className="block text-sm font-semibold text-red-900">
-                Temporada
-              </label>
-              <input
-                type="text"
-                value={formData.temporada}
-                onChange={(e) =>
-                  manejarCambioFormulario("temporada", e.target.value)
-                }
-                className="w-full p-4 border-2 border-gray-200 rounded-xl focus:border-red-500 focus:border-opacity-50 transition-colors"
-                placeholder="ej: Verano 2025, Otoño 2024"
-              />
-            </div>
+            <TemporadaInput
+              value={formData.temporada}
+              onChange={(valor) =>
+                manejarCambioFormulario("temporada", valor)
+              }
+            />
 
-            {/* Código de estilo */}
-            {CampoCodigoEstilo}
+            <CampoCodigoEstiloComponent
+              value={formData.codigo_estilo}
+              buscandoEstilo={buscandoEstilo}
+              estilosEncontrados={estilosEncontrados}
+              esEstiloNuevo={esEstiloNuevo}
+              infoAutoCompletado={infoAutoCompletado}
+              onChange={handleCodigoEstiloChange}
+              onBuscar={onBuscarEstilo}
+              onSelectStyle={seleccionarEstiloSimilar}
+            />
 
-            {/* Categoría de lote */}
-            <div className="space-y-2">
-              <label className="block text-sm font-semibold text-red-900">
-                Categoría de Lote
-              </label>
-              <select
-                value={formData.categoria_lote}
-                onChange={(e) =>
-                  manejarCambioFormulario("categoria_lote", e.target.value)
-                }
-                className="w-full p-4 border-2 border-gray-200 rounded-xl focus:border-red-500 focus:border-opacity-50 transition-colors"
-              >
-                {Object.entries(CATEGORIAS_LOTE).map(([categoria, info]) => (
-                  <option key={categoria} value={categoria}>
-                    {categoria} ({info.rango} prendas)
-                  </option>
-                ))}
-              </select>
-            </div>
+            <CategoriaLoteSelect
+              value={formData.categoria_lote}
+              onChange={(valor) =>
+                manejarCambioFormulario("categoria_lote", valor)
+              }
+            />
 
-            {/* Familia de producto */}
-            <div className="space-y-2">
-              <label className="block text-sm font-semibold text-red-900">
-                Familia de Producto
-              </label>
-              <div className="relative">
-                <select
-                  value={formData.familia_producto}
-                  onChange={(e) =>
-                    manejarCambioFormulario("familia_producto", e.target.value)
-                  }
-                  className="w-full p-4 border-2 border-gray-200 rounded-xl focus:border-red-500 focus:border-opacity-50 transition-colors appearance-none"
-                  disabled={cargandoFamilias}
-                >
-                  <option value="">
-                    {cargandoFamilias
-                      ? "Cargando familias..."
-                      : familiasDisponibles.length === 0
-                        ? "⚠️ Error cargando familias - Verifique backend"
-                        : "Seleccionar familia"}
-                  </option>
-                  {familiasDisponibles.map((familia) => (
-                    <option key={familia} value={familia}>
-                      {familia}
-                    </option>
-                  ))}
-                </select>
-                {cargandoFamilias && (
-                  <div className="absolute right-3 top-4">
-                    <RefreshCw className="h-5 w-5 animate-spin text-red-500" />
-                  </div>
-                )}
-              </div>
-            </div>
+            <FamiliaProductoSelect
+              value={formData.familia_producto}
+              familiasDisponibles={familiasDisponibles}
+              cargandoFamilias={cargandoFamilias}
+              onChange={(valor) =>
+                manejarCambioFormulario("familia_producto", valor)
+              }
+            />
 
-            {/* Tipo de prenda */}
-            <div className="space-y-2">
-              <label className="block text-sm font-semibold text-red-900">
-                Tipo de Prenda
-              </label>
-              <div className="relative">
-                <select
-                  value={formData.tipo_prenda}
-                  onChange={(e) =>
-                    manejarCambioFormulario("tipo_prenda", e.target.value)
-                  }
-                  className="w-full p-4 border-2 border-gray-200 rounded-xl focus:border-red-500 focus:border-opacity-50 transition-colors appearance-none"
-                  disabled={cargandoTipos || !formData.familia_producto}
-                >
-                  <option value="">
-                    {!formData.familia_producto
-                      ? "Primero selecciona familia"
-                      : cargandoTipos
-                        ? "Cargando tipos..."
-                        : "Seleccionar tipo"}
-                  </option>
-                  {tiposDisponibles.map((tipo) => (
-                    <option key={tipo} value={tipo}>
-                      {tipo}
-                    </option>
-                  ))}
-                </select>
-                {cargandoTipos && (
-                  <div className="absolute right-3 top-4">
-                    <RefreshCw className="h-5 w-5 animate-spin text-red-500" />
-                  </div>
-                )}
-              </div>
-            </div>
+            <TipoPrendaSelect
+              value={formData.tipo_prenda}
+              tiposDisponibles={tiposDisponibles}
+              cargandoTipos={cargandoTipos}
+              familiaSelectorPrimero={!formData.familia_producto}
+              onChange={(valor) =>
+                manejarCambioFormulario("tipo_prenda", valor)
+              }
+            />
           </div>
         </div>
       </div>

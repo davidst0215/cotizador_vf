@@ -13,7 +13,7 @@ from pydantic import ConfigDict, model_validator
 class Settings(BaseSettings):
     """Configuración principal de la aplicación"""
 
-    model_config = ConfigDict(env_file=".env")
+    model_config = ConfigDict(env_file=".env", extra="ignore")
 
     # Base de datos
     db_host: str = "127.0.0.1"
@@ -23,25 +23,62 @@ class Settings(BaseSettings):
     db_name: str
     db_schema: str
 
-    # Connection string
-    connection_string: Optional[str] = None
+    # Connection string or params dict
+    connection_string: Optional[str | dict] = None
     connection_driver: Optional[str] = None
+
+    # PostgreSQL SSL settings
+    pgsslmode: Optional[str] = None
+    pgsslcert: Optional[str] = None
+    pgsslkey: Optional[str] = None
+    pgsslrootcert: Optional[str] = None
 
     @model_validator(mode="after")
     def _build(self):
+        # ✅ DETECTAR PostgreSQL por puerto (5432) o por variables de entorno
+        is_postgres = self.db_port == 5432 or self.pgsslmode is not None
+
         if not self.connection_driver:
-            self.connection_driver = "{SQL Server}"
+            self.connection_driver = "psycopg2" if is_postgres else "{SQL Server}"
+
         if not self.connection_string:
-            self.connection_string = (
-                f"DRIVER={self.connection_driver};"
-                f"SERVER={self.db_host},{self.db_port};"
-                f"UID={self.db_user};"
-                f"PWD={self.db_password};"
-                f"DATABASE={self.db_name};"
-                f"TrustServerCertificate=yes;"
-                f"Connection Timeout=30;"
-                f"Command Timeout=60"
-            )
+            if is_postgres:
+                # PostgreSQL: usar diccionario de parámetros en lugar de DSN string
+                # Esto evita problemas con espacios en rutas de certificados
+                self.connection_string = {
+                    'dbname': self.db_name,
+                    'user': self.db_user,
+                    'host': self.db_host,
+                    'port': self.db_port,
+                }
+
+                if self.db_password:
+                    self.connection_string['password'] = self.db_password
+
+                # Agregar SSL settings
+                if self.pgsslmode:
+                    self.connection_string['sslmode'] = self.pgsslmode
+                else:
+                    self.connection_string['sslmode'] = 'disable'
+
+                if self.pgsslcert:
+                    self.connection_string['sslcert'] = self.pgsslcert
+                if self.pgsslkey:
+                    self.connection_string['sslkey'] = self.pgsslkey
+                if self.pgsslrootcert:
+                    self.connection_string['sslrootcert'] = self.pgsslrootcert
+            else:
+                # SQL Server connection string
+                self.connection_string = (
+                    f"DRIVER={self.connection_driver};"
+                    f"SERVER={self.db_host},{self.db_port};"
+                    f"UID={self.db_user};"
+                    f"PWD={self.db_password};"
+                    f"DATABASE={self.db_name};"
+                    f"TrustServerCertificate=yes;"
+                    f"Connection Timeout=30;"
+                    f"Command Timeout=60"
+                )
         return self
 
     # API
@@ -53,7 +90,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
     # CORS
-    cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
+    cors_origins: str = "http://localhost:3000,http://localhost:3001,http://localhost:3002,http://127.0.0.1:3000,http://127.0.0.1:3001,http://127.0.0.1:3002"
 
     # Cache
     cache_ttl: int = 3600
@@ -115,18 +152,18 @@ class FactoresTDV:
     # ✅ NUEVO: Mapeo de nombres específicos de WIPs
     NOMBRES_WIPS = {
         # WIPs Textiles
-        "16": "WIP 16 - Hilado",
-        "14": "WIP 14 - Teñido",
-        "19a": "WIP 19a - Acabados",
+        "14": "WIP 14 - Teñido de Hilado",
+        "16": "WIP 16 - Tejido de Tela y Rectilíneos",
+        "19a": "WIP 19a - Teñido de Tela",
         "19c": "WIP 19c - Despacho",
-        "24": "WIP 24 - Control",
+        "24": "WIP 24 - Estampado Tela",
         # WIPs Manufactura
         "34": "WIP 34 - Corte",
-        "40": "WIP 40 - Confección",
-        "44": "WIP 44 - Bordado",
-        "37": "WIP 37 - Acabado",
-        "45": "WIP 45 - Planchado",
-        "49": "WIP 49 - Empaque",
+        "37": "WIP 37 - Bordado Pieza",
+        "40": "WIP 40 - Costura",
+        "44": "WIP 44 - Estampado Prendas",
+        "45": "WIP 45 - Lavado en Prenda",
+        "49": "WIP 49 - Acabado",
     }
 
     # Rangos de seguridad por componente (validación experta)

@@ -80,7 +80,7 @@ def test_normal_case(processor, base_input, caplog):
     assert res["estrategia_usada"] == "test"
     assert res["fecha_mas_reciente"] == base_input[0]["fecha_facturacion"]
     assert res["precision_estimada"] == 0.1
-    assert res["version_calculo"] == "FLUIDA"
+    assert res["version_calculo"] == "FLUIDO"
     assert "2 registros procesados con estrategia 'test', 14 ajustes" in caplog.text
 
 

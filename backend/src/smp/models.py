@@ -23,7 +23,7 @@ from enum import Enum
 class VersionCalculo(str, Enum):
     """Versiones de cálculo disponibles"""
 
-    FLUIDA = "FLUIDA"
+    FLUIDO = "FLUIDO"  # Valor que acepta el frontend/API
     TRUNCADO = "truncado"
 
 
@@ -102,7 +102,7 @@ class CotizacionInput(BaseModel):
 
     # ✅ CORREGIDO: Campo para versión de cálculo con enum
     version_calculo: VersionCalculo = Field(
-        default=VersionCalculo.FLUIDA, description="Versión de cálculo"
+        default=VersionCalculo.FLUIDO, description="Versión de cálculo"
     )
 
     # Campos determinados automáticamente por el backend
@@ -135,12 +135,13 @@ class CotizacionInput(BaseModel):
     def validar_version_calculo(cls, v):
         """Valida y normaliza la versión de cálculo"""
         if isinstance(v, str):
-            if v.upper() == "FLUIDA":
-                return VersionCalculo.FLUIDA
+            # Aceptar tanto "FLUIDO" (UI) como "FLUIDA" (BD)
+            if v.upper() in ("FLUIDO", "FLUIDA"):
+                return VersionCalculo.FLUIDO
             elif v.lower() == "truncado":
                 return VersionCalculo.TRUNCADO
             else:
-                raise ValueError(f"Versión debe ser FLUIDA o truncado, recibido: {v}")
+                raise ValueError(f"Versión debe ser FLUIDO/FLUIDA o truncado, recibido: {v}")
         return v
 
 
@@ -181,7 +182,7 @@ class InfoEstiloDetallada(BaseModel):
     encontrado: bool = Field(default=False, description="Si fue encontrado en BD")
     fuente: Optional[str] = Field(None, description="Fuente de la información")
     version_calculo: VersionCalculo = Field(
-        default=VersionCalculo.FLUIDA, description="Versión usada"
+        default=VersionCalculo.FLUIDO, description="Versión usada"
     )
 
 
@@ -551,7 +552,7 @@ class WipsDisponiblesResponse(BaseModel):
         None, description="Tipo de prenda filtrado"
     )
     version_calculo: VersionCalculo = Field(
-        default=VersionCalculo.FLUIDA, description="Versión de cálculo usada"
+        default=VersionCalculo.FLUIDO, description="Versión de cálculo usada"
     )
 
 

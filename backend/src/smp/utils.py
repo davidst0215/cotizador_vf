@@ -188,10 +188,11 @@ class CotizadorTDV:
 
         # Validar version_calculo
         if not hasattr(input_data, "version_calculo") or not input_data.version_calculo:
-            input_data.version_calculo = VersionCalculo.FLUIDA  # Default
+            input_data.version_calculo = VersionCalculo.FLUIDO  # Default
         else:
-            versiones_validas = ["FLUIDA", "truncado"]
-            if input_data.version_calculo not in versiones_validas:
+            versiones_validas = ["FLUIDO", "truncado"]
+            version_value = input_data.version_calculo.value if hasattr(input_data.version_calculo, 'value') else str(input_data.version_calculo)
+            if version_value not in versiones_validas:
                 errores.append(f"version_calculo debe ser una de: {versiones_validas}")
 
         # Validar categoría de lote
@@ -406,6 +407,17 @@ class CotizadorTDV:
                 f"✅ Costos históricos COMPLETOS obtenidos: {costos_hist.get('registros_encontrados', 0)} registros"
             )
 
+            # 🔍 DIAGNOSTIC: Print values directly to ensure visibility
+            print(f"\n=== DIAGNOSTICO: Valores en costos_hist para {input_data.codigo_estilo} ===", flush=True)
+            componentes_para_log = [
+                "costo_textil", "costo_manufactura", "costo_avios",
+                "costo_materia_prima", "costo_indirecto_fijo",
+                "gasto_administracion", "gasto_ventas"
+            ]
+            for comp in componentes_para_log:
+                val = costos_hist.get(comp)
+                print(f"{comp}: {val} (type: {type(val).__name__}, is_None: {val is None}, is_le_0: {val <= 0 if val is not None else 'N/A'})", flush=True)
+
         except Exception as e:
             logger.warning(
                 f"⚠️ No se pudo obtener costos completos por estilo específico: {e}"
@@ -432,23 +444,32 @@ class CotizadorTDV:
             "gasto_ventas",
         ]
 
+        print(f"\n=== EXTRAYENDO COMPONENTES para {input_data.codigo_estilo} ===", flush=True)
         for componente in componentes_esperados:
             valor = costos_hist.get(componente, 0)
 
+            # 🔍 DEBUG: Print detallado
+            print(f"[{componente}] valor={valor}, tipo={type(valor).__name__}, is_None={valor is None}, is_le_0={valor <= 0 if valor is not None else 'N/A'}", flush=True)
+
             # ✅ VERIFICAR SI EL COMPONENTE ESTÁ DISPONIBLE EN EL HISTÓRICO
             if valor is None or valor <= 0:
+                print(f"  -> FALLBACK TRIGGERED for {componente}", flush=True)
                 componentes_faltantes.append(componente)
                 logger.warning(
-                    f"⚠️ {componente} no disponible en histórico de {input_data.codigo_estilo}"
+                    f"⚠️ {componente} no disponible en histórico de {input_data.codigo_estilo} (valor={valor})"
                 )
                 # Usar un valor mínimo del rango como fallback
                 if componente in factores.RANGOS_SEGURIDAD:
                     valor = factores.RANGOS_SEGURIDAD[componente]["min"]
+                    print(f"  -> Using safety minimum: ${valor:.2f}", flush=True)
+                    logger.warning(f"   → Usando fallback mínimo: ${valor:.2f}")
                     alertas.append(
                         f"⚠️ {componente}: no en histórico, usando valor mínimo ${valor:.2f}"
                     )
                 else:
                     valor = 0.5  # Fallback genérico
+                    print(f"  -> Using generic fallback: ${valor:.2f}", flush=True)
+                    logger.warning(f"   → Usando fallback genérico: ${valor:.2f}")
                     alertas.append(
                         f"⚠️ {componente}: no en histórico, usando fallback ${valor:.2f}"
                     )
@@ -971,3 +992,4 @@ class CotizadorTDV:
 
 # Instancia global del cotizador
 cotizador_tdv = CotizadorTDV()
+

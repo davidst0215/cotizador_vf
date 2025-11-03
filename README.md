@@ -203,7 +203,7 @@ Contiene los datos históricos de órdenes de producción con todos los componen
 - `gasto_administracion`: Gastos administrativos
 - `gasto_ventas`: Gastos de ventas
 - `esfuerzo_total`: Nivel de complejidad
-- `version_calculo`: Versión del cálculo (FLUIDA/truncado)
+- `version_calculo`: Versión del cálculo (FLUIDO/truncado)
 - `fecha_corrida`: Fecha de procesamiento
 
 #### RESUMEN_WIP_POR_PRENDA
@@ -352,7 +352,7 @@ npm test
 
 El sistema soporta múltiples versiones de cálculo:
 
-- **FLUIDA:** Metodología actual optimizada
+- **FLUIDO:** Metodología actual optimizada
 - **truncado:** Metodología con datos limitados
 
 ### Control de Versiones

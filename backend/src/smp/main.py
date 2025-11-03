@@ -153,7 +153,7 @@ async def root():
             "Información comercial avanzada",
             "Análisis inteligente WIPs por estabilidad + fecha_corrida",
         ],
-        "versiones_calculo_soportadas": ["FLUIDA", "truncado"],
+        "versiones_calculo_soportadas": ["FLUIDO", "truncado"],
         "endpoints_nuevos": [
             "/verificar-estilo-completo/{codigo_estilo}",
             "/ops-utilizadas-cotizacion",
@@ -199,7 +199,7 @@ async def health_check():
 @app.get("/verificar-estilo-completo/{codigo_estilo}", tags=["Búsqueda"])
 async def verificar_estilo_completo_con_autocompletado(
     codigo_estilo: str,
-    version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
+    version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
 ):
     """
     ✅ NUEVO ENDPOINT: Verificación completa de estilo con auto-completado
@@ -372,7 +372,7 @@ async def obtener_configuracion():
 )
 async def obtener_wips_disponibles(
     tipo_prenda: Optional[str] = None,
-    version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
+    version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
 ):
     """✅ CORREGIDO: Obtiene WIPs disponibles con costos actuales - ANÁLISIS INTELIGENTE CON VERSION_CALCULO"""
     try:
@@ -415,7 +415,7 @@ async def obtener_wips_disponibles(
 @app.get("/ruta-textil-recomendada/{tipo_prenda}", tags=["Configuración"])
 async def obtener_ruta_textil_recomendada(
     tipo_prenda: str,
-    version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
+    version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
 ):
     """✅ CORREGIDO: Obtiene ruta textil recomendada para un tipo de prenda específico"""
     try:
@@ -459,7 +459,7 @@ async def obtener_ruta_textil_recomendada(
 
 @app.get("/clientes", tags=["Datos Maestros"])
 async def obtener_clientes(
-    version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
+    version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
 ):
     """✅ CORREGIDO: Obtiene lista de clientes disponibles CON VERSION_CALCULO"""
     try:
@@ -487,7 +487,7 @@ async def obtener_clientes(
 
 @app.get("/familias-productos", tags=["Datos Maestros"])
 async def obtener_familias_productos(
-    version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
+    version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
 ):
     """Obtiene familias de productos disponibles CON VERSION_CALCULO"""
     try:
@@ -515,7 +515,7 @@ async def obtener_familias_productos(
 
 @app.get("/tipos-prenda/{familia}", tags=["Datos Maestros"])
 async def obtener_tipos_prenda(
-    familia: str, version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA
+    familia: str, version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO
 ):
     """✅ CORREGIDO: Obtiene tipos de prenda para una familia específica CON VERSION_CALCULO"""
     try:
@@ -556,7 +556,7 @@ async def buscar_estilos_similares(
     codigo_estilo: str,
     cliente: Optional[str] = None,
     limite: Optional[int] = 10,
-    version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
+    version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
 ):
     """✅ CORREGIDO: Busca estilos similares por código y cliente CON VERSION_CALCULO"""
     try:
@@ -584,7 +584,7 @@ async def buscar_estilos_similares(
 @app.get("/verificar-estilo/{codigo_estilo}", tags=["Búsqueda"])
 async def verificar_estilo_existente(
     codigo_estilo: str,
-    version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
+    version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
 ):
     """✅ MANTENIDO: Verificación básica de estilo (compatibilidad)"""
     try:
@@ -648,14 +648,15 @@ async def crear_cotizacion(input_data: CotizacionInput):
 
         # Validar version_calculo
         if hasattr(input_data, "version_calculo") and input_data.version_calculo:
-            versiones_validas = ["FLUIDA", "truncado"]
-            if input_data.version_calculo not in versiones_validas:
+            versiones_validas = ["FLUIDO", "truncado"]
+            version_value = input_data.version_calculo.value if hasattr(input_data.version_calculo, 'value') else str(input_data.version_calculo)
+            if version_value not in versiones_validas:
                 raise ValueError(
                     f"version_calculo debe ser una de: {versiones_validas}"
                 )
         else:
             # Asignar default si no viene en input
-            input_data.version_calculo = VersionCalculo.FLUIDA
+            input_data.version_calculo = VersionCalculo.FLUIDO
 
         # Procesar cotización
         resultado = await cotizador_tdv.procesar_cotizacion(input_data)
@@ -683,7 +684,7 @@ async def obtener_analisis_historico(
     familia: str,
     tipo: Optional[str] = None,
     meses: Optional[int] = 12,
-    version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
+    version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
 ):
     """✅ CORREGIDO: Análisis histórico para benchmarking CON VERSION_CALCULO"""
     try:
@@ -791,7 +792,7 @@ async def obtener_factor_marca(cliente: str):
 
 @app.get("/info-fechas-corrida", tags=["Análisis"])
 async def obtener_info_fechas_corrida(
-    version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
+    version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
 ):
     """✅ CORREGIDO: Obtiene información sobre las fechas de corrida CON VERSION_CALCULO"""
     try:
@@ -844,7 +845,7 @@ async def verificar_estilo_completo(
     codigo_estilo: str,
     familia_producto: Optional[str] = None,
     tipo_prenda: Optional[str] = None,
-    version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
+    version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
 ):
     """
     ✅ ENDPOINT NUEVO: Verificación completa con auto-completado y ruta
@@ -973,7 +974,7 @@ async def verificar_estilo_completo(
 @app.get("/autocompletar-estilo/{codigo_estilo}", tags=["Búsqueda"])
 async def autocompletar_estilo_recurrente(
     codigo_estilo: str,
-    version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
+    version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
 ):
     """
     ✅ ENDPOINT NUEVO: Auto-completa información para estilos recurrentes
@@ -1029,7 +1030,7 @@ async def autocompletar_estilo_recurrente(
 @app.get("/debug-estilo/{codigo_estilo}", tags=["Debug"])
 async def debug_estilo_clasificacion(
     codigo_estilo: str,
-    version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
+    version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
 ):
     """
     🔍 ENDPOINT DE DEBUG: Para diagnosticar problemas de clasificación
@@ -1113,7 +1114,7 @@ async def obtener_versiones_calculo():
         logger.info("📋 Obteniendo información de versiones de cálculo")
 
         versiones_info = {}
-        versiones = ["FLUIDA", "truncado"]
+        versiones = ["FLUIDO", "truncado"]
 
         for version in versiones:
             try:
@@ -1223,7 +1224,7 @@ async def startup_event():
         # Verificar fechas de corrida por versión
         for tabla in ["costo_op_detalle", "resumen_wip_por_prenda"]:
             try:
-                for version in ["FLUIDA", "truncado"]:
+                for version in ["FLUIDO", "truncado"]:
                     try:
                         fecha_max = await tdv_queries.obtener_fecha_maxima_corrida(
                             tabla, version
@@ -1258,7 +1259,7 @@ if __name__ == "__main__":
 
     logger.info(f"🚀 Iniciando servidor en {settings.api_host}:{settings.api_port}")
     uvicorn.run(
-        "app",
+        "smp.main:app",
         host=settings.api_host,
         port=settings.api_port,
         reload=settings.debug,

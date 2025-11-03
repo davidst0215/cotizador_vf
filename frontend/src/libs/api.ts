@@ -17,7 +17,7 @@ async function createHttpError(res: Response) {
   } catch {
     // ignore parse errors
   }
-  const err: any = new Error(message);
+  const err = new Error(message) as Error & { status?: number; response?: Response };
   err.status = res.status;
   err.response = res;
   return err;

@@ -79,11 +79,11 @@ def diagnosticar_version_calculo():
                     FROM {settings.db_schema}.costo_op_detalle
                     WHERE version_calculo = ?
                 """,
-                    ("FLUIDA",),
+                    ("FLUIDO",),
                 )
                 resultado = cursor.fetchone()[0]
                 print(
-                    f"✅ Query con parámetro FUNCIONA: {resultado:,} registros FLUIDA"
+                    f"✅ Query con parámetro FUNCIONA: {resultado:,} registros FLUIDO"
                 )
 
             except Exception as e:
@@ -98,7 +98,7 @@ def diagnosticar_version_calculo():
                     FROM {settings.db_schema}.costo_op_detalle
                     WHERE version_calculo = ?
                 """,
-                    ("FLUIDA",),
+                    ("FLUIDO",),
                 )
                 resultado = cursor.fetchone()[0]
                 print(f"✅ Query completa FUNCIONA: {resultado}")

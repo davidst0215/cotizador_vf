@@ -1508,6 +1508,10 @@ class TDVQueries:
             - gastos_dict: {"costo_indirecto_fijo": float, "gasto_administracion": float, "gasto_ventas": float}
             - ops_excluidas_indices: Lista de índices de OPs que fueron excluidas
         """
+        print(f"\n=== obtener_gastos_por_estilo_recurrente DEBUG ===", flush=True)
+        print(f"codigo_estilo: {codigo_estilo}", flush=True)
+        print(f"version_calculo: {version_calculo}", flush=True)
+
         try:
             query = f"""
             SELECT
@@ -1539,7 +1543,12 @@ class TDVQueries:
             )
             resultado = await self.db.query(query, params)
 
+            print(f"Query ejecutada, registros encontrados: {len(resultado) if resultado else 0}", flush=True)
+            if resultado:
+                print(f"Primeros 3 registros: {resultado[:3]}", flush=True)
+
             if not resultado:
+                print(f"NO hay OPs para este estilo", flush=True)
                 logger.warning(f" No se encontraron OPs para estilo recurrente: {codigo_estilo}")
                 return {
                     "costo_indirecto_fijo": 0,
@@ -1564,9 +1573,20 @@ class TDVQueries:
                 })
 
             # Filtrar por threshold de moda (10x)
+            print(f"\nANTES de filtrado:", flush=True)
+            print(f"  indirectos ({len(indirectos)} valores): {indirectos[:5]}...", flush=True)
+            print(f"  admins ({len(admins)} valores): {admins[:5]}...", flush=True)
+            print(f"  ventas ({len(ventas)} valores): {ventas[:5]}...", flush=True)
+
             indirectos_filtrados, indices_excluidos_ind = filter_by_mode_threshold(indirectos, threshold=10.0)
             admins_filtrados, indices_excluidos_adm = filter_by_mode_threshold(admins, threshold=10.0)
             ventas_filtrados, indices_excluidos_ven = filter_by_mode_threshold(ventas, threshold=10.0)
+
+            print(f"\nDESPUES de filtrado (threshold=10x):", flush=True)
+            print(f"  indirectos_filtrados ({len(indirectos_filtrados)} valores): {indirectos_filtrados}", flush=True)
+            print(f"  admins_filtrados ({len(admins_filtrados)} valores): {admins_filtrados}", flush=True)
+            print(f"  ventas_filtrados ({len(ventas_filtrados)} valores): {ventas_filtrados}", flush=True)
+            print(f"  indices_excluidos: ind={indices_excluidos_ind}, adm={indices_excluidos_adm}, ven={indices_excluidos_ven}", flush=True)
 
             # Combinar índices excluidos de los tres costos
             indices_excluidos_totales = set(indices_excluidos_ind) | set(indices_excluidos_adm) | set(indices_excluidos_ven)
@@ -1580,6 +1600,9 @@ class TDVQueries:
                 "gasto_administracion": float(sum(admins_filtrados) / len(admins_filtrados)) if admins_filtrados else 0,
                 "gasto_ventas": float(sum(ventas_filtrados) / len(ventas_filtrados)) if ventas_filtrados else 0,
             }
+
+            print(f"\nGASTOS FINALES CALCULADOS: {gastos}", flush=True)
+            print(f"OPs excluidas: {ops_excluidas}", flush=True)
 
             logger.info(
                 f" Gastos recurrentes (estilo {codigo_estilo}): {gastos} | OPs excluidas: {len(ops_excluidas)}"
@@ -1735,15 +1758,24 @@ class TDVQueries:
         Retorna: (gastos_dict, ops_excluidas)
         """
 
+        print(f"\n=== obtener_gastos_indirectos_formula DEBUG ===", flush=True)
+        print(f"codigo_estilo: {codigo_estilo}", flush=True)
+        print(f"version_calculo: {version_calculo}", flush=True)
+
         #  OPCIÓN 1: Intentar con ESTILO RECURRENTE (por código_estilo exacto)
         if codigo_estilo:
+            print(f"OPCIÓN 1: Buscando ESTILO RECURRENTE", flush=True)
             logger.info(f" Buscando gastos para ESTILO RECURRENTE: {codigo_estilo}")
             gastos, ops_excluidas = await self.obtener_gastos_por_estilo_recurrente(
                 codigo_estilo, version_calculo
             )
+            print(f"OPCIÓN 1 Resultado: gastos={gastos}, ops_excluidas={ops_excluidas}", flush=True)
             if any(gastos.values()):  # Si se encontraron datos
-                logger.info(f" Gastos obtenidos por ESTILO RECURRENTE")
+                print(f"OPCIÓN 1 SUCCESS: Retornando resultados", flush=True)
+                logger.info(f" Gastos obtenidos por ESTILO RECURRENTE: {gastos}")
                 return gastos, ops_excluidas
+            else:
+                print(f"OPCIÓN 1 FAILED: todos los valores son 0/None", flush=True)
 
         #  OPCIÓN 2: Intentar con ESTILO NUEVO (marca + familia + tipo)
         if cliente_marca and familia_producto and tipo_prenda:

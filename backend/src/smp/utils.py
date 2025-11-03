@@ -410,14 +410,26 @@ class CotizadorTDV:
             )
 
             # Gastos INDIRECTOS (3): MODA + filtrado (MÉTODO ÚNICO)
+            logger.info(
+                f" INICIANDO obtener_gastos_indirectos_formula para estilo recurrente: {input_data.codigo_estilo}"
+            )
             gastos_indirectos, ops_excluidas = await tdv_queries.obtener_gastos_indirectos_formula(
                 version_calculo=input_data.version_calculo,
                 codigo_estilo=input_data.codigo_estilo,  # Para estilo recurrente
             )
             metodo_usado_indirectos = "moda_filtrado_10x"
             logger.info(
-                f" Gastos indirectos (MODA+filtrado) obtenidos: {gastos_indirectos}"
+                f" RESULTADO Gastos indirectos (MODA+filtrado): {gastos_indirectos}"
             )
+            logger.info(
+                f" OPs excluidas como outliers: {len(ops_excluidas)} → {ops_excluidas}"
+            )
+            print(f"\n=== DEBUG GASTOS INDIRECTOS ===", flush=True)
+            print(f"Método: obtener_gastos_indirectos_formula", flush=True)
+            print(f"Estilo: {input_data.codigo_estilo}", flush=True)
+            print(f"Resultados: {gastos_indirectos}", flush=True)
+            print(f"OPs excluidas: {ops_excluidas}", flush=True)
+            print(f"==============================\n", flush=True)
 
         except Exception as e:
             logger.warning(

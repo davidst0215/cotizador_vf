@@ -1518,7 +1518,7 @@ class TDVQueries:
                 cod_ordpro,
                 ROW_NUMBER() OVER (ORDER BY fecha_facturacion DESC) as rn
             FROM {settings.db_schema}.costo_op_detalle
-            WHERE codigo_estilo = ?
+            WHERE estilo_propio = ?
                 AND version_calculo = ?
                 AND fecha_facturacion >= (
                     SELECT (MAX(fecha_facturacion) - INTERVAL '12 months')
@@ -1628,7 +1628,7 @@ class TDVQueries:
                 ROW_NUMBER() OVER (ORDER BY fecha_facturacion DESC) as rn
             FROM {settings.db_schema}.costo_op_detalle
             WHERE cliente = ?
-                AND familia_prenda = ?
+                AND familia_de_productos = ?
                 AND tipo_prenda = ?
                 AND version_calculo = ?
                 AND fecha_facturacion >= (

@@ -387,89 +387,76 @@ class CotizadorTDV:
     ) -> CotizacionResponse:
         """
          FUNCIÓN COMPLETAMENTE CORREGIDA: Procesa estilos recurrentes
-        TODOS los costos del histórico específico del estilo
+        Usa MÉTODO ÚNICO COORDINADO:
+        - Costos directos (4): del histórico específico del estilo
+        - Gastos indirectos (3): MODA + filtrado (obtener_gastos_indirectos_formula)
         """
 
         logger.info(
             f"🔄 PROCESANDO estilo RECURRENTE: {input_data.codigo_estilo} ({input_data.version_calculo})"
         )
 
-        #  ESTRATEGIA CORREGIDA: TODOS LOS COSTOS DEL ESTILO ESPECÍFICO
+        #  ESTRATEGIA CORREGIDA: SEPARAR COSTOS DIRECTOS DE INDIRECTOS
         try:
-            # ÚNICA FUENTE: histórico del estilo específico
+            # Costos DIRECTOS (4): histórico del estilo específico
             costos_hist = await tdv_queries.buscar_costos_estilo_especifico(
                 input_data.codigo_estilo,
                 meses=24,
                 version_calculo=input_data.version_calculo,
             )
-            metodo_usado = f"estilo_especifico_completo_{input_data.codigo_estilo}"
+            metodo_usado_directos = f"historico_especifico_{input_data.codigo_estilo}"
             logger.info(
-                f" Costos históricos COMPLETOS obtenidos: {costos_hist.get('registros_encontrados', 0)} registros"
+                f" Costos directos obtenidos: {costos_hist.get('registros_encontrados', 0)} registros"
             )
 
-            #  DIAGNOSTIC: Print values directly to ensure visibility
-            print(f"\n=== DIAGNOSTICO: Valores en costos_hist para {input_data.codigo_estilo} ===", flush=True)
-            componentes_para_log = [
-                "costo_textil", "costo_manufactura", "costo_avios",
-                "costo_materia_prima", "costo_indirecto_fijo",
-                "gasto_administracion", "gasto_ventas"
-            ]
-            for comp in componentes_para_log:
-                val = costos_hist.get(comp)
-                print(f"{comp}: {val} (type: {type(val).__name__}, is_None: {val is None}, is_le_0: {val <= 0 if val is not None else 'N/A'})", flush=True)
+            # Gastos INDIRECTOS (3): MODA + filtrado (MÉTODO ÚNICO)
+            gastos_indirectos, ops_excluidas = await tdv_queries.obtener_gastos_indirectos_formula(
+                version_calculo=input_data.version_calculo,
+                codigo_estilo=input_data.codigo_estilo,  # Para estilo recurrente
+            )
+            metodo_usado_indirectos = "moda_filtrado_10x"
+            logger.info(
+                f" Gastos indirectos (MODA+filtrado) obtenidos: {gastos_indirectos}"
+            )
 
         except Exception as e:
             logger.warning(
-                f" No se pudo obtener costos completos por estilo específico: {e}"
+                f" No se pudo obtener costos para {input_data.codigo_estilo}: {e}"
             )
-            #  Si no tiene histórico completo, NO es verdaderamente recurrente
             raise ValueError(
-                f"Estilo {input_data.codigo_estilo} marcado como recurrente pero sin histórico completo"
+                f"Estilo {input_data.codigo_estilo} marcado como recurrente pero sin datos históricos"
             )
 
-        #  USAR TODOS LOS COMPONENTES DEL HISTÓRICO ESPECÍFICO
+        #  CONSOLIDAR COMPONENTES: Directos + Indirectos
         componentes = []
         costos_validados = {}
         alertas = []
         componentes_faltantes = []
 
-        #  TODOS LOS COMPONENTES DEBEN VENIR DEL HISTÓRICO
-        componentes_esperados = [
+        # Procesar COSTOS DIRECTOS (4) del histórico específico
+        costos_directos = [
             "costo_textil",
             "costo_manufactura",
             "costo_avios",
             "costo_materia_prima",
-            "costo_indirecto_fijo",
-            "gasto_administracion",
-            "gasto_ventas",
         ]
 
-        print(f"\n=== EXTRAYENDO COMPONENTES para {input_data.codigo_estilo} ===", flush=True)
-        for componente in componentes_esperados:
+        for componente in costos_directos:
             valor = costos_hist.get(componente, 0)
 
-            #  DEBUG: Print detallado
-            print(f"[{componente}] valor={valor}, tipo={type(valor).__name__}, is_None={valor is None}, is_le_0={valor <= 0 if valor is not None else 'N/A'}", flush=True)
-
-            #  VERIFICAR SI EL COMPONENTE ESTÁ DISPONIBLE EN EL HISTÓRICO
+            # Si no está en histórico, usar fallback
             if valor is None or valor <= 0:
-                print(f"  -> FALLBACK TRIGGERED for {componente}", flush=True)
                 componentes_faltantes.append(componente)
                 logger.warning(
-                    f" {componente} no disponible en histórico de {input_data.codigo_estilo} (valor={valor})"
+                    f" {componente} no disponible en histórico de {input_data.codigo_estilo}"
                 )
-                # Usar un valor mínimo del rango como fallback
                 if componente in factores.RANGOS_SEGURIDAD:
                     valor = factores.RANGOS_SEGURIDAD[componente]["min"]
-                    print(f"  -> Using safety minimum: ${valor:.2f}", flush=True)
-                    logger.warning(f"   → Usando fallback mínimo: ${valor:.2f}")
                     alertas.append(
                         f" {componente}: no en histórico, usando valor mínimo ${valor:.2f}"
                     )
                 else:
-                    valor = 0.5  # Fallback genérico
-                    print(f"  -> Using generic fallback: ${valor:.2f}", flush=True)
-                    logger.warning(f"   → Usando fallback genérico: ${valor:.2f}")
+                    valor = 0.5
                     alertas.append(
                         f" {componente}: no en histórico, usando fallback ${valor:.2f}"
                     )
@@ -486,7 +473,6 @@ class CotizadorTDV:
                     f" {componente}: ajustado de ${valor_original:.2f} a ${valor_validado:.2f}"
                 )
 
-            # Determinar fuente real
             fuente_real = "historico" if valor_original > 0 else "fallback_minimo"
 
             componentes.append(
@@ -495,7 +481,7 @@ class CotizadorTDV:
                     costo_unitario=valor_validado,
                     fuente=fuente_real,
                     detalles={
-                        "metodo": metodo_usado,
+                        "metodo": metodo_usado_directos,
                         "valor_original": valor_original,
                         "fue_ajustado": fue_ajustado,
                         "registros_usados": costos_hist.get("registros_encontrados", 0),
@@ -505,6 +491,69 @@ class CotizadorTDV:
                     validado=True,
                     ajustado_por_rango=fue_ajustado,
                 )
+            )
+
+        # Procesar GASTOS INDIRECTOS (3) usando MODA + filtrado
+        gastos_indirectos_keys = [
+            "costo_indirecto_fijo",
+            "gasto_administracion",
+            "gasto_ventas",
+        ]
+
+        for componente in gastos_indirectos_keys:
+            valor = gastos_indirectos.get(componente, 0)
+
+            # Si no está disponible, usar fallback
+            if valor is None or valor <= 0:
+                componentes_faltantes.append(componente)
+                logger.warning(
+                    f" {componente} no disponible en fórmula MODA para {input_data.codigo_estilo}"
+                )
+                if componente in factores.RANGOS_SEGURIDAD:
+                    valor = factores.RANGOS_SEGURIDAD[componente]["min"]
+                    alertas.append(
+                        f" {componente}: no en MODA, usando valor mínimo ${valor:.2f}"
+                    )
+                else:
+                    valor = 0.5
+                    alertas.append(
+                        f" {componente}: no en MODA, usando fallback ${valor:.2f}"
+                    )
+
+            # Aplicar rangos de seguridad
+            valor_original = valor
+            valor_validado, fue_ajustado = factores.validar_rango_seguridad(
+                valor, componente
+            )
+            costos_validados[componente] = valor_validado
+
+            if fue_ajustado:
+                alertas.append(
+                    f" {componente}: ajustado de ${valor_original:.2f} a ${valor_validado:.2f}"
+                )
+
+            fuente_real = "moda_filtrado" if valor_original > 0 else "fallback_minimo"
+
+            componentes.append(
+                ComponenteCosto(
+                    nombre=componente.replace("_", " ").title(),
+                    costo_unitario=valor_validado,
+                    fuente=fuente_real,
+                    detalles={
+                        "metodo": metodo_usado_indirectos,
+                        "valor_original": valor_original,
+                        "fue_ajustado": fue_ajustado,
+                        "ops_excluidas": len(ops_excluidas),
+                        "estilo": input_data.codigo_estilo,
+                    },
+                    validado=True,
+                    ajustado_por_rango=fue_ajustado,
+                )
+            )
+
+        if ops_excluidas:
+            alertas.append(
+                f" {len(ops_excluidas)} OPs excluidas como outliers en cálculo de MODA"
             )
 
         #  ADVERTENCIA SI HAY COMPONENTES FALTANTES
@@ -542,12 +591,14 @@ class CotizadorTDV:
         info_comercial = await self._obtener_info_comercial_mejorada(input_data)
 
         #  VALIDACIONES Y ALERTAS MEJORADAS
+        total_componentes = 7
         validaciones = [
-            " Estilo RECURRENTE procesado con histórico específico",
-            f" Método: {metodo_usado}",
-            f" Registros históricos: {costos_hist.get('registros_encontrados', 0)}",
+            " Estilo RECURRENTE procesado con método COORDINADO",
+            f" Costos directos (4): {metodo_usado_directos}",
+            f" Gastos indirectos (3): {metodo_usado_indirectos}",
+            f" Registros históricos usados: {costos_hist.get('registros_encontrados', 0)}",
             f" Versión de cálculo: {input_data.version_calculo}",
-            f" Componentes del histórico: {len(componentes_esperados) - len(componentes_faltantes)}/{len(componentes_esperados)}",
+            f" Componentes con datos: {total_componentes - len(componentes_faltantes)}/{total_componentes}",
             f" Precisión estimada: {costos_hist.get('precision_estimada', 0.8):.1%}",
         ]
 
@@ -588,23 +639,23 @@ class CotizadorTDV:
             validaciones=validaciones,
             alertas=alertas,
             info_comercial=info_comercial,
-            metodos_usados=[metodo_usado],
+            metodos_usados=[metodo_usado_directos, metodo_usado_indirectos],
             registros_encontrados=costos_hist.get("registros_encontrados", 0),
             precision_estimada=costos_hist.get(
                 "precision_estimada", 0.95
-            ),  # Mayor precisión al usar histórico específico
+            ),
             version_calculo_usada=input_data.version_calculo,
             volumen_historico=volumen,
             metadatos_adicionales={
-                "estrategia_costos": "historico_especifico_completo",
+                "estrategia_costos": "coordinado_directo+moda",
                 "esfuerzo_historico": esfuerzo_historico,
                 "ajustes_aplicados": costos_hist.get("total_ajustados", 0),
                 "fecha_mas_reciente": costos_hist.get("fecha_mas_reciente"),
-                "fuente_datos": "historico_estilo_especifico",
-                "componentes_historicos": len(componentes_esperados)
-                - len(componentes_faltantes),
+                "fuente_datos_directos": "historico_especifico",
+                "fuente_datos_indirectos": "moda_filtrado",
+                "componentes_con_datos": total_componentes - len(componentes_faltantes),
                 "componentes_fallback": len(componentes_faltantes),
-                "completitud_historica": f"{((len(componentes_esperados) - len(componentes_faltantes)) / len(componentes_esperados) * 100):.1f}%",
+                "completitud": f"{((total_componentes - len(componentes_faltantes)) / total_componentes * 100):.1f}%",
             },
         )
 
@@ -683,7 +734,7 @@ class CotizadorTDV:
 
         #  OBTENER COSTOS COMPLEMENTARIOS
         costos_complementarios = await self._obtener_costos_complementarios_mejorados(
-            input_data, componentes, alertas
+            input_data, componentes, alertas, es_estilo_nuevo=True
         )
 
         #  CALCULAR TOTALES
@@ -837,6 +888,7 @@ class CotizadorTDV:
         input_data: CotizacionInput,
         componentes: List[ComponenteCosto],
         alertas: List[str],
+        es_estilo_nuevo: bool = False,
     ) -> Dict[str, float]:
         """ Obtiene costos complementarios con fallbacks robustos"""
 
@@ -886,15 +938,25 @@ class CotizadorTDV:
                     costos_validados[comp] = valor_default
                     alertas.append(f" {comp}: usando valor promedio por error en BD")
 
-        #  OBTENER GASTOS INDIRECTOS (ahora retorna tupla con OPs excluidas)
+        #  OBTENER GASTOS INDIRECTOS (usando MODA para RECURRENTES, genéricos para NUEVOS)
         try:
-            gastos, ops_excluidas = await tdv_queries.obtener_gastos_indirectos_formula(
-                version_calculo=input_data.version_calculo,
-                codigo_estilo=input_data.codigo_estilo,
-                cliente_marca=input_data.cliente_marca,
-                familia_producto=input_data.familia_producto,
-                tipo_prenda=input_data.tipo_prenda,
-            )
+            if es_estilo_nuevo:
+                #  ESTILOS NUEVOS: Usar función con MODA por marca + familia + tipo
+                gastos, ops_excluidas = await tdv_queries.obtener_gastos_por_estilo_nuevo(
+                    marca=input_data.cliente_marca,
+                    familia_prenda=input_data.familia_producto,
+                    tipo_prenda=input_data.tipo_prenda,
+                    version_calculo=input_data.version_calculo,
+                )
+                metodo_gastos = "MODA (nuevo por familia/tipo)"
+            else:
+                #  ESTILOS RECURRENTES: Usar función con MODA por código_estilo exacto
+                gastos, ops_excluidas = await tdv_queries.obtener_gastos_por_estilo_recurrente(
+                    codigo_estilo=input_data.codigo_estilo,
+                    version_calculo=input_data.version_calculo,
+                )
+                metodo_gastos = "MODA (recurrente específico)"
+
             for comp in [
                 "costo_indirecto_fijo",
                 "gasto_administracion",
@@ -904,20 +966,20 @@ class CotizadorTDV:
                 #  NOTA: Los límites de seguridad ya NO se aplican a estos 3 costos
                 # porque usamos MODA con filtrado de outliers (10x)
                 costos_validados[comp] = valor
-                logger.info(f" {comp}: ${valor:.4f} (por MODA, sin rango_seguridad)")
+                logger.info(f" {comp}: ${valor:.4f} (por {metodo_gastos}, sin rango_seguridad)")
 
                 componentes.append(
                     ComponenteCosto(
                         nombre=comp.replace("_", " ").title(),
-                        costo_unitario=valor_validado,
-                        fuente="formula",
+                        costo_unitario=valor,
+                        fuente="moda_filtrada",
                         detalles={
-                            "metodo": "PROMEDIO",
+                            "metodo": metodo_gastos,
                             "version_calculo": input_data.version_calculo,
-                            "fue_ajustado": fue_ajustado,
+                            "ops_excluidas_por_outlier": len(ops_excluidas),
                         },
                         validado=True,
-                        ajustado_por_rango=fue_ajustado,
+                        ajustado_por_rango=False,
                     )
                 )
 

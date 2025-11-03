@@ -2,12 +2,12 @@
 =====================================================================
 COTIZADOR TDV - LÓGICA PRINCIPAL - COMPLETAMENTE CORREGIDO
 =====================================================================
-✅ Detección mejorada de estilos con nuevas funciones de database.py
-✅ Auto-completado automático funcionando
-✅ Manejo completo de versiones de cálculo
-✅ Rutas textiles automáticas para estilos nuevos
-✅ Logging mejorado con emojis
-✅ Validaciones robustas
+ Detección mejorada de estilos con nuevas funciones de database.py
+ Auto-completado automático funcionando
+ Manejo completo de versiones de cálculo
+ Rutas textiles automáticas para estilos nuevos
+ Logging mejorado con emojis
+ Validaciones robustas
 """
 
 import logging
@@ -34,18 +34,18 @@ tdv_queries: TDVQueries = TDVQueries.get_instance()
 
 
 class CotizadorTDV:
-    """✅ Cotizador principal para TDV COMPLETAMENTE CORREGIDO"""
+    """ Cotizador principal para TDV COMPLETAMENTE CORREGIDO"""
 
     def __init__(self):
         self.version = "2.1.0-CORREGIDO-COMPLETO"
         self.tdv_queries = tdv_queries
-        logger.info(f"🚀 Cotizador TDV iniciado - Versión {self.version}")
+        logger.info(f"[INICIO] Cotizador TDV iniciado - Versión {self.version}")
 
     async def procesar_cotizacion(
         self, input_data: CotizacionInput
     ) -> CotizacionResponse:
         """
-        ✅ FUNCIÓN PRINCIPAL COMPLETAMENTE CORREGIDA
+         FUNCIÓN PRINCIPAL COMPLETAMENTE CORREGIDA
 
         Flujo mejorado:
         1. Validaciones iniciales robustas
@@ -57,7 +57,7 @@ class CotizadorTDV:
         """
 
         logger.info(
-            f"💰 Iniciando cotización: {input_data.codigo_estilo} | {input_data.usuario} | Versión: {input_data.version_calculo}"
+            f" Iniciando cotización: {input_data.codigo_estilo} | {input_data.usuario} | Versión: {input_data.version_calculo}"
         )
         inicio_tiempo = datetime.now()
 
@@ -65,20 +65,20 @@ class CotizadorTDV:
             # Generar ID único para la cotización
             id_cotizacion = self._generar_id_cotizacion()
 
-            # ✅ VALIDACIONES INICIALES ROBUSTAS
+            #  VALIDACIONES INICIALES ROBUSTAS
             self._validar_input_completo(input_data)
 
-            # ✅ DETECCIÓN INTELIGENTE DE CATEGORÍA DE ESTILO
+            #  DETECCIÓN INTELIGENTE DE CATEGORÍA DE ESTILO
             (
                 categoria_estilo,
                 volumen_historico,
                 info_autocompletado,
             ) = await self._determinar_categoria_estilo_completa(input_data)
             logger.info(
-                f"🔍 Estilo {input_data.codigo_estilo}: categoría={categoria_estilo}, volumen={volumen_historico}"
+                f" Estilo {input_data.codigo_estilo}: categoría={categoria_estilo}, volumen={volumen_historico}"
             )
 
-            # ✅ AUTO-COMPLETADO AUTOMÁTICO
+            #  AUTO-COMPLETADO AUTOMÁTICO
             if info_autocompletado and info_autocompletado.get("encontrado"):
                 logger.info(
                     f"🎯 Aplicando auto-completado para {input_data.codigo_estilo}"
@@ -90,7 +90,7 @@ class CotizadorTDV:
                     "tipo_prenda", input_data.tipo_prenda
                 )
 
-            # ✅ DETERMINAR SI ES NUEVO BASADO EN CATEGORÍA
+            #  DETERMINAR SI ES NUEVO BASADO EN CATEGORÍA
             es_estilo_nuevo = categoria_estilo == "Nuevo"
             input_data.es_estilo_nuevo = es_estilo_nuevo
 
@@ -102,7 +102,7 @@ class CotizadorTDV:
             # Obtener factor de marca
             factor_marca = factores.obtener_factor_marca(input_data.cliente_marca)
 
-            # ✅ PROCESAR SEGÚN TIPO DE ESTILO CON LÓGICA MEJORADA
+            #  PROCESAR SEGÚN TIPO DE ESTILO CON LÓGICA MEJORADA
             if es_estilo_nuevo:
                 logger.info(
                     f"🆕 Procesando como ESTILO NUEVO: {input_data.codigo_estilo}"
@@ -118,12 +118,12 @@ class CotizadorTDV:
                     input_data, id_cotizacion, categoria_lote, factor_lote, factor_marca
                 )
 
-            # ✅ ENRIQUECER RESPUESTA CON METADATA COMPLETA
+            #  ENRIQUECER RESPUESTA CON METADATA COMPLETA
             resultado.categoria_estilo = categoria_estilo
             resultado.volumen_historico = volumen_historico
             resultado.version_calculo_usada = input_data.version_calculo
 
-            # ✅ AGREGAR RUTA AUTOMÁTICA PARA ESTILOS NUEVOS
+            #  AGREGAR RUTA AUTOMÁTICA PARA ESTILOS NUEVOS
             if (
                 es_estilo_nuevo
                 and input_data.familia_producto
@@ -144,7 +144,7 @@ class CotizadorTDV:
                         f"🧵 Ruta automática agregada para estilo nuevo: {len(ruta_automatica.get('wips_recomendadas', []))} WIPs"
                     )
 
-            # ✅ AGREGAR INFO DE AUTO-COMPLETADO A METADATA
+            #  AGREGAR INFO DE AUTO-COMPLETADO A METADATA
             if info_autocompletado and info_autocompletado.get("encontrado"):
                 resultado.metadatos_adicionales = resultado.metadatos_adicionales or {}
                 resultado.metadatos_adicionales["autocompletado_aplicado"] = {
@@ -156,17 +156,17 @@ class CotizadorTDV:
 
             tiempo_procesamiento = (datetime.now() - inicio_tiempo).total_seconds()
             logger.info(
-                f"✅ Cotización completada: {id_cotizacion} | ${resultado.precio_final:.2f} | {tiempo_procesamiento:.2f}s"
+                f" Cotización completada: {id_cotizacion} | ${resultado.precio_final:.2f} | {tiempo_procesamiento:.2f}s"
             )
 
             return resultado
 
         except Exception as e:
-            logger.error(f"❌ Error procesando cotización: {e}")
+            logger.error(f" Error procesando cotización: {e}")
             raise
 
     def _validar_input_completo(self, input_data: CotizacionInput):
-        """✅ Validaciones completas y robustas del input"""
+        """ Validaciones completas y robustas del input"""
 
         errores = []
 
@@ -229,13 +229,13 @@ class CotizadorTDV:
         input_data.tipo_prenda = input_data.tipo_prenda.strip()
         input_data.temporada = input_data.temporada.strip()
 
-        logger.info(f"✅ Validación completa exitosa para {input_data.codigo_estilo}")
+        logger.info(f" Validación completa exitosa para {input_data.codigo_estilo}")
 
     async def _determinar_categoria_estilo_completa(
         self, input_data: CotizacionInput
     ) -> Tuple[TipoEstilo, int, Optional[Dict]]:
         """
-        ✅ FUNCIÓN COMPLETAMENTE CORREGIDA: Determina categoría con auto-completado
+         FUNCIÓN COMPLETAMENTE CORREGIDA: Determina categoría con auto-completado
 
         Returns:
             Tuple[categoria, volumen_historico, info_autocompletado]
@@ -247,7 +247,7 @@ class CotizadorTDV:
 
         if input_data.codigo_estilo:
             try:
-                # ✅ USAR NUEVA FUNCIÓN DE INFORMACIÓN DETALLADA
+                #  USAR NUEVA FUNCIÓN DE INFORMACIÓN DETALLADA
                 info_detallada = await tdv_queries.obtener_info_detallada_estilo(
                     input_data.codigo_estilo, input_data.version_calculo
                 )
@@ -279,7 +279,7 @@ class CotizadorTDV:
                     }
 
                     logger.info(
-                        f"🔍 Estilo {input_data.codigo_estilo} ENCONTRADO: volumen={volumen_total}, "
+                        f" Estilo {input_data.codigo_estilo} ENCONTRADO: volumen={volumen_total}, "
                         f"categoría={categoria_estilo}, fuente={info_detallada.get('fuente')}"
                     )
                 else:
@@ -291,7 +291,7 @@ class CotizadorTDV:
 
             except Exception as e:
                 logger.error(
-                    f"❌ Error determinando categoría estilo {input_data.codigo_estilo}: {e}"
+                    f" Error determinando categoría estilo {input_data.codigo_estilo}: {e}"
                 )
                 categoria_estilo = TipoEstilo.NUEVO  # Asumir nuevo en caso de error
 
@@ -301,7 +301,7 @@ class CotizadorTDV:
         self, input_data: CotizacionInput
     ) -> Optional[Dict[str, Any]]:
         """
-        ✅ FUNCIÓN MEJORADA: Obtiene ruta automática para estilos nuevos
+         FUNCIÓN MEJORADA: Obtiene ruta automática para estilos nuevos
         """
 
         try:
@@ -312,7 +312,7 @@ class CotizadorTDV:
 
             if not ruta_textil or not ruta_textil.get("wips_recomendadas"):
                 logger.warning(
-                    f"⚠️ No se encontró ruta textil para {input_data.tipo_prenda}"
+                    f" No se encontró ruta textil para {input_data.tipo_prenda}"
                 )
                 return None
 
@@ -373,7 +373,7 @@ class CotizadorTDV:
 
         except Exception as e:
             logger.warning(
-                f"⚠️ Error generando ruta automática para {input_data.codigo_estilo}: {e}"
+                f" Error generando ruta automática para {input_data.codigo_estilo}: {e}"
             )
             return None
 
@@ -386,7 +386,7 @@ class CotizadorTDV:
         factor_marca: float,
     ) -> CotizacionResponse:
         """
-        ✅ FUNCIÓN COMPLETAMENTE CORREGIDA: Procesa estilos recurrentes
+         FUNCIÓN COMPLETAMENTE CORREGIDA: Procesa estilos recurrentes
         TODOS los costos del histórico específico del estilo
         """
 
@@ -394,7 +394,7 @@ class CotizadorTDV:
             f"🔄 PROCESANDO estilo RECURRENTE: {input_data.codigo_estilo} ({input_data.version_calculo})"
         )
 
-        # ✅ ESTRATEGIA CORREGIDA: TODOS LOS COSTOS DEL ESTILO ESPECÍFICO
+        #  ESTRATEGIA CORREGIDA: TODOS LOS COSTOS DEL ESTILO ESPECÍFICO
         try:
             # ÚNICA FUENTE: histórico del estilo específico
             costos_hist = await tdv_queries.buscar_costos_estilo_especifico(
@@ -404,10 +404,10 @@ class CotizadorTDV:
             )
             metodo_usado = f"estilo_especifico_completo_{input_data.codigo_estilo}"
             logger.info(
-                f"✅ Costos históricos COMPLETOS obtenidos: {costos_hist.get('registros_encontrados', 0)} registros"
+                f" Costos históricos COMPLETOS obtenidos: {costos_hist.get('registros_encontrados', 0)} registros"
             )
 
-            # 🔍 DIAGNOSTIC: Print values directly to ensure visibility
+            #  DIAGNOSTIC: Print values directly to ensure visibility
             print(f"\n=== DIAGNOSTICO: Valores en costos_hist para {input_data.codigo_estilo} ===", flush=True)
             componentes_para_log = [
                 "costo_textil", "costo_manufactura", "costo_avios",
@@ -420,20 +420,20 @@ class CotizadorTDV:
 
         except Exception as e:
             logger.warning(
-                f"⚠️ No se pudo obtener costos completos por estilo específico: {e}"
+                f" No se pudo obtener costos completos por estilo específico: {e}"
             )
-            # ❌ Si no tiene histórico completo, NO es verdaderamente recurrente
+            #  Si no tiene histórico completo, NO es verdaderamente recurrente
             raise ValueError(
                 f"Estilo {input_data.codigo_estilo} marcado como recurrente pero sin histórico completo"
             )
 
-        # ✅ USAR TODOS LOS COMPONENTES DEL HISTÓRICO ESPECÍFICO
+        #  USAR TODOS LOS COMPONENTES DEL HISTÓRICO ESPECÍFICO
         componentes = []
         costos_validados = {}
         alertas = []
         componentes_faltantes = []
 
-        # ✅ TODOS LOS COMPONENTES DEBEN VENIR DEL HISTÓRICO
+        #  TODOS LOS COMPONENTES DEBEN VENIR DEL HISTÓRICO
         componentes_esperados = [
             "costo_textil",
             "costo_manufactura",
@@ -448,15 +448,15 @@ class CotizadorTDV:
         for componente in componentes_esperados:
             valor = costos_hist.get(componente, 0)
 
-            # 🔍 DEBUG: Print detallado
+            #  DEBUG: Print detallado
             print(f"[{componente}] valor={valor}, tipo={type(valor).__name__}, is_None={valor is None}, is_le_0={valor <= 0 if valor is not None else 'N/A'}", flush=True)
 
-            # ✅ VERIFICAR SI EL COMPONENTE ESTÁ DISPONIBLE EN EL HISTÓRICO
+            #  VERIFICAR SI EL COMPONENTE ESTÁ DISPONIBLE EN EL HISTÓRICO
             if valor is None or valor <= 0:
                 print(f"  -> FALLBACK TRIGGERED for {componente}", flush=True)
                 componentes_faltantes.append(componente)
                 logger.warning(
-                    f"⚠️ {componente} no disponible en histórico de {input_data.codigo_estilo} (valor={valor})"
+                    f" {componente} no disponible en histórico de {input_data.codigo_estilo} (valor={valor})"
                 )
                 # Usar un valor mínimo del rango como fallback
                 if componente in factores.RANGOS_SEGURIDAD:
@@ -464,14 +464,14 @@ class CotizadorTDV:
                     print(f"  -> Using safety minimum: ${valor:.2f}", flush=True)
                     logger.warning(f"   → Usando fallback mínimo: ${valor:.2f}")
                     alertas.append(
-                        f"⚠️ {componente}: no en histórico, usando valor mínimo ${valor:.2f}"
+                        f" {componente}: no en histórico, usando valor mínimo ${valor:.2f}"
                     )
                 else:
                     valor = 0.5  # Fallback genérico
                     print(f"  -> Using generic fallback: ${valor:.2f}", flush=True)
                     logger.warning(f"   → Usando fallback genérico: ${valor:.2f}")
                     alertas.append(
-                        f"⚠️ {componente}: no en histórico, usando fallback ${valor:.2f}"
+                        f" {componente}: no en histórico, usando fallback ${valor:.2f}"
                     )
 
             # Aplicar rangos de seguridad
@@ -483,7 +483,7 @@ class CotizadorTDV:
 
             if fue_ajustado:
                 alertas.append(
-                    f"⚠️ {componente}: ajustado de ${valor_original:.2f} a ${valor_validado:.2f}"
+                    f" {componente}: ajustado de ${valor_original:.2f} a ${valor_validado:.2f}"
                 )
 
             # Determinar fuente real
@@ -507,16 +507,16 @@ class CotizadorTDV:
                 )
             )
 
-        # ✅ ADVERTENCIA SI HAY COMPONENTES FALTANTES
+        #  ADVERTENCIA SI HAY COMPONENTES FALTANTES
         if componentes_faltantes:
             alertas.append(
-                f"⚠️ Componentes sin datos históricos: {', '.join(componentes_faltantes)}"
+                f" Componentes sin datos históricos: {', '.join(componentes_faltantes)}"
             )
             logger.warning(
-                f"⚠️ Estilo {input_data.codigo_estilo} recurrente pero faltan: {componentes_faltantes}"
+                f" Estilo {input_data.codigo_estilo} recurrente pero faltan: {componentes_faltantes}"
             )
 
-        # ✅ CALCULAR TOTALES Y FACTORES
+        #  CALCULAR TOTALES Y FACTORES
         costo_base_total = sum(costos_validados.values())
 
         # Determinar esfuerzo (usar histórico si disponible)
@@ -538,30 +538,30 @@ class CotizadorTDV:
         precio_final = costo_base_total * (1 + 0.15 * vector_total)
         margen_aplicado = 15 * vector_total
 
-        # ✅ OBTENER INFORMACIÓN COMERCIAL
+        #  OBTENER INFORMACIÓN COMERCIAL
         info_comercial = await self._obtener_info_comercial_mejorada(input_data)
 
-        # ✅ VALIDACIONES Y ALERTAS MEJORADAS
+        #  VALIDACIONES Y ALERTAS MEJORADAS
         validaciones = [
-            "✅ Estilo RECURRENTE procesado con histórico específico",
-            f"✅ Método: {metodo_usado}",
-            f"✅ Registros históricos: {costos_hist.get('registros_encontrados', 0)}",
-            f"✅ Versión de cálculo: {input_data.version_calculo}",
-            f"✅ Componentes del histórico: {len(componentes_esperados) - len(componentes_faltantes)}/{len(componentes_esperados)}",
-            f"✅ Precisión estimada: {costos_hist.get('precision_estimada', 0.8):.1%}",
+            " Estilo RECURRENTE procesado con histórico específico",
+            f" Método: {metodo_usado}",
+            f" Registros históricos: {costos_hist.get('registros_encontrados', 0)}",
+            f" Versión de cálculo: {input_data.version_calculo}",
+            f" Componentes del histórico: {len(componentes_esperados) - len(componentes_faltantes)}/{len(componentes_esperados)}",
+            f" Precisión estimada: {costos_hist.get('precision_estimada', 0.8):.1%}",
         ]
 
         if costos_hist.get("total_ajustados", 0) > 0:
             alertas.append(
-                f"⚠️ {costos_hist.get('total_ajustados')} valores ajustados por límites de seguridad"
+                f" {costos_hist.get('total_ajustados')} valores ajustados por límites de seguridad"
             )
 
         if len(componentes_faltantes) > 0:
             alertas.append(
-                f"⚠️ Estilo recurrente incompleto: {len(componentes_faltantes)} componentes con fallback"
+                f" Estilo recurrente incompleto: {len(componentes_faltantes)} componentes con fallback"
             )
 
-        # ✅ RESPUESTA ESTRUCTURADA COMPLETA
+        #  RESPUESTA ESTRUCTURADA COMPLETA
         return CotizacionResponse(
             id_cotizacion=id_cotizacion,
             fecha_cotizacion=datetime.now(),
@@ -617,14 +617,14 @@ class CotizadorTDV:
         factor_marca: float,
     ) -> CotizacionResponse:
         """
-        ✅ FUNCIÓN COMPLETAMENTE CORREGIDA: Procesa estilos nuevos con WIPs y ruta automática
+         FUNCIÓN COMPLETAMENTE CORREGIDA: Procesa estilos nuevos con WIPs y ruta automática
         """
 
         logger.info(
             f"🆕 PROCESANDO estilo NUEVO: {input_data.codigo_estilo} ({input_data.version_calculo})"
         )
 
-        # ✅ VALIDAR QUE TENGA WIPS (REQUERIDO PARA ESTILOS NUEVOS)
+        #  VALIDAR QUE TENGA WIPS (REQUERIDO PARA ESTILOS NUEVOS)
         if (not input_data.wips_textiles or len(input_data.wips_textiles) == 0) and (
             not input_data.wips_manufactura or len(input_data.wips_manufactura) == 0
         ):
@@ -632,21 +632,21 @@ class CotizadorTDV:
                 "Para estilos nuevos se requieren WIPs textiles y/o manufactura seleccionadas"
             )
 
-        # ✅ OBTENER COSTOS WIPS CON ANÁLISIS INTELIGENTE
+        #  OBTENER COSTOS WIPS CON ANÁLISIS INTELIGENTE
         try:
             costos_wips = await tdv_queries.obtener_costos_wips_por_estabilidad(
                 input_data.tipo_prenda, input_data.version_calculo
             )
             logger.info(
-                f"💰 Costos WIPs obtenidos: {len(costos_wips)} WIPs disponibles"
+                f" Costos WIPs obtenidos: {len(costos_wips)} WIPs disponibles"
             )
         except Exception as e:
-            logger.error(f"❌ Error obteniendo costos WIPs: {e}")
+            logger.error(f" Error obteniendo costos WIPs: {e}")
             raise ValueError(
                 f"No se pudieron obtener costos de WIPs para {input_data.tipo_prenda}"
             )
 
-        # ✅ PROCESAR WIPS CON VALIDACIÓN ROBUSTA
+        #  PROCESAR WIPS CON VALIDACIÓN ROBUSTA
         componentes: List[ComponenteCosto] = []
         alertas: List[str] = []
 
@@ -664,7 +664,7 @@ class CotizadorTDV:
             alertas,
         )
 
-        # ✅ APLICAR RANGOS DE SEGURIDAD
+        #  APLICAR RANGOS DE SEGURIDAD
         costo_textil, textil_ajustado = factores.validar_rango_seguridad(
             costo_textil_total, "costo_textil"
         )
@@ -674,24 +674,24 @@ class CotizadorTDV:
 
         if textil_ajustado:
             alertas.append(
-                f"⚠️ Costo textil ajustado: ${costo_textil_total:.2f} → ${costo_textil:.2f}"
+                f" Costo textil ajustado: ${costo_textil_total:.2f} → ${costo_textil:.2f}"
             )
         if manufactura_ajustado:
             alertas.append(
-                f"⚠️ Costo manufactura ajustado: ${costo_manufactura_total:.2f} → ${costo_manufactura:.2f}"
+                f" Costo manufactura ajustado: ${costo_manufactura_total:.2f} → ${costo_manufactura:.2f}"
             )
 
-        # ✅ OBTENER COSTOS COMPLEMENTARIOS
+        #  OBTENER COSTOS COMPLEMENTARIOS
         costos_complementarios = await self._obtener_costos_complementarios_mejorados(
             input_data, componentes, alertas
         )
 
-        # ✅ CALCULAR TOTALES
+        #  CALCULAR TOTALES
         costo_base_total = (
             costo_textil + costo_manufactura + sum(costos_complementarios.values())
         )
 
-        # ✅ FACTORES PARA ESTILOS NUEVOS
+        #  FACTORES PARA ESTILOS NUEVOS
         esfuerzo_estimado = 7  # Default conservador para nuevos
         if hasattr(input_data, "esfuerzo_total") and input_data.esfuerzo_total:
             esfuerzo_estimado = max(1, min(10, int(input_data.esfuerzo_total)))
@@ -703,16 +703,16 @@ class CotizadorTDV:
         precio_final = costo_base_total * (1 + 0.15 * vector_total)
         margen_aplicado = 15 * vector_total
 
-        # ✅ INFORMACIÓN COMERCIAL
+        #  INFORMACIÓN COMERCIAL
         info_comercial = await self._obtener_info_comercial_mejorada(input_data)
 
-        # ✅ VALIDACIONES Y CONFIGURACIÓN WIPS
+        #  VALIDACIONES Y CONFIGURACIÓN WIPS
         validaciones = [
-            "✅ Estilo NUEVO procesado correctamente",
-            f"✅ WIPs configuradas: {len(input_data.wips_textiles or [])} textiles + {len(input_data.wips_manufactura or [])} manufactura",
-            f"✅ Versión de cálculo: {input_data.version_calculo}",
-            f"✅ Costos WIP obtenidos: {len(costos_wips)} disponibles",
-            "✅ Estrategia: configuración manual de WIPs",
+            " Estilo NUEVO procesado correctamente",
+            f" WIPs configuradas: {len(input_data.wips_textiles or [])} textiles + {len(input_data.wips_manufactura or [])} manufactura",
+            f" Versión de cálculo: {input_data.version_calculo}",
+            f" Costos WIP obtenidos: {len(costos_wips)} disponibles",
+            " Estrategia: configuración manual de WIPs",
         ]
 
         # Configuración WIPs para respuesta
@@ -732,7 +732,7 @@ class CotizadorTDV:
                 )
             )
 
-        # ✅ RESPUESTA ESTRUCTURADA COMPLETA
+        #  RESPUESTA ESTRUCTURADA COMPLETA
         return CotizacionResponse(
             id_cotizacion=id_cotizacion,
             fecha_cotizacion=datetime.now(),
@@ -775,7 +775,7 @@ class CotizadorTDV:
         )
 
     # ========================================
-    # 🔧 FUNCIONES AUXILIARES MEJORADAS
+    #  FUNCIONES AUXILIARES MEJORADAS
     # ========================================
 
     def _procesar_wips_mejorado(
@@ -786,13 +786,13 @@ class CotizadorTDV:
         componentes: List[ComponenteCosto],
         alertas: List[str],
     ) -> float:
-        """✅ Procesa WIPs seleccionadas con validación robusta"""
+        """ Procesa WIPs seleccionadas con validación robusta"""
 
         costo_total = 0.0
 
         for wip in wips_seleccionadas:
             if wip.wip_id not in costos_wips:
-                alertas.append(f"⚠️ WIP {wip.wip_id} sin costo disponible")
+                alertas.append(f" WIP {wip.wip_id} sin costo disponible")
                 costo_base = 0.0
             else:
                 costo_base = float(costos_wips[wip.wip_id])
@@ -802,7 +802,7 @@ class CotizadorTDV:
             if factor_ajuste < 0.1 or factor_ajuste > 2.0:
                 factor_ajuste = max(0.1, min(2.0, factor_ajuste))
                 alertas.append(
-                    f"⚠️ Factor ajuste WIP {wip.wip_id} limitado a {factor_ajuste}"
+                    f" Factor ajuste WIP {wip.wip_id} limitado a {factor_ajuste}"
                 )
 
             costo_ajustado = costo_base * factor_ajuste
@@ -828,7 +828,7 @@ class CotizadorTDV:
             )
 
         logger.info(
-            f"🔧 WIPs {grupo} procesadas: {len(wips_seleccionadas)} → ${costo_total:.2f}"
+            f" WIPs {grupo} procesadas: {len(wips_seleccionadas)} → ${costo_total:.2f}"
         )
         return costo_total
 
@@ -838,11 +838,11 @@ class CotizadorTDV:
         componentes: List[ComponenteCosto],
         alertas: List[str],
     ) -> Dict[str, float]:
-        """✅ Obtiene costos complementarios con fallbacks robustos"""
+        """ Obtiene costos complementarios con fallbacks robustos"""
 
         costos_validados = {}
 
-        # ✅ OBTENER ÚLTIMO COSTO DE MATERIALES
+        #  OBTENER ÚLTIMO COSTO DE MATERIALES
         try:
             costos_materiales = await tdv_queries.obtener_ultimo_costo_materiales(
                 input_data.version_calculo
@@ -855,7 +855,7 @@ class CotizadorTDV:
                 costos_validados[comp] = valor_validado
 
                 if fue_ajustado:
-                    alertas.append(f"⚠️ {comp}: ajustado por límites de seguridad")
+                    alertas.append(f" {comp}: ajustado por límites de seguridad")
 
                 componentes.append(
                     ComponenteCosto(
@@ -872,21 +872,21 @@ class CotizadorTDV:
                 )
 
             logger.info(
-                f"💰 Costos materiales obtenidos: MP=${costos_validados.get('costo_materia_prima', 0):.2f}, Avíos=${costos_validados.get('costo_avios', 0):.2f}"
+                f" Costos materiales obtenidos: MP=${costos_validados.get('costo_materia_prima', 0):.2f}, Avíos=${costos_validados.get('costo_avios', 0):.2f}"
             )
 
         except Exception as e:
             logger.warning(
-                f"⚠️ Error obteniendo costos materiales, usando defaults: {e}"
+                f" Error obteniendo costos materiales, usando defaults: {e}"
             )
             for comp in ["costo_materia_prima", "costo_avios"]:
                 if comp in factores.RANGOS_SEGURIDAD:
                     rango = factores.RANGOS_SEGURIDAD[comp]
                     valor_default = (rango["min"] + rango["max"]) / 2
                     costos_validados[comp] = valor_default
-                    alertas.append(f"⚠️ {comp}: usando valor promedio por error en BD")
+                    alertas.append(f" {comp}: usando valor promedio por error en BD")
 
-        # ✅ OBTENER GASTOS INDIRECTOS (ahora retorna tupla con OPs excluidas)
+        #  OBTENER GASTOS INDIRECTOS (ahora retorna tupla con OPs excluidas)
         try:
             gastos, ops_excluidas = await tdv_queries.obtener_gastos_indirectos_formula(
                 version_calculo=input_data.version_calculo,
@@ -901,10 +901,10 @@ class CotizadorTDV:
                 "gasto_ventas",
             ]:
                 valor = gastos.get(comp, 0)
-                # ⚠️ NOTA: Los límites de seguridad ya NO se aplican a estos 3 costos
+                #  NOTA: Los límites de seguridad ya NO se aplican a estos 3 costos
                 # porque usamos MODA con filtrado de outliers (10x)
                 costos_validados[comp] = valor
-                logger.info(f"✅ {comp}: ${valor:.4f} (por MODA, sin rango_seguridad)")
+                logger.info(f" {comp}: ${valor:.4f} (por MODA, sin rango_seguridad)")
 
                 componentes.append(
                     ComponenteCosto(
@@ -922,12 +922,12 @@ class CotizadorTDV:
                 )
 
             logger.info(
-                f"📊 Gastos indirectos obtenidos: {sum([gastos.get(c, 0) for c in ['costo_indirecto_fijo', 'gasto_administracion', 'gasto_ventas']]):.2f}"
+                f" Gastos indirectos obtenidos: {sum([gastos.get(c, 0) for c in ['costo_indirecto_fijo', 'gasto_administracion', 'gasto_ventas']]):.2f}"
             )
 
         except Exception as e:
             logger.warning(
-                f"⚠️ Error obteniendo gastos indirectos, usando defaults: {e}"
+                f" Error obteniendo gastos indirectos, usando defaults: {e}"
             )
             for comp in [
                 "costo_indirecto_fijo",
@@ -938,14 +938,14 @@ class CotizadorTDV:
                     rango = factores.RANGOS_SEGURIDAD[comp]
                     valor_default = (rango["min"] + rango["max"]) / 2
                     costos_validados[comp] = valor_default
-                    alertas.append(f"⚠️ {comp}: usando valor promedio por error en BD")
+                    alertas.append(f" {comp}: usando valor promedio por error en BD")
 
         return costos_validados
 
     async def _obtener_info_comercial_mejorada(
         self, input_data: CotizacionInput
     ) -> InfoComercial:
-        """✅ Obtiene información comercial con manejo robusto de errores"""
+        """ Obtiene información comercial con manejo robusto de errores"""
         try:
             info_raw = await tdv_queries.obtener_info_comercial(
                 input_data.familia_producto,
@@ -965,7 +965,7 @@ class CotizadorTDV:
                 analisis_competitividad=info_raw.get("analisis_competitividad", []),
             )
         except Exception as e:
-            logger.warning(f"⚠️ Error obteniendo info comercial: {e}")
+            logger.warning(f" Error obteniendo info comercial: {e}")
             return InfoComercial(
                 ops_utilizadas=0,
                 historico_volumen={

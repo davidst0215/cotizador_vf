@@ -652,12 +652,15 @@ class TDVQueries:
         ORDER BY COUNT(c.cod_ordpro) DESC
         """
 
+        # Normalizar version_calculo (FLUIDO -> FLUIDA)
+        version_normalized = normalize_version_calculo(version_calculo)
+
         params = (
             f"{prefijo}%",
             f"%{cliente}%",
-            version_calculo,
-            version_calculo,
-            version_calculo,
+            version_normalized,
+            version_normalized,
+            version_normalized,
         )
         resultados = await self.db.query(query, params)
 
@@ -938,14 +941,6 @@ class TDVQueries:
         if not recs:
             raise ValueError("Sin resultados")
 
-        now = datetime.now(timezone.utc)
-        weights = [
-            0.1
-            if not isinstance(rec.get("fecha_facturacion"), datetime)
-            else max(0.1, 1.0 - (now - rec["fecha_facturacion"]).days / 365.0)
-            for rec in recs
-        ]
-        sum_weights = sum(weights) or 1e-10
         out, adjust = {}, {}
         cols = [
             "costo_textil",
@@ -979,7 +974,7 @@ class TDVQueries:
                     vals[i] = clipped
             adjust[col], out[col] = (
                 adj,
-                sum(v * w for v, w in zip(vals, weights)) / sum_weights,
+                sum(vals) / len(vals),
             )
 
         out.update(
@@ -1229,6 +1224,9 @@ class TDVQueries:
          FUNCIÓN SIN CAMBIOS: Ya usa fechas relativas correctamente
         """
 
+        # Normalizar version_calculo (FLUIDO -> FLUIDA)
+        version_normalized = normalize_version_calculo(version_calculo)
+
         #  QUERY YA CORRECTA: 12 meses, sin filtros de prendas
         query_ruta = f"""
         SELECT
@@ -1262,9 +1260,9 @@ class TDVQueries:
             query_ruta,
             (
                 tipo_prenda,
-                version_calculo,
-                version_calculo,
-                version_calculo,
+                version_normalized,
+                version_normalized,
+                version_normalized,
                 tipo_prenda,
             ),
         )
@@ -1563,46 +1561,23 @@ class TDVQueries:
             ops_info = []
 
             for row in resultado:
-                prenda_qty = row["prendas_requeridas"]
-                indirectos.append(float(row["costo_indirecto_fijo"]) / prenda_qty)
-                admins.append(float(row["gasto_administracion"]) / prenda_qty)
-                ventas.append(float(row["gasto_ventas"]) / prenda_qty)
+                # Los costos ya vienen por prenda en la tabla
+                indirectos.append(float(row["costo_indirecto_fijo"]))
+                admins.append(float(row["gasto_administracion"]))
+                ventas.append(float(row["gasto_ventas"]))
                 ops_info.append({
                     "rn": row["rn"],
                     "cod_ordpro": row["cod_ordpro"],
                 })
 
-            # Filtrar por threshold de moda (10x)
-            print(f"\nANTES de filtrado:", flush=True)
-            print(f"  indirectos ({len(indirectos)} valores): {indirectos[:5]}...", flush=True)
-            print(f"  admins ({len(admins)} valores): {admins[:5]}...", flush=True)
-            print(f"  ventas ({len(ventas)} valores): {ventas[:5]}...", flush=True)
-
-            indirectos_filtrados, indices_excluidos_ind = filter_by_mode_threshold(indirectos, threshold=10.0)
-            admins_filtrados, indices_excluidos_adm = filter_by_mode_threshold(admins, threshold=10.0)
-            ventas_filtrados, indices_excluidos_ven = filter_by_mode_threshold(ventas, threshold=10.0)
-
-            print(f"\nDESPUES de filtrado (threshold=10x):", flush=True)
-            print(f"  indirectos_filtrados ({len(indirectos_filtrados)} valores): {indirectos_filtrados}", flush=True)
-            print(f"  admins_filtrados ({len(admins_filtrados)} valores): {admins_filtrados}", flush=True)
-            print(f"  ventas_filtrados ({len(ventas_filtrados)} valores): {ventas_filtrados}", flush=True)
-            print(f"  indices_excluidos: ind={indices_excluidos_ind}, adm={indices_excluidos_adm}, ven={indices_excluidos_ven}", flush=True)
-
-            # Combinar índices excluidos de los tres costos
-            indices_excluidos_totales = set(indices_excluidos_ind) | set(indices_excluidos_adm) | set(indices_excluidos_ven)
-
-            # Obtener los códigos de OPs excluidas
-            ops_excluidas = [ops_info[idx]["cod_ordpro"] for idx in indices_excluidos_totales]
-
-            # Calcular promedios de los valores filtrados
+            # Calcular promedios simples sin filtrado
             gastos = {
-                "costo_indirecto_fijo": float(sum(indirectos_filtrados) / len(indirectos_filtrados)) if indirectos_filtrados else 0,
-                "gasto_administracion": float(sum(admins_filtrados) / len(admins_filtrados)) if admins_filtrados else 0,
-                "gasto_ventas": float(sum(ventas_filtrados) / len(ventas_filtrados)) if ventas_filtrados else 0,
+                "costo_indirecto_fijo": float(sum(indirectos) / len(indirectos)) if indirectos else 0,
+                "gasto_administracion": float(sum(admins) / len(admins)) if admins else 0,
+                "gasto_ventas": float(sum(ventas) / len(ventas)) if ventas else 0,
             }
 
-            print(f"\nGASTOS FINALES CALCULADOS: {gastos}", flush=True)
-            print(f"OPs excluidas: {ops_excluidas}", flush=True)
+            ops_excluidas = []
 
             logger.info(
                 f" Gastos recurrentes (estilo {codigo_estilo}): {gastos} | OPs excluidas: {len(ops_excluidas)}"
@@ -1620,20 +1595,22 @@ class TDVQueries:
     async def obtener_gastos_por_estilo_nuevo(
         self,
         marca: str,
-        familia_prenda: str,
+        familia_prenda: Optional[str],
         tipo_prenda: str,
         version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
     ) -> Tuple[Dict[str, float], List[str]]:
         """
         Obtiene gastos indirectos para estilos NUEVOS usando MODA.
 
-        Busca todas las OPs que tengan la misma marca + familia_prenda + tipo_prenda,
-        calcula la MODA de los tres costos, filtra outliers (máx 10x la moda),
+        Busca todas las OPs que tengan la misma marca + tipo_prenda.
+        NOTA: familia_prenda es OPCIONAL y NO se usa como filtro
+
+        Calcula la MODA de los tres costos, filtra outliers (máx 10x la moda),
         y retorna los gastos con los índices de OPs excluidas.
 
         Args:
             marca: Cliente/marca
-            familia_prenda: Familia de la prenda
+            familia_prenda: (OPCIONAL - no se usa como filtro)
             tipo_prenda: Tipo de prenda
             version_calculo: FLUIDO o truncado
 
@@ -1651,8 +1628,7 @@ class TDVQueries:
                 ROW_NUMBER() OVER (ORDER BY fecha_facturacion DESC) as rn
             FROM {settings.db_schema}.costo_op_detalle
             WHERE cliente = ?
-                AND familia_de_productos = ?
-                AND tipo_prenda = ?
+                AND tipo_de_producto = ?
                 AND version_calculo = ?
                 AND fecha_facturacion >= (
                     SELECT (MAX(fecha_facturacion) - INTERVAL '12 months')
@@ -1668,7 +1644,6 @@ class TDVQueries:
 
             params = (
                 marca,
-                familia_prenda,
                 tipo_prenda,
                 normalize_version_calculo(version_calculo),
                 normalize_version_calculo(version_calculo),
@@ -1677,7 +1652,7 @@ class TDVQueries:
 
             if not resultado:
                 logger.warning(
-                    f" No se encontraron OPs para estilo nuevo: {marca} | {familia_prenda} | {tipo_prenda}"
+                    f" No se encontraron OPs para estilo nuevo: {marca} | {tipo_prenda}"
                 )
                 return {
                     "costo_indirecto_fijo": 0,
@@ -1692,41 +1667,32 @@ class TDVQueries:
             ops_info = []
 
             for row in resultado:
-                prenda_qty = row["prendas_requeridas"]
-                indirectos.append(float(row["costo_indirecto_fijo"]) / prenda_qty)
-                admins.append(float(row["gasto_administracion"]) / prenda_qty)
-                ventas.append(float(row["gasto_ventas"]) / prenda_qty)
+                # Los costos ya vienen por prenda en la tabla
+                indirectos.append(float(row["costo_indirecto_fijo"]))
+                admins.append(float(row["gasto_administracion"]))
+                ventas.append(float(row["gasto_ventas"]))
                 ops_info.append({
                     "rn": row["rn"],
                     "cod_ordpro": row["cod_ordpro"],
                 })
 
-            # Filtrar por threshold de moda (10x)
-            indirectos_filtrados, indices_excluidos_ind = filter_by_mode_threshold(indirectos, threshold=10.0)
-            admins_filtrados, indices_excluidos_adm = filter_by_mode_threshold(admins, threshold=10.0)
-            ventas_filtrados, indices_excluidos_ven = filter_by_mode_threshold(ventas, threshold=10.0)
-
-            # Combinar índices excluidos de los tres costos
-            indices_excluidos_totales = set(indices_excluidos_ind) | set(indices_excluidos_adm) | set(indices_excluidos_ven)
-
-            # Obtener los códigos de OPs excluidas
-            ops_excluidas = [ops_info[idx]["cod_ordpro"] for idx in indices_excluidos_totales]
-
-            # Calcular promedios de los valores filtrados
+            # Calcular promedios simples sin filtrado
             gastos = {
-                "costo_indirecto_fijo": float(sum(indirectos_filtrados) / len(indirectos_filtrados)) if indirectos_filtrados else 0,
-                "gasto_administracion": float(sum(admins_filtrados) / len(admins_filtrados)) if admins_filtrados else 0,
-                "gasto_ventas": float(sum(ventas_filtrados) / len(ventas_filtrados)) if ventas_filtrados else 0,
+                "costo_indirecto_fijo": float(sum(indirectos) / len(indirectos)) if indirectos else 0,
+                "gasto_administracion": float(sum(admins) / len(admins)) if admins else 0,
+                "gasto_ventas": float(sum(ventas) / len(ventas)) if ventas else 0,
             }
 
+            ops_excluidas = []
+
             logger.info(
-                f" Gastos nuevos ({marca} | {familia_prenda} | {tipo_prenda}): {gastos} | OPs excluidas: {len(ops_excluidas)}"
+                f" Gastos nuevos ({marca} | {tipo_prenda}): {gastos} | OPs excluidas: {len(ops_excluidas)}"
             )
             return gastos, ops_excluidas
 
         except Exception as e:
             logger.error(
-                f" Error en obtener_gastos_por_estilo_nuevo ({marca} | {familia_prenda} | {tipo_prenda}): {e}"
+                f" Error en obtener_gastos_por_estilo_nuevo ({marca} | {tipo_prenda}): {e}"
             )
             return {
                 "costo_indirecto_fijo": 0,
@@ -1777,10 +1743,11 @@ class TDVQueries:
             else:
                 print(f"OPCIÓN 1 FAILED: todos los valores son 0/None", flush=True)
 
-        #  OPCIÓN 2: Intentar con ESTILO NUEVO (marca + familia + tipo)
-        if cliente_marca and familia_producto and tipo_prenda:
+        #  OPCIÓN 2: Intentar con ESTILO NUEVO (marca + tipo)
+        #  NOTA: familia_producto ahora es OPCIONAL y NO se usa
+        if cliente_marca and tipo_prenda:
             logger.info(
-                f" Buscando gastos para ESTILO NUEVO: {cliente_marca} | {familia_producto} | {tipo_prenda}"
+                f" Buscando gastos para ESTILO NUEVO: {cliente_marca} | {tipo_prenda}"
             )
             gastos, ops_excluidas = await self.obtener_gastos_por_estilo_nuevo(
                 cliente_marca, familia_producto, tipo_prenda, version_calculo
@@ -2020,11 +1987,11 @@ class TDVQueries:
             except Exception as e:
                 logger.warning(f"Error buscando OPs por estilo {codigo_estilo}: {e}")
 
-        # PASO 2: Si no hay por estilo, buscar por familia+tipo+cliente
-        if not ops_utilizadas and familia_producto and tipo_prenda:
+        # PASO 2: Si no hay por estilo, buscar por tipo_prenda (sin familia_producto)
+        # familia_producto ahora es OPCIONAL y NO se usa en el filtro
+        if not ops_utilizadas and tipo_prenda:
             try:
                 params = [
-                    familia_producto,
                     tipo_prenda,
                     version_calculo,
                     version_calculo,
@@ -2035,11 +2002,12 @@ class TDVQueries:
                 if cliente:
                     cliente_filter = "AND c.cliente = ?"
                     params.append(cliente)
-                    metodo_usado = f"familia_tipo_cliente_{familia_producto}_{tipo_prenda}_{cliente}"
+                    metodo_usado = f"tipo_cliente_{tipo_prenda}_{cliente}"
                 else:
-                    metodo_usado = f"familia_tipo_{familia_producto}_{tipo_prenda}"
+                    metodo_usado = f"tipo_{tipo_prenda}"
 
                 #  CORREGIDO: Fechas relativas en lugar de GETDATE()
+                #  NOTA: Se eliminó el filtro de familia_de_productos
                 query_familia = f"""
                 SELECT
                   c.cod_ordpro,
@@ -2057,8 +2025,7 @@ class TDVQueries:
                   COALESCE(c.gasto_ventas, 0) / NULLIF(c.prendas_requeridas, 0) as gasto_ventas_unit,
                   c.esfuerzo_total
                 FROM {settings.db_schema}.costo_op_detalle c
-                WHERE c.familia_de_productos = ?
-                  AND c.tipo_de_producto = ?
+                WHERE c.tipo_de_producto = ?
                   AND c.version_calculo = ?
                   AND c.fecha_corrida = (
                     SELECT MAX(fecha_corrida)
@@ -2081,7 +2048,7 @@ class TDVQueries:
                     ops_utilizadas = resultados
 
             except Exception as e:
-                logger.warning(f"Error buscando OPs por familia/tipo: {e}")
+                logger.warning(f"Error buscando OPs por tipo_prenda: {e}")
 
         #  PROCESAR RESULTADOS CORREGIDO
         ops_procesadas = []

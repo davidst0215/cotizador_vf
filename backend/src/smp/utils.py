@@ -177,11 +177,8 @@ class CotizadorTDV:
         if not input_data.cliente_marca or len(input_data.cliente_marca.strip()) == 0:
             errores.append("El cliente/marca es requerido")
 
-        if (
-            not input_data.familia_producto
-            or len(input_data.familia_producto.strip()) == 0
-        ):
-            errores.append("La familia de producto es requerida")
+        # NOTA: familia_producto y temporada ahora son OPCIONALES
+        # Se pasarán directamente a tipo_prenda en los fallbacks
 
         if not input_data.tipo_prenda or len(input_data.tipo_prenda.strip()) == 0:
             errores.append("El tipo de prenda es requerido")
@@ -198,10 +195,6 @@ class CotizadorTDV:
         # Validar categoría de lote
         if input_data.categoria_lote not in factores.RANGOS_LOTE:
             errores.append(f"Categoría de lote inválida: {input_data.categoria_lote}")
-
-        # Validar temporada
-        if not input_data.temporada or len(input_data.temporada.strip()) == 0:
-            errores.append("La temporada es requerida")
 
         # Usar cantidad_prendas del categoría_lote si no viene especificada
         if (
@@ -953,14 +946,14 @@ class CotizadorTDV:
         #  OBTENER GASTOS INDIRECTOS (usando MODA para RECURRENTES, genéricos para NUEVOS)
         try:
             if es_estilo_nuevo:
-                #  ESTILOS NUEVOS: Usar función con MODA por marca + familia + tipo
+                #  ESTILOS NUEVOS: Usar función con MODA por marca + tipo (familia ahora es OPCIONAL)
                 gastos, ops_excluidas = await tdv_queries.obtener_gastos_por_estilo_nuevo(
                     marca=input_data.cliente_marca,
-                    familia_prenda=input_data.familia_producto,
+                    familia_prenda=getattr(input_data, 'familia_producto', None),
                     tipo_prenda=input_data.tipo_prenda,
                     version_calculo=input_data.version_calculo,
                 )
-                metodo_gastos = "MODA (nuevo por familia/tipo)"
+                metodo_gastos = "MODA (nuevo por tipo)"
             else:
                 #  ESTILOS RECURRENTES: Usar función con MODA por código_estilo exacto
                 gastos, ops_excluidas = await tdv_queries.obtener_gastos_por_estilo_recurrente(

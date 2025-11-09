@@ -199,27 +199,7 @@ const ClienteSelect = React.memo(({ value, clientesDisponibles, onChange }: Clie
 ));
 ClienteSelect.displayName = "ClienteSelect";
 
-// Temporada text input
-interface TemporadaInputProps {
-  value: string;
-  onChange: (value: string) => void;
-}
-
-const TemporadaInput = React.memo(({ value, onChange }: TemporadaInputProps) => (
-  <div className="space-y-2">
-    <label className="block text-sm font-semibold text-red-900">
-      Temporada
-    </label>
-    <input
-      type="text"
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="w-full p-4 border-2 border-gray-200 rounded-xl focus:border-red-500 focus:border-opacity-50 transition-colors"
-      placeholder="ej: Verano 2025, Otoño 2024"
-    />
-  </div>
-));
-TemporadaInput.displayName = "TemporadaInput";
+// NOTA: TemporadaInput fue eliminado - temporada ya no se usa en la UI
 
 // Categoría de Lote select
 interface CategoriaLoteSelectProps {
@@ -247,62 +227,18 @@ const CategoriaLoteSelect = React.memo(({ value, onChange }: CategoriaLoteSelect
 ));
 CategoriaLoteSelect.displayName = "CategoriaLoteSelect";
 
-// Familia de Producto select con loading state
-interface FamiliaProductoSelectProps {
-  value: string;
-  familiasDisponibles: string[];
-  cargandoFamilias: boolean;
-  onChange: (value: string) => void;
-}
-
-const FamiliaProductoSelect = React.memo(
-  ({ value, familiasDisponibles, cargandoFamilias, onChange }: FamiliaProductoSelectProps) => (
-    <div className="space-y-2">
-      <label className="block text-sm font-semibold text-red-900">
-        Familia de Producto
-      </label>
-      <div className="relative">
-        <select
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className="w-full p-4 border-2 border-gray-200 rounded-xl focus:border-red-500 focus:border-opacity-50 transition-colors appearance-none"
-          disabled={cargandoFamilias}
-        >
-          <option value="">
-            {cargandoFamilias
-              ? "Cargando familias..."
-              : familiasDisponibles.length === 0
-                ? "⚠️ Error cargando familias - Verifique backend"
-                : "Seleccionar familia"}
-          </option>
-          {familiasDisponibles.map((familia) => (
-            <option key={familia} value={familia}>
-              {familia}
-            </option>
-          ))}
-        </select>
-        {cargandoFamilias && (
-          <div className="absolute right-3 top-4">
-            <RefreshCw className="h-5 w-5 animate-spin text-red-500" />
-          </div>
-        )}
-      </div>
-    </div>
-  )
-);
-FamiliaProductoSelect.displayName = "FamiliaProductoSelect";
+// NOTA: FamiliaProductoSelect fue eliminado - familia_producto ya no se usa en la UI
 
 // Tipo de Prenda select con loading state
 interface TipoPrendaSelectProps {
   value: string;
   tiposDisponibles: string[];
   cargandoTipos: boolean;
-  familiaSelectorPrimero: boolean;
   onChange: (value: string) => void;
 }
 
 const TipoPrendaSelect = React.memo(
-  ({ value, tiposDisponibles, cargandoTipos, familiaSelectorPrimero, onChange }: TipoPrendaSelectProps) => (
+  ({ value, tiposDisponibles, cargandoTipos, onChange }: TipoPrendaSelectProps) => (
     <div className="space-y-2">
       <label className="block text-sm font-semibold text-red-900">
         Tipo de Prenda
@@ -312,14 +248,12 @@ const TipoPrendaSelect = React.memo(
           value={value}
           onChange={(e) => onChange(e.target.value)}
           className="w-full p-4 border-2 border-gray-200 rounded-xl focus:border-red-500 focus:border-opacity-50 transition-colors appearance-none"
-          disabled={cargandoTipos || familiaSelectorPrimero}
+          disabled={cargandoTipos}
         >
           <option value="">
-            {familiaSelectorPrimero
-              ? "Primero selecciona familia"
-              : cargandoTipos
-                ? "Cargando tipos..."
-                : "Seleccionar tipo"}
+            {cargandoTipos
+              ? "Cargando tipos..."
+              : "Seleccionar tipo"}
           </option>
           {tiposDisponibles.map((tipo) => (
             <option key={tipo} value={tipo}>
@@ -518,9 +452,9 @@ const SistemaCotizadorTDV = () => {
   // Estados para formulario - separados para evitar pérdida de foco
   const [formData, setFormData] = useState<FormData>({
     cliente_marca: "LACOSTE",
-    temporada: "",
+    temporada: "", // NOTA: Ya no se usa en la UI
     categoria_lote: "Lote Mediano",
-    familia_producto: "",
+    familia_producto: "", // NOTA: Ya no se usa en la UI
     tipo_prenda: "",
     codigo_estilo: "",
     usuario: "Usuario Demo",
@@ -555,9 +489,7 @@ const SistemaCotizadorTDV = () => {
     const errores = [];
 
     if (!formData.cliente_marca) errores.push("Cliente/Marca es requerido");
-    if (!formData.temporada) errores.push("Temporada es requerida");
-    if (!formData.familia_producto)
-      errores.push("Familia de Producto es requerida");
+    // NOTA: temporada y familia_producto ya no son requeridas
     if (!formData.tipo_prenda) errores.push("Tipo de Prenda es requerido");
     if (!formData.codigo_estilo) errores.push("Código de estilo propio es requerido");
 
@@ -577,11 +509,10 @@ const SistemaCotizadorTDV = () => {
       setFormData((prev) => ({
         ...prev,
         [campo]: valor,
-        // Limpiar tipo si cambia familia
-        ...(campo === "familia_producto" ? { tipo_prenda: "" } : {}),
+        // NOTA: ya no se limpia tipo_prenda (familia_producto fue eliminado)
       }));
 
-      // Para familia_producto y tipo_prenda, debounce triggers disparará el re-render después
+      // Para tipo_prenda, debounce triggers disparará el re-render después
       // Esto evita que los efectos se disparen en cada keystroke
     },
     [],
@@ -600,19 +531,11 @@ const SistemaCotizadorTDV = () => {
     const recargarDatosVersion = async () => {
       try {
         // Cargar datos principales
+        // NOTA: Ya no se cargan familias automáticamente
         await Promise.all([
           cargarWipsDisponibles(debouncedFormData.version_calculo),
           cargarClientesDisponibles(debouncedFormData.version_calculo),
-          cargarFamiliasProductos(debouncedFormData.version_calculo),
         ]);
-
-        // Recargar tipos si hay familia
-        if (debouncedFormData.familia_producto) {
-          await cargarTiposPrenda(
-            debouncedFormData.familia_producto,
-            debouncedFormData.version_calculo,
-          );
-        }
 
         // Recargar WIPs si hay tipo y es nuevo
         if (debouncedFormData.tipo_prenda && esEstiloNuevo) {
@@ -638,14 +561,8 @@ const SistemaCotizadorTDV = () => {
     recargarDatosVersion();
   }, [debouncedFormData.version_calculo]); // Usa debouncedFormData para evitar actualizaciones frecuentes
 
-  // Efecto 2: Cargar tipos cuando cambia familia (usando debouncedFormData)
-  useEffect(() => {
-    if (debouncedFormData.familia_producto) {
-      cargarTiposPrenda(debouncedFormData.familia_producto, debouncedFormData.version_calculo);
-    } else {
-      setTiposDisponibles([]);
-    }
-  }, [debouncedFormData.familia_producto, debouncedFormData.version_calculo]);
+  // NOTA: Efecto 2 (cargar tipos cuando cambia familia) fue eliminado
+  // Ya no se necesita porque familia_producto fue eliminado
 
   // Efecto 3: Cargar WIPs cuando cambia tipo (usando debouncedFormData, solo para estilos nuevos)
   useEffect(() => {
@@ -854,29 +771,23 @@ const SistemaCotizadorTDV = () => {
           setEsEstiloNuevo(esNuevo);
 
           if (!esNuevo && verificacion.autocompletado?.disponible) {
-            const { familia_producto, tipo_prenda } =
-              verificacion.autocompletado;
-            if (familia_producto && tipo_prenda) {
-              // console.log(
-              //   `🎯 Auto-completando: ${familia_producto} → ${tipo_prenda}`,
-              // );
+            const { tipo_prenda } = verificacion.autocompletado;
+            // NOTA: Ya no se preseteea familia_producto
+            if (tipo_prenda) {
+              // console.log(`🎯 Auto-completando: ${tipo_prenda}`);
               setFormData((prev) => ({
                 ...prev,
-                familia_producto,
                 tipo_prenda,
               }));
-
-              await cargarTiposPrenda(familia_producto, versionCalculo);
 
               setInfoAutoCompletado({
                 autocompletado_disponible: true,
                 info_estilo: {
-                  familia_producto,
                   tipo_prenda,
                   categoria: verificacion.categoria,
                   volumen_total: verificacion.volumen_historico,
                 },
-                campos_sugeridos: { familia_producto, tipo_prenda },
+                campos_sugeridos: { tipo_prenda },
               });
             }
           } else {
@@ -970,15 +881,14 @@ const SistemaCotizadorTDV = () => {
     (estilo: EstiloSimilar) => {
       // console.log(`🎯 Seleccionando estilo similar:`, estilo);
 
+      // NOTA: Ya no se preseteea familia_producto
       setFormData((prev) => ({
         ...prev,
-        familia_producto: estilo.familia_producto,
         tipo_prenda: estilo.tipo_prenda,
       }));
       setEstilosEncontrados([]);
-      cargarTiposPrenda(estilo.familia_producto, formData.version_calculo);
     },
-    [formData.version_calculo, cargarTiposPrenda],
+    [],
   );
 
   const toggleWipTextil = useCallback((wip: WipDisponible) => {
@@ -1709,13 +1619,6 @@ const SistemaCotizadorTDV = () => {
               }
             />
 
-            <TemporadaInput
-              value={formData.temporada}
-              onChange={(valor) =>
-                manejarCambioFormulario("temporada", valor)
-              }
-            />
-
             <CampoCodigoEstiloComponent
               value={formData.codigo_estilo}
               buscandoEstilo={buscandoEstilo}
@@ -1734,20 +1637,10 @@ const SistemaCotizadorTDV = () => {
               }
             />
 
-            <FamiliaProductoSelect
-              value={formData.familia_producto}
-              familiasDisponibles={familiasDisponibles}
-              cargandoFamilias={cargandoFamilias}
-              onChange={(valor) =>
-                manejarCambioFormulario("familia_producto", valor)
-              }
-            />
-
             <TipoPrendaSelect
               value={formData.tipo_prenda}
               tiposDisponibles={tiposDisponibles}
               cargandoTipos={cargandoTipos}
-              familiaSelectorPrimero={!formData.familia_producto}
               onChange={(valor) =>
                 manejarCambioFormulario("tipo_prenda", valor)
               }

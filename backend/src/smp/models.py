@@ -76,10 +76,11 @@ class CotizacionInput(BaseModel):
     cliente_marca: str = Field(
         ..., min_length=1, max_length=100, description="Cliente/Marca"
     )
-    temporada: str = Field(..., min_length=1, max_length=50, description="Temporada")
+    # NOTA: temporada y familia_producto ahora son OPCIONALES (no se usan en la UI)
+    temporada: Optional[str] = Field(None, max_length=50, description="Temporada (opcional)")
     categoria_lote: str = Field(..., description="Categoría del lote")
-    familia_producto: str = Field(
-        ..., min_length=1, max_length=100, description="Familia de producto"
+    familia_producto: Optional[str] = Field(
+        None, max_length=100, description="Familia de producto (opcional)"
     )
     tipo_prenda: str = Field(
         ..., min_length=1, max_length=100, description="Tipo de prenda"

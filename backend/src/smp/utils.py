@@ -218,9 +218,13 @@ class CotizadorTDV:
         # Limpiar y normalizar datos
         input_data.codigo_estilo = input_data.codigo_estilo.strip().upper()
         input_data.cliente_marca = input_data.cliente_marca.strip()
-        input_data.familia_producto = input_data.familia_producto.strip()
-        input_data.tipo_prenda = input_data.tipo_prenda.strip()
-        input_data.temporada = input_data.temporada.strip()
+        # NOTA: familia_producto y temporada ahora son opcionales
+        if input_data.familia_producto:
+            input_data.familia_producto = input_data.familia_producto.strip()
+        if input_data.tipo_prenda:
+            input_data.tipo_prenda = input_data.tipo_prenda.strip()
+        if input_data.temporada:
+            input_data.temporada = input_data.temporada.strip()
 
         logger.info(f" Validación completa exitosa para {input_data.codigo_estilo}")
 

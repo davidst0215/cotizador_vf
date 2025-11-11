@@ -1158,7 +1158,8 @@ class TDVQueries:
     ) -> List[Dict[str, Any]]:
         """
         Obtiene desglose de costos por WIP para OPs seleccionadas.
-        Retorna costo_textil y costo_manufactura promedio por WIP.
+        Calcula costos textil y manufactura por prenda.
+        Retorna datos pivotados: WIPs en columnas, costos en filas.
         """
 
         if not cod_ordpros:
@@ -1170,51 +1171,80 @@ class TDVQueries:
         try:
             logger.info(f" [WIP-DESGLOSE] Iniciando con {len(cod_ordpros)} OPs: {cod_ordpros}")
 
-            # Usar una única query con JOIN para obtener WIPs para las OPs seleccionadas
-            # Esto es más robusto que dos queries separadas
+            # Query compleja con CTEs para calcular costos por prenda
             placeholders_cod = ",".join(["%s"] * len(cod_ordpros))
 
             query = f"""
-            SELECT DISTINCT
-                wip.wip_id,
-                CASE
-                    WHEN wip.wip_id IN ('16', '14', '19a', '19c', '24', '10c') THEN 'textil'
-                    WHEN wip.wip_id IN ('34', '36', '40', '44', '37', '45', '49', '43', '50') THEN 'manufactura'
-                    ELSE 'otro'
-                END as grupo_wip,
-                ROUND(AVG(COALESCE(wip.costo_textil, 0))::NUMERIC, 4) as costo_textil_promedio,
-                ROUND(AVG(COALESCE(wip.costo_manufactura, 0))::NUMERIC, 4) as costo_manufactura_promedio,
-                COUNT(*) as ops_con_wip
-            FROM silver.costo_wip_op wip
-            WHERE wip.pr_id IN ({placeholders_cod})
-              AND wip.fecha_corrida = (
-                SELECT MAX(fecha_corrida)
+            WITH ultimas_fechas AS (
+                SELECT
+                    MAX(fecha_corrida) as fecha_max
                 FROM silver.costo_wip_op
-                WHERE pr_id IN ({placeholders_cod})
-              )
-            GROUP BY wip.wip_id
-            ORDER BY grupo_wip, wip.wip_id
+                WHERE version_calculo = %s
+            ),
+            datos_separados AS (
+                SELECT
+                    cwo.wip_id,
+                    cwo.pr_id,
+                    MAX(bf.prendas_requeridas) as prendas_op,
+                    SUM(cwo.costo_textil) as costo_textil_op,
+                    SUM(cwo.costo_manufactura) as costo_manufactura_op,
+                    CASE
+                        WHEN cwo.wip_id IN ('16', '14', '19a', '19c', '24', '10c') THEN 'textil'
+                        WHEN cwo.wip_id IN ('34', '36', '40', '44', '37', '45', '49', '43', '50') THEN 'manufactura'
+                        ELSE 'otro'
+                    END as grupo_wip
+                FROM silver.costo_wip_op cwo
+                INNER JOIN ultimas_fechas uf
+                    ON cwo.fecha_corrida = uf.fecha_max
+                LEFT JOIN silver.bd_finanzas bf
+                    ON cwo.pr_id::text = bf.cod_ordpro::text
+                    AND bf.activo IS true
+                WHERE cwo.pr_id::text IN ({placeholders_cod})
+                  AND COALESCE(bf.prendas_requeridas, 0) >= 200
+                GROUP BY
+                    cwo.wip_id, cwo.pr_id
+            )
+            SELECT
+                wip_id,
+                grupo_wip,
+                SUM(prendas_op) as total_prendas,
+                ROUND(SUM(costo_textil_op)::NUMERIC, 2) as total_textil,
+                ROUND(SUM(costo_manufactura_op)::NUMERIC, 2) as total_manufactura,
+                CASE WHEN SUM(prendas_op) > 0
+                     THEN ROUND((SUM(costo_textil_op) / SUM(prendas_op))::NUMERIC, 4)
+                     ELSE 0 END as textil_por_prenda,
+                CASE WHEN SUM(prendas_op) > 0
+                     THEN ROUND((SUM(costo_manufactura_op) / SUM(prendas_op))::NUMERIC, 4)
+                     ELSE 0 END as manufactura_por_prenda
+            FROM datos_separados
+            GROUP BY wip_id, grupo_wip
+            HAVING SUM(costo_textil_op + costo_manufactura_op) > 0
+            ORDER BY grupo_wip, wip_id
             """
 
-            logger.debug(f" [WIP-DESGLOSE] Query: {query}")
-            logger.debug(f" [WIP-DESGLOSE] Params: {cod_ordpros + cod_ordpros}")
+            logger.debug(f" [WIP-DESGLOSE] Query: {query[:200]}...")
 
-            params = cod_ordpros + cod_ordpros  # cod_ordpros aparece 2 veces: en WHERE IN exterior y en el subquery
+            # Parámetros: version_calculo + cod_ordpros (aparece 1 vez en la query)
+            params = [version_norm] + cod_ordpros
+            logger.debug(f" [WIP-DESGLOSE] Params: version={version_norm}, ops={cod_ordpros}")
+
             resultados = await self.db.query(query, params)
 
-            logger.info(f" [WIP-DESGLOSE] Query retornó {len(resultados)} filas")
+            logger.info(f" [WIP-DESGLOSE] Query retornó {len(resultados)} WIPs")
 
             desgloses = []
             for row in resultados:
                 desglose = {
                     "wip_id": row['wip_id'],
                     "grupo_wip": row['grupo_wip'],
-                    "costo_textil_promedio": float(row['costo_textil_promedio']) if row['costo_textil_promedio'] else 0.0,
-                    "costo_manufactura_promedio": float(row['costo_manufactura_promedio']) if row['costo_manufactura_promedio'] else 0.0,
-                    "ops_con_wip": int(row['ops_con_wip']),
+                    "total_prendas": int(row['total_prendas']) if row['total_prendas'] else 0,
+                    "total_textil": float(row['total_textil']) if row['total_textil'] else 0.0,
+                    "total_manufactura": float(row['total_manufactura']) if row['total_manufactura'] else 0.0,
+                    "textil_por_prenda": float(row['textil_por_prenda']) if row['textil_por_prenda'] else 0.0,
+                    "manufactura_por_prenda": float(row['manufactura_por_prenda']) if row['manufactura_por_prenda'] else 0.0,
                 }
                 desgloses.append(desglose)
-                logger.debug(f" [WIP-DESGLOSE] WIP encontrado: {desglose}")
+                logger.debug(f" [WIP-DESGLOSE] WIP encontrado: {desglose['wip_id']} - textil/prenda: {desglose['textil_por_prenda']}, manufactura/prenda: {desglose['manufactura_por_prenda']}")
 
             logger.info(f" [WIP-DESGLOSE] Procesadas {len(desgloses)} WIPs para {len(cod_ordpros)} OPs")
             return desgloses

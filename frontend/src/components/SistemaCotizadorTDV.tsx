@@ -454,6 +454,15 @@ const SistemaCotizadorTDV = () => {
   // Estado para OPs seleccionadas en la tabla interactiva
   const [selectedOpsCode, setSelectedOpsCode] = useState<string[]>([]);
 
+  // Estados para costos calculados del WIP (para sobrescribir backend values)
+  const [costosWipCalculados, setCostosWipCalculados] = useState<{
+    textil_por_prenda: number | null;
+    manufactura_por_prenda: number | null;
+  }>({
+    textil_por_prenda: null,
+    manufactura_por_prenda: null,
+  });
+
   // Estados para formulario - separados para evitar pérdida de foco
   const [formData, setFormData] = useState<FormData>({
     cliente_marca: "LACOSTE",
@@ -1418,6 +1427,7 @@ const SistemaCotizadorTDV = () => {
                       cod_ordpros: codOrdpros,
                     };
 
+                    console.log("📤 PAYLOAD ENVIADO AL BACKEND:", JSON.stringify(payload, null, 2));
                     const resultado = await post<any>("/cotizar", payload);
                     console.log("🔍 BACKEND RESPONSE - costo_textil:", resultado.costo_textil, "costo_manufactura:", resultado.costo_manufactura);
                     console.log("📊 OPs seleccionadas siendo procesadas:", codOrdpros);
@@ -1445,6 +1455,12 @@ const SistemaCotizadorTDV = () => {
                     codigoEstilo={cotizacionActual.inputs.codigo_estilo}
                     versionCalculo={cotizacionActual.inputs.version_calculo}
                     codOrdpros={selectedOpsCode}
+                    onCostosCalculados={(textil, manufactura) => {
+                      setCostosWipCalculados({
+                        textil_por_prenda: textil,
+                        manufactura_por_prenda: manufactura,
+                      });
+                    }}
                   />
                 </div>
               )}
@@ -1790,21 +1806,30 @@ const SistemaCotizadorTDV = () => {
     // Memoized componentesAgrupados
     const componentesAgrupados = useMemo(() => {
       if (!cotizacionActual) return []; // Safe: inside callback, not hook
+
+      // Usar costos del WIP si están disponibles, sino usar los del backend
+      const costoTextil = costosWipCalculados.textil_por_prenda ?? cotizacionActual.costo_textil;
+      const costoManufactura = costosWipCalculados.manufactura_por_prenda ?? cotizacionActual.costo_manufactura;
+
       return [
         {
           nombre: "Costo Textil",
-          costo_unitario: cotizacionActual.costo_textil,
-          fuente: "wip",
-          badge: esEstiloNuevo
+          costo_unitario: costoTextil,
+          fuente: costosWipCalculados.textil_por_prenda ? "wip" : "historico",
+          badge: costosWipCalculados.textil_por_prenda
+            ? `${selectedOpsCode.length} OPs seleccionadas`
+            : esEstiloNuevo
             ? `${wipsTextiles?.length || 0} WIPs`
             : "histórico",
           es_agrupado: false,
         },
         {
           nombre: "Costo Manufactura",
-          costo_unitario: cotizacionActual.costo_manufactura,
-          fuente: "wip",
-          badge: esEstiloNuevo
+          costo_unitario: costoManufactura,
+          fuente: costosWipCalculados.manufactura_por_prenda ? "wip" : "historico",
+          badge: costosWipCalculados.manufactura_por_prenda
+            ? `${selectedOpsCode.length} OPs seleccionadas`
+            : esEstiloNuevo
             ? `${wipsManufactura?.length || 0} WIPs`
             : "histórico",
           es_agrupado: false,
@@ -1850,6 +1875,9 @@ const SistemaCotizadorTDV = () => {
       esEstiloNuevo,
       wipsTextiles.length,
       wipsManufactura.length,
+      costosWipCalculados.textil_por_prenda,
+      costosWipCalculados.manufactura_por_prenda,
+      selectedOpsCode.length,
     ]);
 
     // Early return after hooks (safe)

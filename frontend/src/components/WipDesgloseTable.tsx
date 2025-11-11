@@ -26,10 +26,11 @@ interface WipDesgloseTableProps {
   versionCalculo: string;
   codOrdpros: string[]; // OPs seleccionadas de OpsSelectionTable
   onError?: (error: string) => void;
+  onCostosCalculados?: (textilPorPrenda: number, manufacturaPorPrenda: number) => void;
 }
 
 export const WipDesgloseTable = React.memo(
-  ({ codigoEstilo, versionCalculo, codOrdpros, onError }: WipDesgloseTableProps) => {
+  ({ codigoEstilo, versionCalculo, codOrdpros, onError, onCostosCalculados }: WipDesgloseTableProps) => {
     const [desgloseData, setDesgloseData] = useState<WipDesgloseResponse | null>(null);
     const [cargando, setCargando] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -99,6 +100,13 @@ export const WipDesgloseTable = React.memo(
         manufactura: totalManufactura,
       };
     }, [desgloseData]);
+
+    // Notificar al padre cuando se calculen los costos
+    React.useEffect(() => {
+      if (onCostosCalculados && totalesPorGrupo.textil > 0 && totalesPorGrupo.manufactura > 0) {
+        onCostosCalculados(totalesPorGrupo.textil, totalesPorGrupo.manufactura);
+      }
+    }, [totalesPorGrupo, onCostosCalculados]);
 
     if (cargando) {
       return (

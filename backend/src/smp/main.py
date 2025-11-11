@@ -761,25 +761,30 @@ async def desglose_wip_ops(data: Dict[str, Any] = Body(...)):
         cod_ordpros = data.get("cod_ordpros", [])
         version_calculo = data.get("version_calculo", "FLUIDO")
 
+        logger.info(f" [ENDPOINT-DESGLOSE-WIP] Request recibida")
+        logger.info(f" [ENDPOINT-DESGLOSE-WIP] cod_ordpros recibidos: {cod_ordpros} (tipo: {type(cod_ordpros)}, len: {len(cod_ordpros) if cod_ordpros else 0})")
+        logger.info(f" [ENDPOINT-DESGLOSE-WIP] version_calculo: {version_calculo}")
+
         if not cod_ordpros:
+            logger.warning(f" [ENDPOINT-DESGLOSE-WIP] No se proporcionaron OPs")
             return {
                 "error": "No se proporcionaron OPs",
                 "desgloses": [],
             }
 
         # DEBUG: Obtener desglose de WIPs
-        print(f"[ENDPOINT-WIP] Iniciando desglose para {len(cod_ordpros)} OPs: {cod_ordpros}, version: {version_calculo}")
+        logger.info(f" [ENDPOINT-DESGLOSE-WIP] Llamando a obtener_desglose_wip_por_ops con {len(cod_ordpros)} OPs")
         desgloses = await tdv_queries.obtener_desglose_wip_por_ops(
             cod_ordpros, version_calculo
         )
-        print(f"[ENDPOINT-WIP] Resultado: {len(desgloses)} WIPs encontrados")
+        logger.info(f" [ENDPOINT-DESGLOSE-WIP] Resultado: {len(desgloses)} WIPs encontrados")
 
         # Separar por grupo
         desgloses_textil = [d for d in desgloses if d["grupo_wip"] == "textil"]
         desgloses_manufactura = [d for d in desgloses if d["grupo_wip"] == "manufactura"]
 
         logger.info(
-            f"Desglose WIP: {len(desgloses_textil)} WIPs textil, {len(desgloses_manufactura)} WIPs manufactura"
+            f" [ENDPOINT-DESGLOSE-WIP] Desglose WIP: {len(desgloses_textil)} WIPs textil, {len(desgloses_manufactura)} WIPs manufactura"
         )
 
         return {
@@ -795,9 +800,9 @@ async def desglose_wip_ops(data: Dict[str, Any] = Body(...)):
         }
 
     except Exception as e:
-        logger.error(f"Error obteniendo desglose WIP: {e}")
+        logger.error(f" [ENDPOINT-DESGLOSE-WIP] Error obteniendo desglose WIP: {e}")
         import traceback
-        traceback.print_exc()
+        logger.error(f" [ENDPOINT-DESGLOSE-WIP] Traceback: {traceback.format_exc()}")
         raise HTTPException(
             status_code=500, detail=f"Error obteniendo desglose WIP: {str(e)}"
         )

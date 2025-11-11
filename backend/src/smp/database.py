@@ -1162,11 +1162,14 @@ class TDVQueries:
         """
 
         if not cod_ordpros:
+            logger.warning(" [WIP-DESGLOSE] No se proporcionaron cod_ordpros")
             return []
 
         version_norm = normalize_version_calculo(version_calculo)
 
         try:
+            logger.info(f" [WIP-DESGLOSE] Iniciando con {len(cod_ordpros)} OPs: {cod_ordpros}")
+
             # Usar una única query con JOIN para obtener WIPs para las OPs seleccionadas
             # Esto es más robusto que dos queries separadas
             placeholders_cod = ",".join(["%s"] * len(cod_ordpros))
@@ -1193,8 +1196,13 @@ class TDVQueries:
             ORDER BY grupo_wip, wip.wip_id
             """
 
+            logger.debug(f" [WIP-DESGLOSE] Query: {query}")
+            logger.debug(f" [WIP-DESGLOSE] Params: {cod_ordpros + cod_ordpros}")
+
             params = cod_ordpros + cod_ordpros  # cod_ordpros aparece 2 veces: en WHERE IN exterior y en el subquery
             resultados = await self.db.query(query, params)
+
+            logger.info(f" [WIP-DESGLOSE] Query retornó {len(resultados)} filas")
 
             desgloses = []
             for row in resultados:
@@ -1206,12 +1214,15 @@ class TDVQueries:
                     "ops_con_wip": int(row['ops_con_wip']),
                 }
                 desgloses.append(desglose)
+                logger.debug(f" [WIP-DESGLOSE] WIP encontrado: {desglose}")
 
-            logger.info(f" Obtenido desglose WIP para {len(cod_ordpros)} OPs ({len(pr_ids_list)} pr_ids): {len(desgloses)} WIPs")
+            logger.info(f" [WIP-DESGLOSE] Procesadas {len(desgloses)} WIPs para {len(cod_ordpros)} OPs")
             return desgloses
 
         except Exception as e:
-            logger.error(f" Error obteniendo desglose WIP: {e}")
+            logger.error(f" [WIP-DESGLOSE] Error obteniendo desglose WIP: {e}")
+            import traceback
+            logger.error(f" [WIP-DESGLOSE] Traceback: {traceback.format_exc()}")
             return []
 
     # ========================================

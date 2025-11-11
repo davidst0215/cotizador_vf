@@ -73,14 +73,15 @@ export const WipDesgloseTable = React.memo(
       } finally {
         setCargando(false);
       }
-    }, [codOrdpros, versionCalculo, onError]);
+    }, [versionCalculo, onError]); // Removed codOrdpros from dependencies
 
-    // Cargar desglose cuando las OPs cambian
+    // Cargar desglose cuando las OPs cambian (usando string de OPs para evitar ciclos)
+    const codOrdprosString = JSON.stringify(codOrdpros);
     React.useEffect(() => {
       if (codOrdpros.length > 0) {
         cargarDesgloseWip();
       }
-    }, [codOrdpros, cargarDesgloseWip]);
+    }, [codOrdprosString, cargarDesgloseWip]);
 
     // Calcular totales por grupo
     const totalesPorGrupo = useMemo(() => {

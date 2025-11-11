@@ -69,17 +69,11 @@ export const OpsSelectionTable = React.memo(
         if (data.ops.length === 0) {
           setError("No hay OPs disponibles para este estilo (estilo nuevo)");
           setOpsData([]);
+          setSelectedOps(new Set());
         } else {
-          // Inicializar OPs y mantener selección anterior si la hay
+          // Inicializar OPs - seleccionar todas por defecto
           setOpsData(data.ops);
-          if (opsSeleccionadasPrevia && opsSeleccionadasPrevia.length > 0) {
-            // Si hay selección previa, mantenerla
-            setSelectedOps(new Set(opsSeleccionadasPrevia));
-            console.log("✅ Restaurada selección anterior de OPs:", opsSeleccionadasPrevia);
-          } else {
-            // Si no hay selección previa, seleccionar todas
-            setSelectedOps(new Set(data.ops.map((op) => op.cod_ordpro)));
-          }
+          setSelectedOps(new Set(data.ops.map((op) => op.cod_ordpro)));
         }
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : "Error desconocido";
@@ -88,12 +82,26 @@ export const OpsSelectionTable = React.memo(
       } finally {
         setCargando(false);
       }
-    }, [codigoEstilo, versionCalculo, onError, opsSeleccionadasPrevia]);
+    }, [codigoEstilo, versionCalculo, onError]);
 
     // Cargar OPs al montar el componente
     React.useEffect(() => {
       cargarOpsDetalladas();
     }, [cargarOpsDetalladas]);
+
+    // Restaurar selección anterior cuando opsSeleccionadasPrevia cambia
+    React.useEffect(() => {
+      if (opsSeleccionadasPrevia && opsSeleccionadasPrevia.length > 0 && opsData.length > 0) {
+        // Solo actualizar si las OPs cargadas contienen las OPs de la selección previa
+        const opsValidas = opsSeleccionadasPrevia.filter(opCode =>
+          opsData.some(op => op.cod_ordpro === opCode)
+        );
+        if (opsValidas.length > 0) {
+          setSelectedOps(new Set(opsValidas));
+          console.log("✅ Restaurada selección anterior de OPs:", opsValidas);
+        }
+      }
+    }, [opsSeleccionadasPrevia, opsData]);
 
     // Toggle selección de una OP
     const toggleOp = useCallback((codOrdpro: string) => {

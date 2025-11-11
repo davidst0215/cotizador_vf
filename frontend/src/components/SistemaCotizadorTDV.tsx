@@ -20,6 +20,8 @@ import {
   RefreshCw,
   Database,
 } from "lucide-react";
+import { OpsSelectionTable } from "./OpsSelectionTable";
+import { WipDesgloseTable } from "./WipDesgloseTable";
 
 // Constantes del sistema
 const CATEGORIAS_LOTE = {
@@ -413,13 +415,13 @@ interface OpsResponse {
 interface AutoCompletadoInfo {
   autocompletado_disponible: boolean;
   info_estilo?: {
-    familia_producto: string;
+    familia_producto?: string;
     tipo_prenda: string;
     categoria: string;
     volumen_total: number;
   };
   campos_sugeridos?: {
-    familia_producto: string;
+    familia_producto?: string;
     tipo_prenda: string;
   };
 }
@@ -448,6 +450,9 @@ const SistemaCotizadorTDV = () => {
   const [opsReales, setOpsReales] = useState<OpsResponse | null>(null);
   const [cargandoOps, setCargandoOps] = useState(false);
   const [errorOps, setErrorOps] = useState<string | null>(null);
+
+  // Estado para OPs seleccionadas en la tabla interactiva
+  const [selectedOpsCode, setSelectedOpsCode] = useState<string[]>([]);
 
   // Estados para formulario - separados para evitar pérdida de foco
   const [formData, setFormData] = useState<FormData>({
@@ -525,44 +530,6 @@ const SistemaCotizadorTDV = () => {
     },
     [manejarCambioFormulario],
   );
-
-  // Efecto 1: Recargar cuando cambia version_calculo (usando debouncedFormData)
-  useEffect(() => {
-    const recargarDatosVersion = async () => {
-      try {
-        // Cargar datos principales
-        // NOTA: Ya no se cargan familias automáticamente
-        await Promise.all([
-          cargarWipsDisponibles(debouncedFormData.version_calculo),
-          cargarClientesDisponibles(debouncedFormData.version_calculo),
-        ]);
-
-        // Recargar WIPs si hay tipo y es nuevo
-        if (debouncedFormData.tipo_prenda && esEstiloNuevo) {
-          await cargarWipsPorTipoPrenda(
-            debouncedFormData.tipo_prenda,
-            debouncedFormData.version_calculo,
-          );
-        }
-
-        // Re-verificar estilo si existe
-        if (debouncedFormData.codigo_estilo && debouncedFormData.codigo_estilo.length >= 3) {
-          await verificarYBuscarEstilo(
-            debouncedFormData.codigo_estilo,
-            debouncedFormData.cliente_marca,
-            debouncedFormData.version_calculo,
-          );
-        }
-      } catch (error) {
-        console.error(`❌ Error recargando datos:`, error);
-      }
-    };
-
-    recargarDatosVersion();
-  }, [debouncedFormData.version_calculo]); // Usa debouncedFormData para evitar actualizaciones frecuentes
-
-  // NOTA: Efecto 2 (cargar tipos cuando cambia familia) fue eliminado
-  // Ya no se necesita porque familia_producto fue eliminado
 
   // Efecto 3: Cargar WIPs cuando cambia tipo (usando debouncedFormData, solo para estilos nuevos)
   useEffect(() => {
@@ -737,6 +704,71 @@ const SistemaCotizadorTDV = () => {
     [],
   );
 
+  // Cargar TODOS los tipos de prenda (sin filtrar por familia)
+  const cargarTodosTipos = useCallback(
+    async (versionCalculo: string = "FLUIDO") => {
+      setCargandoTipos(true);
+      try {
+        // Obtener todas las familias primero
+        const familiasData = await get<{ familias: string[] }>(
+          `familias-productos?version_calculo=${encodeURIComponent(versionCalculo)}`,
+        );
+
+        // Obtener tipos para todas las familias y combinarlos
+        const todasLasFamilias = familiasData.familias;
+        const tiposUnicos = new Set<string>();
+
+        for (const familia of todasLasFamilias) {
+          try {
+            const tiposData = await get<{ tipos: string[] }>(
+              `tipos-prenda/${encodeURIComponent(familia)}?version_calculo=${encodeURIComponent(versionCalculo)}`,
+            );
+            tiposData.tipos.forEach(tipo => tiposUnicos.add(tipo));
+          } catch {
+            // Ignorar errores de familias individuales
+          }
+        }
+
+        setTiposDisponibles(Array.from(tiposUnicos).sort());
+      } catch {
+        // Si no funciona, al menos mantener vacío en lugar de error
+        setTiposDisponibles([]);
+      } finally {
+        setCargandoTipos(false);
+      }
+    },
+    [get],
+  );
+
+  // Efecto 1: Recargar cuando cambia version_calculo (usando debouncedFormData)
+  useEffect(() => {
+    const recargarDatosVersion = async () => {
+      try {
+        // Cargar datos principales
+        await Promise.all([
+          cargarWipsDisponibles(debouncedFormData.version_calculo),
+          cargarClientesDisponibles(debouncedFormData.version_calculo),
+          cargarTodosTipos(debouncedFormData.version_calculo), // ✅ Cargar TODOS los tipos
+        ]);
+
+        // Recargar WIPs si hay tipo y es nuevo
+        if (debouncedFormData.tipo_prenda && esEstiloNuevo) {
+          await cargarWipsPorTipoPrenda(
+            debouncedFormData.tipo_prenda,
+            debouncedFormData.version_calculo,
+          );
+        }
+      } catch (error) {
+        console.error(`❌ Error recargando datos:`, error);
+      }
+    };
+
+    recargarDatosVersion();
+  }, [debouncedFormData.version_calculo, cargarTodosTipos, esEstiloNuevo, debouncedFormData.tipo_prenda]); // Usa debouncedFormData para evitar actualizaciones frecuentes
+
+  // NOTA: Efecto 2 (cargar tipos cuando cambia familia) fue eliminado
+  // Ahora se cargan TODOS los tipos al iniciar (cargarTodosTipos) para que estilos nuevos puedan seleccionar tipo_prenda
+
   const verificarYBuscarEstilo = useCallback(
     async (codigoEstilo: string, cliente: string, versionCalculo: string) => {
       if (abortControllerRef.current) {
@@ -779,6 +811,21 @@ const SistemaCotizadorTDV = () => {
                 ...prev,
                 tipo_prenda,
               }));
+
+              // ✅ IMPORTANTE: Actualizar debouncedFormData inmediatamente para evitar pérdida de valor
+              // Esto previene que se pierda el tipo_prenda mientras el debounce timer sigue corriendo
+              setDebouncedFormData((prev) => ({
+                ...prev,
+                tipo_prenda,
+              }));
+
+              // Agregar tipo_prenda al array de tipos disponibles si no está ya
+              setTiposDisponibles((prev) => {
+                if (!prev.includes(tipo_prenda)) {
+                  return [...prev, tipo_prenda];
+                }
+                return prev;
+              });
 
               setInfoAutoCompletado({
                 autocompletado_disponible: true,
@@ -1294,7 +1341,7 @@ const SistemaCotizadorTDV = () => {
                 Base histórica: {opsReales.total_ops_encontradas} órdenes |
                 Método: {opsReales.ops_data.metodo_utilizado} | Versión:{" "}
                 {opsReales.ops_data.parametros_busqueda.version_calculo}
-                {opsReales.ops_data.rangos_aplicados && (
+                {opsReales.ops_data.rangos_aplicados === true && (
                   <span className="ml-2 px-2 py-1 bg-yellow-500/30 rounded text-xs">
                     ✓ Rangos de seguridad aplicados
                   </span>
@@ -1334,209 +1381,73 @@ const SistemaCotizadorTDV = () => {
                 Reintentar
               </button>
             </div>
-          ) : opsReales && opsReales.ops_data.ops_utilizadas.length > 0 ? (
+          ) : cotizacionActual ? (
             <>
-              <div className="grid grid-cols-5 gap-4">
-                {opsReales.ops_data.ops_utilizadas
-                  .slice(0, 10)
-                  .map((op, idx) => {
-                    // VALIDACIONES DEFENSIVAS COMPLETAS
-                    const costoTotalUnitario = op.costo_total_unitario || 0;
-                    const costoPromedio =
-                      opsReales.ops_data.estadisticas?.costo_promedio || 1;
-                    const costoPorcentual =
-                      costoPromedio > 0
-                        ? (costoTotalUnitario / costoPromedio) * 100
-                        : 100;
+              <OpsSelectionTable
+                codigoEstilo={cotizacionActual.inputs.codigo_estilo}
+                versionCalculo={cotizacionActual.inputs.version_calculo}
+                onOpsSelected={async (opsSeleccionadas) => {
+                  try {
+                    // Capturar los códigos de OP seleccionadas para mostrar el desglose WIP
+                    setSelectedOpsCode(opsSeleccionadas.map((op) => op.cod_ordpro));
 
-                    // VALIDAR SI TIENE AJUSTES
-                    const tieneAjustes =
-                      op.costos_componentes &&
-                      Object.values(op.costos_componentes).some(
-                        (c) => c !== (op.costos_componentes as any).original,
-                      );
-
-                    return (
-                      <div
-                        key={idx}
-                        className="relative p-4 rounded-xl border-2 border-transparent hover:shadow-lg transition-all duration-300 group bg-orange-50"
-                      >
-                        <div className="mb-3">
-                          <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                            <div
-                              className="h-full rounded-full transition-all duration-500"
-                              style={{
-                                backgroundColor:
-                                  costoTotalUnitario > costoPromedio
-                                    ? "#fa8072"
-                                    : "#bd4c42",
-                                width: `${Math.min(100, Math.max(10, costoPorcentual))}%`,
-                              }}
-                            />
-                          </div>
-                        </div>
-
-                        <div className="text-center">
-                          <div className="font-bold text-sm mb-1 text-red-900">
-                            {op.cod_ordpro}
-                            {tieneAjustes && (
-                              <span className="ml-1 text-xs text-orange-600">
-                                *
-                              </span>
-                            )}
-                          </div>
-                          <div className="text-lg font-bold text-red-500">
-                            ${costoTotalUnitario.toFixed(2)}
-                          </div>
-                          <div className="text-xs text-gray-600 mt-1">
-                            {op.costo_total_original ? (
-                              <>
-                                Original:{" "}
-                                <span className="font-semibold">
-                                  ${op.costo_total_original.toFixed(2)}
-                                </span>
-                                {op.fue_ajustado && (
-                                  <span className="text-orange-600 ml-1 font-semibold">
-                                    → Ajustado
-                                  </span>
-                                )}
-                              </>
-                            ) : (
-                              <span className="text-gray-500">
-                                Sin datos originales
-                              </span>
-                            )}
-                          </div>
-                          <div className="text-xs text-gray-500 mt-1">
-                            {(op.prendas_requeridas || 0).toLocaleString()}{" "}
-                            prendas
-                          </div>
-                          {op.fecha_facturacion && (
-                            <div className="text-xs text-gray-500">
-                              {new Date(
-                                op.fecha_facturacion,
-                              ).toLocaleDateString()}
-                            </div>
-                          )}
-                        </div>
-
-                        {/* TOOLTIP MEJORADO CON DESGLOSE */}
-                        <div className="absolute -top-20 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs px-3 py-2 rounded opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-10 min-w-max">
-                          <div className="font-semibold">{op.cod_ordpro}</div>
-                          <div>Cliente: {op.cliente}</div>
-                          <div>Estilo: {op.estilo_propio}</div>
-                          <div>Esfuerzo: {op.esfuerzo_total || 6}/10</div>
-                          <div>
-                            Precio facturado: $
-                            {(op.precio_unitario || 0).toFixed(2)}
-                          </div>
-                          {op.costos_componentes && (
-                            <div className="border-t border-gray-600 mt-1 pt-1">
-                              <div>
-                                Textil: $
-                                {(op.costos_componentes.textil || 0).toFixed(2)}
-                              </div>
-                              <div>
-                                Manufactura: $
-                                {(
-                                  op.costos_componentes.manufactura || 0
-                                ).toFixed(2)}
-                              </div>
-                              <div>Total: ${costoTotalUnitario.toFixed(2)}</div>
-                            </div>
-                          )}
-                          {tieneAjustes && (
-                            <div className="text-orange-300 text-xs mt-1">
-                              * Ajustado por rangos
-                            </div>
-                          )}
-                        </div>
-                      </div>
+                    const response = await fetch(
+                      "http://localhost:8000/calcular-promedios-ops-seleccionadas",
+                      {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(opsSeleccionadas),
+                      }
                     );
-                  })}
-              </div>
 
-              {/* ESTADÍSTICAS CON VALIDACIONES */}
-              {opsReales.ops_data.estadisticas && (
-                <div className="mt-6 grid grid-cols-4 gap-4">
-                  <div className="text-center p-3 rounded-xl bg-orange-200">
-                    <div className="text-sm font-semibold text-red-900">
-                      Costo Promedio
-                    </div>
-                    <div className="text-lg font-bold text-red-500">
-                      $
-                      {(
-                        opsReales.ops_data.estadisticas.costo_promedio || 0
-                      ).toFixed(2)}
-                    </div>
-                  </div>
+                    if (!response.ok) {
+                      throw new Error("Error recalculando promedios");
+                    }
 
-                  <div className="text-center p-3 rounded-xl bg-orange-200">
-                    <div className="text-sm font-semibold text-red-900">
-                      Rango Costos
-                    </div>
-                    <div className="text-sm font-bold text-red-500">
-                      $
-                      {(opsReales.ops_data.estadisticas.costo_min || 0).toFixed(
-                        2,
-                      )}{" "}
-                      - $
-                      {(opsReales.ops_data.estadisticas.costo_max || 0).toFixed(
-                        2,
-                      )}
-                    </div>
-                  </div>
+                    const resultado = await response.json();
+                    console.log(
+                      "Promedios recalculados:",
+                      resultado.promedios
+                    );
 
-                  <div className="text-center p-3 rounded-xl bg-orange-200">
-                    <div className="text-sm font-semibold text-red-900">
-                      Esfuerzo Promedio
-                    </div>
-                    <div className="text-lg font-bold text-red-500">
-                      {(
-                        opsReales.ops_data.estadisticas.esfuerzo_promedio || 6
-                      ).toFixed(1)}
-                      /10
-                    </div>
-                  </div>
+                    // Actualizar cotizacionActual con los nuevos promedios
+                    if (cotizacionActual && resultado.promedios) {
+                      setCotizacionActual({
+                        ...cotizacionActual,
+                        costo_textil: resultado.promedios.textil_unitario,
+                        costo_manufactura: resultado.promedios.manufactura_unitario,
+                        costo_materia_prima: resultado.promedios.materia_prima_unitario,
+                        costo_avios: resultado.promedios.avios_unitario,
+                        costo_indirecto_fijo: resultado.promedios.indirecto_fijo_unitario,
+                        gasto_administracion: resultado.promedios.administracion_unitario,
+                        gasto_ventas: resultado.promedios.ventas_unitario,
+                      });
+                      // Mostrar mensaje de éxito
+                      alert(`✓ Promedios recalculados exitosamente con ${resultado.ops_usadas} OPs seleccionadas`);
+                    }
+                  } catch (error) {
+                    console.error("Error en recálculo de promedios:", error);
+                    alert("Error al recalcular promedios: " + (error instanceof Error ? error.message : "Error desconocido"));
+                  }
+                }}
+                onError={(error) => {
+                  setErrorOps(error);
+                }}
+              />
 
-                  <div className="text-center p-3 rounded-xl bg-orange-200">
-                    <div className="text-sm font-semibold text-red-900">
-                      Total OPs
-                    </div>
-                    <div className="text-lg font-bold text-green-600">
-                      {opsReales.ops_data.estadisticas.total_ops || 0}
-                    </div>
-                  </div>
+              {/* Mostrar desglose WIP cuando hay OPs seleccionadas */}
+              {selectedOpsCode.length > 0 && (
+                <div className="mt-8">
+                  <h3 className="text-lg font-bold text-red-900 mb-4">
+                    Análisis de Costos por WIP
+                  </h3>
+                  <WipDesgloseTable
+                    codigoEstilo={cotizacionActual.inputs.codigo_estilo}
+                    versionCalculo={cotizacionActual.inputs.version_calculo}
+                    codOrdpros={selectedOpsCode}
+                  />
                 </div>
               )}
-
-              <div className="mt-4 p-3 rounded-lg text-center text-sm bg-gray-100 text-gray-600">
-                <strong>Método:</strong> {opsReales.ops_data.metodo_utilizado} |
-                <strong> Versión:</strong>{" "}
-                {opsReales.ops_data.parametros_busqueda.version_calculo}
-                {opsReales.ops_data.estadisticas?.rango_fechas && (
-                  <>
-                    {" "}
-                    | <strong>Período:</strong>{" "}
-                    {new Date(
-                      opsReales.ops_data.estadisticas.rango_fechas.desde,
-                    ).toLocaleDateString()}{" "}
-                    -{" "}
-                    {new Date(
-                      opsReales.ops_data.estadisticas.rango_fechas.hasta,
-                    ).toLocaleDateString()}
-                  </>
-                )}
-                {opsReales.ops_data.rangos_aplicados && (
-                  <>
-                    {" "}
-                    |{" "}
-                    <span className="text-orange-600 font-semibold">
-                      ✓ Rangos de seguridad aplicados
-                    </span>
-                  </>
-                )}
-              </div>
             </>
           ) : (
             <div className="text-center py-8">

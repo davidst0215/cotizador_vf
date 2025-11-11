@@ -9,10 +9,10 @@ APLICACIÓN FASTAPI PRINCIPAL - BACKEND TDV COTIZADOR - COMPLETAMENTE CORREGIDO
 ✅ Manejo mejorado de errores y logging
 """
 
-from fastapi import FastAPI, HTTPException, Body
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse as FastAPIJSONResponse
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
 from datetime import datetime
 import logging
 import json
@@ -658,148 +658,6 @@ async def verificar_estilo_existente(
         logger.error(f"❌ Error verificando estilo: {e}")
         raise HTTPException(
             status_code=500, detail=f"Error verificando estilo: {str(e)}"
-        )
-
-
-# =====================================================================
-# NUEVO ENDPOINT: OBTENER OPS DETALLADAS PARA TABLA INTERACTIVA
-# =====================================================================
-
-@app.get("/obtener-ops-detalladas/{codigo_estilo}", tags=["Búsqueda"])
-async def obtener_ops_detalladas(
-    codigo_estilo: str,
-    version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
-    meses: int = 12,
-):
-    """
-    Obtiene lista detallada de OPs para un estilo sin aplicar factor de seguridad.
-    Retorna todos los datos unitarios para mostrar en tabla interactiva.
-    Si no hay OPs con los filtros (>= 200 prendas), retorna lista vacía (estilo nuevo).
-    """
-    try:
-        ops_detalladas = await tdv_queries.obtener_ops_detalladas_para_tabla(
-            codigo_estilo, meses, version_calculo
-        )
-
-        es_estilo_nuevo = len(ops_detalladas) == 0
-
-        logger.info(
-            f" OPs obtenidas para {codigo_estilo}: {len(ops_detalladas)} registros, es_nuevo={es_estilo_nuevo}"
-        )
-
-        return {
-            "codigo_estilo": codigo_estilo,
-            "version_calculo": version_calculo,
-            "es_estilo_nuevo": es_estilo_nuevo,
-            "ops_encontradas": len(ops_detalladas),
-            "ops": ops_detalladas,
-        }
-
-    except Exception as e:
-        logger.error(f"Error obteniendo OPs detalladas para {codigo_estilo}: {e}")
-        raise HTTPException(
-            status_code=500, detail=f"Error obteniendo OPs: {str(e)}"
-        )
-
-
-@app.post("/calcular-promedios-ops-seleccionadas", tags=["Búsqueda"])
-async def calcular_promedios_ops_seleccionadas(ops_seleccionadas: List[Dict[str, Any]]):
-    """
-    Calcula promedios sin factor de seguridad basado en OPs seleccionadas.
-    Recibe lista de OPs con flag 'seleccionado' indicando cuáles usar.
-    """
-    try:
-        # Filtrar solo las OPs que están seleccionadas
-        ops_activas = [op for op in ops_seleccionadas if op.get("seleccionado", False)]
-
-        if not ops_activas:
-            logger.warning("No hay OPs seleccionadas para calcular promedios")
-            return {
-                "error": "No hay OPs seleccionadas",
-                "ops_usadas": 0,
-                "promedios": {},
-            }
-
-        # Calcular promedios sin aplicar factor de seguridad
-        promedios = {
-            "textil_unitario": sum(op.get("textil_unitario", 0) for op in ops_activas) / len(ops_activas),
-            "manufactura_unitario": sum(op.get("manufactura_unitario", 0) for op in ops_activas) / len(ops_activas),
-            "materia_prima_unitario": sum(op.get("materia_prima_unitario", 0) for op in ops_activas) / len(ops_activas),
-            "avios_unitario": sum(op.get("avios_unitario", 0) for op in ops_activas) / len(ops_activas),
-            "indirecto_fijo_unitario": sum(op.get("indirecto_fijo_unitario", 0) for op in ops_activas) / len(ops_activas),
-            "administracion_unitario": sum(op.get("administracion_unitario", 0) for op in ops_activas) / len(ops_activas),
-            "ventas_unitario": sum(op.get("ventas_unitario", 0) for op in ops_activas) / len(ops_activas),
-        }
-
-        # Calcular subtotal
-        subtotal = sum(promedios.values())
-
-        logger.info(
-            f" Promedios calculados sin factor de seguridad: {len(ops_activas)} OPs usadas, subtotal=${subtotal:.4f}"
-        )
-
-        return {
-            "ops_usadas": len(ops_activas),
-            "promedios": promedios,
-            "subtotal": subtotal,
-        }
-
-    except Exception as e:
-        logger.error(f"Error calculando promedios: {e}")
-        raise HTTPException(
-            status_code=500, detail=f"Error calculando promedios: {str(e)}"
-        )
-
-
-@app.post("/desglose-wip-ops", tags=["Búsqueda"])
-async def desglose_wip_ops(data: Dict[str, Any] = Body(...)):
-    """
-    Obtiene desglose de costos por WIP para OPs seleccionadas.
-    Retorna costo_textil y costo_manufactura promedio por cada WIP.
-    """
-    try:
-        cod_ordpros = data.get("cod_ordpros", [])
-        version_calculo = data.get("version_calculo", "FLUIDO")
-
-        if not cod_ordpros:
-            return {
-                "error": "No se proporcionaron OPs",
-                "desgloses": [],
-            }
-
-        # DEBUG: Obtener desglose de WIPs
-        print(f"[ENDPOINT-WIP] Iniciando desglose para {len(cod_ordpros)} OPs: {cod_ordpros}, version: {version_calculo}")
-        desgloses = await tdv_queries.obtener_desglose_wip_por_ops(
-            cod_ordpros, version_calculo
-        )
-        print(f"[ENDPOINT-WIP] Resultado: {len(desgloses)} WIPs encontrados")
-
-        # Separar por grupo
-        desgloses_textil = [d for d in desgloses if d["grupo_wip"] == "textil"]
-        desgloses_manufactura = [d for d in desgloses if d["grupo_wip"] == "manufactura"]
-
-        logger.info(
-            f"Desglose WIP: {len(desgloses_textil)} WIPs textil, {len(desgloses_manufactura)} WIPs manufactura"
-        )
-
-        return {
-            "ops_analizadas": len(cod_ordpros),
-            "desgloses_textil": desgloses_textil,
-            "desgloses_manufactura": desgloses_manufactura,
-            "desgloses_total": desgloses,
-            "_debug": {
-                "cod_ordpros_input": cod_ordpros,
-                "version_input": version_calculo,
-                "desgloses_count": len(desgloses)
-            }
-        }
-
-    except Exception as e:
-        logger.error(f"Error obteniendo desglose WIP: {e}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(
-            status_code=500, detail=f"Error obteniendo desglose WIP: {str(e)}"
         )
 
 

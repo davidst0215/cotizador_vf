@@ -817,8 +817,12 @@ async def desglose_wip_ops(data: Dict[str, Any] = Body(...)):
 async def crear_cotizacion(input_data: CotizacionInput):
     """✅ CORREGIDO: Endpoint principal para crear cotizaciones - CON SOPORTE COMPLETO VERSION_CALCULO"""
     try:
+        print(f"\n🚀 ENDPOINT /cotizar RECIBIDO:", flush=True)
+        print(f"   codigo_estilo: {input_data.codigo_estilo}", flush=True)
+        print(f"   cod_ordpros: {input_data.cod_ordpros}", flush=True)
+        print(f"   version_calculo: {input_data.version_calculo}", flush=True)
         logger.info(
-            f"💰 Nueva cotización: {input_data.usuario} | {input_data.codigo_estilo} | Versión: {input_data.version_calculo}"
+            f"💰 Nueva cotización: {input_data.usuario} | {input_data.codigo_estilo} | Versión: {input_data.version_calculo} | OPs: {input_data.cod_ordpros}"
         )
 
         # Validar version_calculo

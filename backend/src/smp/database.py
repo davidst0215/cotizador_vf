@@ -1255,6 +1255,78 @@ class TDVQueries:
             logger.error(f" [WIP-DESGLOSE] Traceback: {traceback.format_exc()}")
             return []
 
+    async def calcular_costos_ponderados_por_ops(
+        self,
+        cod_ordpros: List[str],
+        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
+    ) -> Dict[str, float]:
+        """
+        Calcula los costos textil y manufactura ponderados por prendas para las OPs seleccionadas.
+
+        Fórmula:
+            costo_ponderado = SUM(costo_op * prendas_op) / SUM(prendas_op)
+
+        Returns:
+            Dict con 'textil' y 'manufactura' (costos por prenda ponderados)
+        """
+        if not cod_ordpros:
+            logger.warning(" [COSTOS-PONDERADOS] No se proporcionaron OPs")
+            return {}
+
+        version_norm = normalize_version_calculo(version_calculo)
+
+        try:
+            logger.info(f" [COSTOS-PONDERADOS] Calculando para {len(cod_ordpros)} OPs: {cod_ordpros}")
+
+            placeholders = ",".join(["%s"] * len(cod_ordpros))
+
+            query = f"""
+            WITH ultimas_fechas AS (
+                SELECT MAX(fecha_corrida) as fecha_max
+                FROM silver.costo_op_detalle
+                WHERE version_calculo = %s
+            )
+            SELECT
+                ROUND((SUM(costo_textil) / NULLIF(SUM(prendas_requeridas), 0))::NUMERIC, 4) as costo_textil_ponderado,
+                ROUND((SUM(costo_manufactura) / NULLIF(SUM(prendas_requeridas), 0))::NUMERIC, 4) as costo_manufactura_ponderado,
+                SUM(prendas_requeridas) as total_prendas,
+                COUNT(DISTINCT cod_ordpro) as ops_encontradas
+            FROM silver.costo_op_detalle cod
+            INNER JOIN ultimas_fechas uf ON cod.fecha_corrida = uf.fecha_max
+            WHERE cod.cod_ordpro::text IN ({placeholders})
+              AND cod.version_calculo = %s
+            """
+
+            params = [version_norm] + cod_ordpros + [version_norm]
+
+            resultado = await self.db.query(query, params)
+
+            if resultado and len(resultado) > 0:
+                row = resultado[0]
+                costo_textil = float(row['costo_textil_ponderado']) if row['costo_textil_ponderado'] else 0.0
+                costo_manufactura = float(row['costo_manufactura_ponderado']) if row['costo_manufactura_ponderado'] else 0.0
+
+                logger.info(
+                    f" [COSTOS-PONDERADOS] Resultado: textil=${costo_textil:.4f}, manufactura=${costo_manufactura:.4f}, "
+                    f"prendas={row['total_prendas']}, ops={row['ops_encontradas']}"
+                )
+
+                return {
+                    "textil": costo_textil,
+                    "manufactura": costo_manufactura,
+                    "total_prendas": row['total_prendas'],
+                    "ops_encontradas": row['ops_encontradas'],
+                }
+            else:
+                logger.warning(f" [COSTOS-PONDERADOS] No se encontraron datos para las OPs")
+                return {}
+
+        except Exception as e:
+            logger.error(f" [COSTOS-PONDERADOS] Error calculando costos ponderados: {e}")
+            import traceback
+            logger.error(f" [COSTOS-PONDERADOS] Traceback: {traceback.format_exc()}")
+            return {}
+
     # ========================================
     #  FUNCIONES DE WIPS (SIN CAMBIOS - YA USAN FECHAS RELATIVAS)
     # ========================================

@@ -111,6 +111,11 @@ class CotizacionInput(BaseModel):
         None, description="Se determina automáticamente"
     )
 
+    # OPs seleccionadas para estimar costos ponderados
+    cod_ordpros: Optional[List[str]] = Field(
+        None, description="Códigos de OPs seleccionadas para calcular costos ponderados"
+    )
+
     # WIPs para estilos nuevos
     wips_textiles: Optional[List[WipSeleccionada]] = Field(
         None, description="WIPs textiles seleccionadas"

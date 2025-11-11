@@ -406,6 +406,32 @@ class CotizadorTDV:
                 f" Costos directos obtenidos: {costos_hist.get('registros_encontrados', 0)} registros"
             )
 
+            # SOBREESCRIBIR CON PROMEDIO PONDERADO SI HAY OPs SELECCIONADAS
+            if input_data.cod_ordpros and len(input_data.cod_ordpros) > 0:
+                logger.info(
+                    f" Usando OPs seleccionadas para calcular costos ponderados: {input_data.cod_ordpros}"
+                )
+                costos_ponderados = await tdv_queries.calcular_costos_ponderados_por_ops(
+                    input_data.cod_ordpros,
+                    input_data.version_calculo
+                )
+                if costos_ponderados and costos_ponderados.get("textil") is not None:
+                    textil_ponderado = costos_ponderados.get("textil")
+                    manufactura_ponderada = costos_ponderados.get("manufactura")
+                    logger.info(
+                        f" Costos ponderados calculados: textil=${textil_ponderado:.4f}, manufactura=${manufactura_ponderada:.4f}"
+                    )
+                    print(f"\n🎯 COSTOS PONDERADOS ASIGNADOS (PRE-VALIDACIÓN):", flush=True)
+                    print(f"   textil: {textil_ponderado}", flush=True)
+                    print(f"   manufactura: {manufactura_ponderada}", flush=True)
+                    costos_hist["costo_textil"] = textil_ponderado
+                    costos_hist["costo_manufactura"] = manufactura_ponderada
+                    metodo_usado_directos = f"ponderado_ops_seleccionadas_{len(input_data.cod_ordpros)}"
+                else:
+                    logger.warning(
+                        f" No se pudieron calcular costos ponderados, usando histórico"
+                    )
+
             # Gastos INDIRECTOS (3): MODA + filtrado (MÉTODO ÚNICO)
             logger.info(
                 f" INICIANDO obtener_gastos_por_estilo_recurrente para estilo recurrente: {input_data.codigo_estilo}"
@@ -475,6 +501,13 @@ class CotizadorTDV:
                 valor, componente
             )
             costos_validados[componente] = valor_validado
+
+            # DEBUGGING: Log ajustes de seguridad
+            if componente in ["costo_textil", "costo_manufactura"]:
+                print(f"\n📌 VALIDACIÓN RANGO SEGURIDAD - {componente}:", flush=True)
+                print(f"   Valor antes: {valor_original:.4f}", flush=True)
+                print(f"   Valor después: {valor_validado:.4f}", flush=True)
+                print(f"   Fue ajustado: {fue_ajustado}", flush=True)
 
             if fue_ajustado:
                 alertas.append(
@@ -634,6 +667,11 @@ class CotizadorTDV:
             )
 
         #  RESPUESTA ESTRUCTURADA COMPLETA
+        print(f"\n✅ VALORES FINALES EN RESPUESTA:", flush=True)
+        print(f"   costo_textil: {costos_validados['costo_textil']}", flush=True)
+        print(f"   costo_manufactura: {costos_validados['costo_manufactura']}", flush=True)
+        print(f"   metodo_usado_directos: {metodo_usado_directos}", flush=True)
+
         return CotizacionResponse(
             id_cotizacion=id_cotizacion,
             fecha_cotizacion=datetime.now(),

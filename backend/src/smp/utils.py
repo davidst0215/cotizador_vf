@@ -407,6 +407,12 @@ class CotizadorTDV:
             )
 
             # SOBREESCRIBIR CON PROMEDIO PONDERADO SI HAY OPs SELECCIONADAS
+            print(f"\n🔥 VALIDANDO OPs SELECCIONADAS:", flush=True)
+            print(f"   input_data.cod_ordpros = {input_data.cod_ordpros}", flush=True)
+            print(f"   tipo: {type(input_data.cod_ordpros)}", flush=True)
+            print(f"   es truthy: {bool(input_data.cod_ordpros)}", flush=True)
+            if input_data.cod_ordpros:
+                print(f"   length: {len(input_data.cod_ordpros)}", flush=True)
             if input_data.cod_ordpros and len(input_data.cod_ordpros) > 0:
                 logger.info(
                     f" Usando OPs seleccionadas para calcular costos ponderados: {input_data.cod_ordpros}"

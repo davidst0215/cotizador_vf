@@ -36,7 +36,6 @@ export const WipDesgloseTable = React.memo(
     const [error, setError] = useState<string | null>(null);
 
     // Cargar desglose WIP cuando las OPs seleccionadas cambian
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     const cargarDesgloseWip = useCallback(async () => {
       if (!codOrdpros || codOrdpros.length === 0) {
         setError("No hay OPs seleccionadas para analizar");
@@ -74,11 +73,10 @@ export const WipDesgloseTable = React.memo(
       } finally {
         setCargando(false);
       }
-    }, [versionCalculo, onError]); // Removed codOrdpros intentionally - handled via codOrdprosString
+    }, [versionCalculo, onError]); // Removed codOrdpros from dependencies
 
     // Cargar desglose cuando las OPs cambian (usando string de OPs para evitar ciclos)
     const codOrdprosString = JSON.stringify(codOrdpros);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     React.useEffect(() => {
       if (codOrdpros.length > 0) {
         cargarDesgloseWip();

@@ -74,6 +74,10 @@ class CotizadorTDV:
                 volumen_historico,
                 info_autocompletado,
             ) = await self._determinar_categoria_estilo_completa(input_data)
+            print(f"\nDETERMINACION DE CATEGORIA:", flush=True)
+            print(f"   Estilo: {input_data.codigo_estilo}", flush=True)
+            print(f"   Categoría detectada: {categoria_estilo}", flush=True)
+            print(f"   Volumen histórico: {volumen_historico}", flush=True)
             logger.info(
                 f" Estilo {input_data.codigo_estilo}: categoría={categoria_estilo}, volumen={volumen_historico}"
             )
@@ -103,16 +107,20 @@ class CotizadorTDV:
             factor_marca = factores.obtener_factor_marca(input_data.cliente_marca)
 
             #  PROCESAR SEGÚN TIPO DE ESTILO CON LÓGICA MEJORADA
+            print(f"\nROUTA ELEGIDA:", flush=True)
+            print(f"   es_estilo_nuevo = {es_estilo_nuevo}", flush=True)
             if es_estilo_nuevo:
+                print(f"   TOMANDO RUTA: ESTILO NUEVO", flush=True)
                 logger.info(
-                    f"🆕 Procesando como ESTILO NUEVO: {input_data.codigo_estilo}"
+                    f"NUEVO Procesando como ESTILO NUEVO: {input_data.codigo_estilo}"
                 )
                 resultado = await self._procesar_estilo_nuevo_mejorado(
                     input_data, id_cotizacion, categoria_lote, factor_lote, factor_marca
                 )
             else:
+                print(f"   TOMANDO RUTA: ESTILO RECURRENTE", flush=True)
                 logger.info(
-                    f"🔄 Procesando como ESTILO RECURRENTE: {input_data.codigo_estilo}"
+                    f"RECURRENTE Procesando como ESTILO RECURRENTE: {input_data.codigo_estilo}"
                 )
                 resultado = await self._procesar_estilo_recurrente_mejorado(
                     input_data, id_cotizacion, categoria_lote, factor_lote, factor_marca

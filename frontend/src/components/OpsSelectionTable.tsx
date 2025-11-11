@@ -84,10 +84,11 @@ export const OpsSelectionTable = React.memo(
       }
     }, [codigoEstilo, versionCalculo, onError]);
 
-    // Cargar OPs al montar el componente
+    // Cargar OPs cuando cambia el código de estilo o versión de cálculo
+    // ✨ CORREGIDO: No incluir cargarOpsDetalladas en dependencias para evitar loop infinito
     React.useEffect(() => {
       cargarOpsDetalladas();
-    }, [cargarOpsDetalladas]);
+    }, [codigoEstilo, versionCalculo]);
 
     // Restaurar selección anterior cuando opsSeleccionadasPrevia cambia
     React.useEffect(() => {

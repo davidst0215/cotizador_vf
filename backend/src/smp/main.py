@@ -1,12 +1,12 @@
 """
 =====================================================================
-APLICACIÓN FASTAPI PRINCIPAL - BACKEND TDV COTIZADOR - COMPLETAMENTE CORREGIDO
+APLICACIN FASTAPI PRINCIPAL - BACKEND TDV COTIZADOR - COMPLETAMENTE CORREGIDO
 =====================================================================
-✅ Nuevos endpoints agregados:
+[OK] Nuevos endpoints agregados:
 - /verificar-estilo-completo/{codigo_estilo} - Auto-completado completo
 - /ops-utilizadas-cotizacion - OPs reales utilizadas
-✅ Todos los endpoints corregidos con version_calculo
-✅ Manejo mejorado de errores y logging
+[OK] Todos los endpoints corregidos con version_calculo
+[OK] Manejo mejorado de errores y logging
 """
 
 from fastapi import FastAPI, HTTPException, Body
@@ -65,13 +65,13 @@ class CustomJSONResponse(FastAPIJSONResponse):
 
 
 # =====================================================================
-# CONFIGURACIÓN FASTAPI
+# CONFIGURACIN FASTAPI
 # =====================================================================
 
 app = FastAPI(
     title=settings.api_title,
     version=settings.api_version,
-    description="Sistema de cotización inteligente basado en metodología WIP para TDV - COMPLETAMENTE CORREGIDO",
+    description="Sistema de cotizacin inteligente basado en metodologa WIP para TDV - COMPLETAMENTE CORREGIDO",
     docs_url="/docs",
     redoc_url="/redoc",
 )
@@ -135,23 +135,23 @@ async def general_exception_handler(request, exc):
 
 @app.get("/", tags=["General"])
 async def root():
-    """Endpoint raíz con información del sistema"""
+    """Endpoint raz con informacin del sistema"""
     return {
         "sistema": "Cotizador TDV Expert",
         "version": settings.api_version,
         "status": "activo",
         "arquitectura": "TDV Real Database",
         "features": [
-            "✅ CORREGIDO: Búsqueda mejorada en costo_op_detalle",
-            "✅ CORREGIDO: Configurador WIPs desde resumen_wip_por_prenda",
-            "✅ CORREGIDO: Categorización automática de estilos",
-            "✅ NUEVO: Auto-completado inteligente para estilos recurrentes",
-            "✅ NUEVO: Endpoint OPs reales utilizadas",
-            "✅ CORREGIDO: Manejo completo de versiones de cálculo",
-            "✅ CORREGIDO: Rutas textiles restauradas",
-            "Factores de ajuste basados en análisis TDV",
-            "Información comercial avanzada",
-            "Análisis inteligente WIPs por estabilidad + fecha_corrida",
+            "[OK] CORREGIDO: Bsqueda mejorada en costo_op_detalle",
+            "[OK] CORREGIDO: Configurador WIPs desde resumen_wip_por_prenda",
+            "[OK] CORREGIDO: Categorizacin automtica de estilos",
+            "[OK] NUEVO: Auto-completado inteligente para estilos recurrentes",
+            "[OK] NUEVO: Endpoint OPs reales utilizadas",
+            "[OK] CORREGIDO: Manejo completo de versiones de clculo",
+            "[OK] CORREGIDO: Rutas textiles restauradas",
+            "Factores de ajuste basados en anlisis TDV",
+            "Informacin comercial avanzada",
+            "Anlisis inteligente WIPs por estabilidad + fecha_corrida",
         ],
         "versiones_calculo_soportadas": ["FLUIDO", "truncado"],
         "endpoints_nuevos": [
@@ -164,7 +164,7 @@ async def root():
 
 @app.get("/health", response_model=HealthCheck, tags=["General"])
 async def health_check():
-    """Verificación de estado del sistema y BD"""
+    """Verificacin de estado del sistema y BD"""
     try:
         tablas_status = await tdv_queries.health_check()
 
@@ -192,32 +192,32 @@ async def health_check():
 
 
 # =====================================================================
-# 🆕 NUEVOS ENDPOINTS CRÍTICOS
+#  NUEVOS ENDPOINTS CRTICOS
 # =====================================================================
 
 
-@app.get("/verificar-estilo-completo/{codigo_estilo}", tags=["Búsqueda"])
+@app.get("/verificar-estilo-completo/{codigo_estilo}", tags=["Bsqueda"])
 async def verificar_estilo_completo_con_autocompletado(
     codigo_estilo: str,
     version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
 ):
     """
-    ✅ NUEVO ENDPOINT: Verificación completa de estilo con auto-completado
+    [OK] NUEVO ENDPOINT: Verificacin completa de estilo con auto-completado
 
     Este endpoint proporciona:
-    1. Verificación si es nuevo/recurrente
+    1. Verificacin si es nuevo/recurrente
     2. Auto-completado de familia_producto y tipo_prenda
-    3. Información detallada del estilo
-    4. Volumen histórico y categorización
+    3. Informacin detallada del estilo
+    4. Volumen histrico y categorizacin
     """
     try:
-        # PASO 1: Verificación básica
+        # PASO 1: Verificacin bsica
         existe = await tdv_queries.verificar_estilo_existente(
             codigo_estilo, version_calculo
         )
         es_nuevo = not existe
 
-        # PASO 2: Información detallada si existe
+        # PASO 2: Informacin detallada si existe
         info_detallada = None
         autocompletado_disponible = False
         campos_sugeridos = {}
@@ -236,16 +236,16 @@ async def verificar_estilo_completo_con_autocompletado(
                     }
 
                     logger.info(
-                        f"✅ Auto-completado disponible para {codigo_estilo}: {campos_sugeridos}"
+                        f"[OK] Auto-completado disponible para {codigo_estilo}: {campos_sugeridos}"
                     )
 
             except Exception as e:
                 logger.warning(
-                    f"⚠️ Error obteniendo info detallada para {codigo_estilo}: {e}"
+                    f"[WARN] Error obteniendo info detallada para {codigo_estilo}: {e}"
                 )
                 info_detallada = None
 
-        # PASO 3: Volumen y categorización
+        # PASO 3: Volumen y categorizacin
         volumen_historico = 0
         categoria = "Nuevo"
 
@@ -287,28 +287,28 @@ async def verificar_estilo_completo_con_autocompletado(
         }
 
         logger.info(
-            f"✅ Verificación completa {codigo_estilo}: existe={existe}, auto-completado={autocompletado_disponible}"
+            f"[OK] Verificacin completa {codigo_estilo}: existe={existe}, auto-completado={autocompletado_disponible}"
         )
         return respuesta
 
     except Exception as e:
-        logger.error(f"❌ Error en verificación completa {codigo_estilo}: {e}")
+        logger.error(f"[ERROR] Error en verificacin completa {codigo_estilo}: {e}")
         raise HTTPException(
             status_code=500, detail=f"Error verificando estilo: {str(e)}"
         )
 
 
-@app.post("/ops-utilizadas-cotizacion", tags=["Análisis"])
+@app.post("/ops-utilizadas-cotizacion", tags=["Anlisis"])
 async def obtener_ops_utilizadas_cotizacion(input_data: CotizacionInput):
     """
-    ✅ NUEVO ENDPOINT: Obtiene las OPs reales utilizadas para una cotización
+    [OK] NUEVO ENDPOINT: Obtiene las OPs reales utilizadas para una cotizacin
 
-    Retorna las órdenes de producción específicas que se usaron como base
-    para calcular los costos de la cotización.
+    Retorna las rdenes de produccin especficas que se usaron como base
+    para calcular los costos de la cotizacin.
     """
     try:
         logger.info(
-            f"🔍 Obteniendo OPs utilizadas para: {input_data.codigo_estilo} ({input_data.version_calculo})"
+            f" Obteniendo OPs utilizadas para: {input_data.codigo_estilo} ({input_data.version_calculo})"
         )
 
         # Obtener OPs utilizadas desde database
@@ -337,23 +337,23 @@ async def obtener_ops_utilizadas_cotizacion(input_data: CotizacionInput):
         }
 
         logger.info(
-            f"✅ OPs encontradas: {respuesta['total_ops_encontradas']} para {input_data.codigo_estilo}"
+            f"[OK] OPs encontradas: {respuesta['total_ops_encontradas']} para {input_data.codigo_estilo}"
         )
         return respuesta
 
     except Exception as e:
-        logger.error(f"❌ Error obteniendo OPs utilizadas: {e}")
+        logger.error(f"[ERROR] Error obteniendo OPs utilizadas: {e}")
         raise HTTPException(status_code=500, detail=f"Error obteniendo OPs: {str(e)}")
 
 
 # =====================================================================
-# ENDPOINTS DE CONFIGURACIÓN - CORREGIDOS CON VERSION_CALCULO
+# ENDPOINTS DE CONFIGURACIN - CORREGIDOS CON VERSION_CALCULO
 # =====================================================================
 
 
-@app.get("/configuracion", response_model=ConfiguracionResponse, tags=["Configuración"])
+@app.get("/configuracion", response_model=ConfiguracionResponse, tags=["Configuracin"])
 async def obtener_configuracion():
-    """Obtiene configuración completa del sistema"""
+    """Obtiene configuracin completa del sistema"""
     return ConfiguracionResponse(
         rangos_lote=factores.RANGOS_LOTE,
         factores_esfuerzo=factores.FACTORES_ESFUERZO,
@@ -368,16 +368,16 @@ async def obtener_configuracion():
 
 
 @app.get(
-    "/wips-disponibles", response_model=WipsDisponiblesResponse, tags=["Configuración"]
+    "/wips-disponibles", response_model=WipsDisponiblesResponse, tags=["Configuracin"]
 )
 async def obtener_wips_disponibles(
     tipo_prenda: Optional[str] = None,
     version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
 ):
-    """✅ CORREGIDO: Obtiene WIPs disponibles con costos actuales - ANÁLISIS INTELIGENTE CON VERSION_CALCULO"""
+    """[OK] CORREGIDO: Obtiene WIPs disponibles con costos actuales - ANLISIS INTELIGENTE CON VERSION_CALCULO"""
     try:
         logger.info(
-            f"🔍 Obteniendo WIPs disponibles: tipo_prenda={tipo_prenda}, version={version_calculo}"
+            f" Obteniendo WIPs disponibles: tipo_prenda={tipo_prenda}, version={version_calculo}"
         )
 
         (
@@ -403,24 +403,24 @@ async def obtener_wips_disponibles(
         )
 
         logger.info(
-            f"✅ WIPs obtenidas: {respuesta.total_disponibles} disponibles para {tipo_prenda or 'genérico'} ({version_calculo})"
+            f"[OK] WIPs obtenidas: {respuesta.total_disponibles} disponibles para {tipo_prenda or 'genrico'} ({version_calculo})"
         )
         return respuesta
 
     except Exception as e:
-        logger.error(f"❌ Error obteniendo WIPs: {e}")
+        logger.error(f"[ERROR] Error obteniendo WIPs: {e}")
         raise HTTPException(status_code=500, detail=f"Error obteniendo WIPs: {str(e)}")
 
 
-@app.get("/ruta-textil-recomendada/{tipo_prenda}", tags=["Configuración"])
+@app.get("/ruta-textil-recomendada/{tipo_prenda}", tags=["Configuracin"])
 async def obtener_ruta_textil_recomendada(
     tipo_prenda: str,
     version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
 ):
-    """✅ CORREGIDO: Obtiene ruta textil recomendada para un tipo de prenda específico"""
+    """[OK] CORREGIDO: Obtiene ruta textil recomendada para un tipo de prenda especfico"""
     try:
         logger.info(
-            f"🧵 Obteniendo ruta textil para: {tipo_prenda} ({version_calculo})"
+            f" Obteniendo ruta textil para: {tipo_prenda} ({version_calculo})"
         )
 
         ruta_textil = await tdv_queries.obtener_ruta_textil_recomendada(
@@ -441,12 +441,12 @@ async def obtener_ruta_textil_recomendada(
             }
 
         logger.info(
-            f"✅ Ruta textil obtenida: {len(ruta_textil.get('wips_recomendadas', []))} WIPs recomendadas"
+            f"[OK] Ruta textil obtenida: {len(ruta_textil.get('wips_recomendadas', []))} WIPs recomendadas"
         )
         return ruta_textil
 
     except Exception as e:
-        logger.error(f"❌ Error obteniendo ruta textil para {tipo_prenda}: {e}")
+        logger.error(f"[ERROR] Error obteniendo ruta textil para {tipo_prenda}: {e}")
         raise HTTPException(
             status_code=500, detail=f"Error obteniendo ruta textil: {str(e)}"
         )
@@ -461,9 +461,9 @@ async def obtener_ruta_textil_recomendada(
 async def obtener_clientes(
     version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
 ):
-    """✅ CORREGIDO: Obtiene lista de clientes disponibles CON VERSION_CALCULO"""
+    """[OK] CORREGIDO: Obtiene lista de clientes disponibles CON VERSION_CALCULO"""
     try:
-        logger.info(f"👥 Cargando clientes para versión: {version_calculo}")
+        logger.info(f" Cargando clientes para versin: {version_calculo}")
 
         clientes = await tdv_queries.obtener_clientes_disponibles(version_calculo)
 
@@ -475,11 +475,11 @@ async def obtener_clientes(
             "timestamp": datetime.now().isoformat(),
         }
 
-        logger.info(f"✅ Clientes cargados: {len(clientes)} para {version_calculo}")
+        logger.info(f"[OK] Clientes cargados: {len(clientes)} para {version_calculo}")
         return respuesta
 
     except Exception as e:
-        logger.error(f"❌ Error obteniendo clientes: {e}")
+        logger.error(f"[ERROR] Error obteniendo clientes: {e}")
         raise HTTPException(
             status_code=500, detail=f"Error obteniendo clientes: {str(e)}"
         )
@@ -491,7 +491,7 @@ async def obtener_familias_productos(
 ):
     """Obtiene familias de productos disponibles CON VERSION_CALCULO"""
     try:
-        logger.info(f"📁 Cargando familias para versión: {version_calculo}")
+        logger.info(f" Cargando familias para versin: {version_calculo}")
 
         familias = await tdv_queries.obtener_familias_productos(version_calculo)
 
@@ -503,11 +503,11 @@ async def obtener_familias_productos(
             "timestamp": datetime.now().isoformat(),
         }
 
-        logger.info(f"✅ Familias cargadas: {len(familias)} para {version_calculo}")
+        logger.info(f"[OK] Familias cargadas: {len(familias)} para {version_calculo}")
         return respuesta
 
     except Exception as e:
-        logger.error(f"❌ Error obteniendo familias: {e}")
+        logger.error(f"[ERROR] Error obteniendo familias: {e}")
         raise HTTPException(
             status_code=500, detail=f"Error obteniendo familias: {str(e)}"
         )
@@ -517,7 +517,7 @@ async def obtener_familias_productos(
 async def obtener_todos_tipos_prenda(
     version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO
 ):
-    """✅ Obtiene TODOS los tipos de prenda disponibles (sin familia)"""
+    """[OK] Obtiene TODOS los tipos de prenda disponibles (sin familia)"""
     try:
         logger.info(f"Cargando todos los tipos de prenda ({version_calculo})")
 
@@ -545,7 +545,7 @@ async def obtener_todos_tipos_prenda(
 async def obtener_tipos_prenda(
     familia: str, version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO
 ):
-    """✅ CORREGIDO: Obtiene tipos de prenda para una familia específica CON VERSION_CALCULO"""
+    """[OK] CORREGIDO: Obtiene tipos de prenda para una familia especfica CON VERSION_CALCULO"""
     try:
         logger.info(f"Cargando tipos para familia: {familia} ({version_calculo})")
 
@@ -561,24 +561,24 @@ async def obtener_tipos_prenda(
         }
 
         logger.info(
-            f"✅ Tipos cargados: {len(tipos)} para {familia} ({version_calculo})"
+            f"[OK] Tipos cargados: {len(tipos)} para {familia} ({version_calculo})"
         )
         return respuesta
 
     except Exception as e:
-        logger.error(f"❌ Error obteniendo tipos de prenda: {e}")
+        logger.error(f"[ERROR] Error obteniendo tipos de prenda: {e}")
         raise HTTPException(status_code=500, detail=f"Error obteniendo tipos: {str(e)}")
 
 
 # =====================================================================
-# ENDPOINTS DE BÚSQUEDA - CORREGIDOS CON VERSION_CALCULO
+# ENDPOINTS DE BSQUEDA - CORREGIDOS CON VERSION_CALCULO
 # =====================================================================
 
 
 @app.get(
     "/buscar-estilos/{codigo_estilo}",
     response_model=List[EstiloSimilar],
-    tags=["Búsqueda"],
+    tags=["Bsqueda"],
 )
 async def buscar_estilos_similares(
     codigo_estilo: str,
@@ -586,13 +586,13 @@ async def buscar_estilos_similares(
     limite: Optional[int] = 10,
     version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
 ):
-    """✅ CORREGIDO: Busca estilos similares por código y cliente CON VERSION_CALCULO"""
+    """[OK] CORREGIDO: Busca estilos similares por cdigo y cliente CON VERSION_CALCULO"""
     try:
         if len(codigo_estilo) < 3:
             return []
 
         logger.info(
-            f"🔍 Buscando estilos similares: {codigo_estilo} para {cliente or 'cualquier cliente'} ({version_calculo})"
+            f" Buscando estilos similares: {codigo_estilo} para {cliente or 'cualquier cliente'} ({version_calculo})"
         )
 
         estilos = await tdv_queries.buscar_estilos_similares(
@@ -600,28 +600,28 @@ async def buscar_estilos_similares(
         )
 
         logger.info(
-            f"✅ Estilos similares encontrados: {len(estilos)} para {codigo_estilo} ({version_calculo})"
+            f"[OK] Estilos similares encontrados: {len(estilos)} para {codigo_estilo} ({version_calculo})"
         )
         return estilos
 
     except Exception as e:
-        logger.error(f"❌ Error buscando estilos: {e}")
-        raise HTTPException(status_code=500, detail=f"Error en búsqueda: {str(e)}")
+        logger.error(f"[ERROR] Error buscando estilos: {e}")
+        raise HTTPException(status_code=500, detail=f"Error en bsqueda: {str(e)}")
 
 
-@app.get("/verificar-estilo/{codigo_estilo}", tags=["Búsqueda"])
+@app.get("/verificar-estilo/{codigo_estilo}", tags=["Bsqueda"])
 async def verificar_estilo_existente(
     codigo_estilo: str,
     version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
 ):
-    """✅ MANTENIDO: Verificación básica de estilo (compatibilidad)"""
+    """[OK] MANTENIDO: Verificacin bsica de estilo (compatibilidad)"""
     try:
         existe = await tdv_queries.verificar_estilo_existente(
             codigo_estilo, version_calculo
         )
         es_nuevo = not existe
 
-        # Determinar categoría específica si es recurrente
+        # Determinar categora especfica si es recurrente
         categoria = "Nuevo"
         volumen_historico = 0
 
@@ -642,7 +642,7 @@ async def verificar_estilo_existente(
                 categoria = "Recurrente"  # Fallback si no se puede obtener volumen
 
         logger.info(
-            f"✅ Verificación básica {codigo_estilo}: existe={existe}, categoría={categoria}, volumen={volumen_historico}"
+            f"[OK] Verificacin bsica {codigo_estilo}: existe={existe}, categora={categoria}, volumen={volumen_historico}"
         )
 
         return {
@@ -655,7 +655,7 @@ async def verificar_estilo_existente(
         }
 
     except Exception as e:
-        logger.error(f"❌ Error verificando estilo: {e}")
+        logger.error(f"[ERROR] Error verificando estilo: {e}")
         raise HTTPException(
             status_code=500, detail=f"Error verificando estilo: {str(e)}"
         )
@@ -665,7 +665,7 @@ async def verificar_estilo_existente(
 # NUEVO ENDPOINT: OBTENER OPS DETALLADAS PARA TABLA INTERACTIVA
 # =====================================================================
 
-@app.get("/obtener-ops-detalladas/{codigo_estilo}", tags=["Búsqueda"])
+@app.get("/obtener-ops-detalladas/{codigo_estilo}", tags=["Bsqueda"])
 async def obtener_ops_detalladas(
     codigo_estilo: str,
     version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
@@ -674,7 +674,7 @@ async def obtener_ops_detalladas(
     """
     Obtiene lista detallada de OPs para un estilo sin aplicar factor de seguridad.
     Retorna todos los datos unitarios para mostrar en tabla interactiva.
-    Si no hay OPs con los filtros (>= 200 prendas), retorna lista vacía (estilo nuevo).
+    Si no hay OPs con los filtros (>= 200 prendas), retorna lista vaca (estilo nuevo).
     """
     try:
         ops_detalladas = await tdv_queries.obtener_ops_detalladas_para_tabla(
@@ -702,14 +702,14 @@ async def obtener_ops_detalladas(
         )
 
 
-@app.post("/calcular-promedios-ops-seleccionadas", tags=["Búsqueda"])
+@app.post("/calcular-promedios-ops-seleccionadas", tags=["Bsqueda"])
 async def calcular_promedios_ops_seleccionadas(ops_seleccionadas: List[Dict[str, Any]]):
     """
     Calcula promedios sin factor de seguridad basado en OPs seleccionadas.
-    Recibe lista de OPs con flag 'seleccionado' indicando cuáles usar.
+    Recibe lista de OPs con flag 'seleccionado' indicando cules usar.
     """
     try:
-        # Filtrar solo las OPs que están seleccionadas
+        # Filtrar solo las OPs que estn seleccionadas
         ops_activas = [op for op in ops_seleccionadas if op.get("seleccionado", False)]
 
         if not ops_activas:
@@ -751,7 +751,7 @@ async def calcular_promedios_ops_seleccionadas(ops_seleccionadas: List[Dict[str,
         )
 
 
-@app.post("/desglose-wip-ops", tags=["Búsqueda"])
+@app.post("/desglose-wip-ops", tags=["Bsqueda"])
 async def desglose_wip_ops(data: Dict[str, Any] = Body(...)):
     """
     Obtiene desglose de costos por WIP para OPs seleccionadas.
@@ -809,20 +809,16 @@ async def desglose_wip_ops(data: Dict[str, Any] = Body(...)):
 
 
 # =====================================================================
-# ENDPOINT PRINCIPAL DE COTIZACIÓN - YA MANEJA VERSION_CALCULO VIA INPUT_DATA
+# ENDPOINT PRINCIPAL DE COTIZACIN - YA MANEJA VERSION_CALCULO VIA INPUT_DATA
 # =====================================================================
 
 
-@app.post("/cotizar", response_model=CotizacionResponse, tags=["Cotización"])
+@app.post("/cotizar", response_model=CotizacionResponse, tags=["Cotizacin"])
 async def crear_cotizacion(input_data: CotizacionInput):
-    """✅ CORREGIDO: Endpoint principal para crear cotizaciones - CON SOPORTE COMPLETO VERSION_CALCULO"""
+    """[OK] CORREGIDO: Endpoint principal para crear cotizaciones - CON SOPORTE COMPLETO VERSION_CALCULO"""
     try:
-        print(f"\n🚀 ENDPOINT /cotizar RECIBIDO:", flush=True)
-        print(f"   codigo_estilo: {input_data.codigo_estilo}", flush=True)
-        print(f"   cod_ordpros: {input_data.cod_ordpros}", flush=True)
-        print(f"   version_calculo: {input_data.version_calculo}", flush=True)
         logger.info(
-            f"💰 Nueva cotización: {input_data.usuario} | {input_data.codigo_estilo} | Versión: {input_data.version_calculo} | OPs: {input_data.cod_ordpros}"
+            f" Nueva cotizacin: {input_data.usuario} | {input_data.codigo_estilo} | Versin: {input_data.version_calculo} | OPs: {input_data.cod_ordpros}"
         )
 
         # Validar version_calculo
@@ -837,37 +833,42 @@ async def crear_cotizacion(input_data: CotizacionInput):
             # Asignar default si no viene en input
             input_data.version_calculo = VersionCalculo.FLUIDO
 
-        # Procesar cotización
-        resultado = await cotizador_tdv.procesar_cotizacion(input_data)
+        # Rutear a método optimizado si hay OPs seleccionadas
+        if input_data.cod_ordpros and len(input_data.cod_ordpros) > 0:
+            logger.info(f"[COTIZACION RAPIDA] Usando método optimizado para {len(input_data.cod_ordpros)} OPs seleccionadas")
+            resultado = await cotizador_tdv.procesar_cotizacion_rapida_por_ops(input_data)
+        else:
+            # Usar método estándar si no hay OPs seleccionadas
+            resultado = await cotizador_tdv.procesar_cotizacion(input_data)
 
         logger.info(
-            f"✅ Cotización completada: {resultado.id_cotizacion} | ${resultado.precio_final:.2f} | Versión: {resultado.version_calculo_usada}"
+            f"[OK] Cotizacin completada: {resultado.id_cotizacion} | ${resultado.precio_final:.2f} | Versin: {resultado.version_calculo_usada}"
         )
         return resultado
 
     except ValueError as e:
-        logger.warning(f"⚠️ Error de validación: {e}")
+        logger.warning(f"[WARN] Error de validacin: {e}")
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"❌ Error procesando cotización: {e}")
+        logger.error(f"[ERROR] Error procesando cotizacin: {e}")
         raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
 
 
 # =====================================================================
-# ENDPOINTS DE ANÁLISIS - CORREGIDOS CON VERSION_CALCULO
+# ENDPOINTS DE ANLISIS - CORREGIDOS CON VERSION_CALCULO
 # =====================================================================
 
 
-@app.get("/analisis-historico", tags=["Análisis"])
+@app.get("/analisis-historico", tags=["Anlisis"])
 async def obtener_analisis_historico(
     familia: str,
     tipo: Optional[str] = None,
     meses: Optional[int] = 12,
     version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
 ):
-    """✅ CORREGIDO: Análisis histórico para benchmarking CON VERSION_CALCULO"""
+    """[OK] CORREGIDO: Anlisis histrico para benchmarking CON VERSION_CALCULO"""
     try:
-        logger.info(f"📊 Análisis histórico: {familia}/{tipo} ({version_calculo})")
+        logger.info(f"[DATA] Anlisis histrico: {familia}/{tipo} ({version_calculo})")
 
         # Query base actualizada CON VERSION_CALCULO
         base_params = [familia, version_calculo, meses]
@@ -913,13 +914,13 @@ async def obtener_analisis_historico(
         }
 
         logger.info(
-            f"✅ Análisis histórico completado para {familia}/{tipo} ({version_calculo})"
+            f"[OK] Anlisis histrico completado para {familia}/{tipo} ({version_calculo})"
         )
         return respuesta
 
     except Exception as e:
-        logger.error(f"❌ Error en análisis histórico: {e}")
-        raise HTTPException(status_code=500, detail=f"Error en análisis: {str(e)}")
+        logger.error(f"[ERROR] Error en anlisis histrico: {e}")
+        raise HTTPException(status_code=500, detail=f"Error en anlisis: {str(e)}")
 
 
 # =====================================================================
@@ -929,7 +930,7 @@ async def obtener_analisis_historico(
 
 @app.get("/categoria-lote/{cantidad}", tags=["Utilidades"])
 async def categorizar_lote_por_cantidad(cantidad: int):
-    """Categoriza un lote basándose en cantidad de prendas"""
+    """Categoriza un lote basndose en cantidad de prendas"""
     try:
         categoria, factor = factores.categorizar_lote(cantidad)
         return {
@@ -945,7 +946,7 @@ async def categorizar_lote_por_cantidad(cantidad: int):
 
 @app.get("/factor-marca/{cliente}", tags=["Utilidades"])
 async def obtener_factor_marca(cliente: str):
-    """Obtiene factor de marca para un cliente específico"""
+    """Obtiene factor de marca para un cliente especfico"""
     try:
         factor = factores.obtener_factor_marca(cliente)
         return {
@@ -965,17 +966,17 @@ async def obtener_factor_marca(cliente: str):
 
 
 # =====================================================================
-# ENDPOINTS DE INFORMACIÓN SISTEMA
+# ENDPOINTS DE INFORMACIN SISTEMA
 # =====================================================================
 
 
-@app.get("/info-fechas-corrida", tags=["Análisis"])
+@app.get("/info-fechas-corrida", tags=["Anlisis"])
 async def obtener_info_fechas_corrida(
     version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
 ):
-    """✅ CORREGIDO: Obtiene información sobre las fechas de corrida CON VERSION_CALCULO"""
+    """[OK] CORREGIDO: Obtiene informacin sobre las fechas de corrida CON VERSION_CALCULO"""
     try:
-        logger.info(f"📅 Obteniendo fechas corrida para versión: {version_calculo}")
+        logger.info(f" Obteniendo fechas corrida para versin: {version_calculo}")
 
         info_fechas = {}
         tablas = ["costo_op_detalle", "resumen_wip_por_prenda", "historial_estilos"]
@@ -1009,17 +1010,17 @@ async def obtener_info_fechas_corrida(
             "version_calculo": version_calculo,
         }
 
-        logger.info(f"✅ Fechas corrida obtenidas para {version_calculo}")
+        logger.info(f"[OK] Fechas corrida obtenidas para {version_calculo}")
         return respuesta
 
     except Exception as e:
-        logger.error(f"❌ Error obteniendo info fechas corrida: {e}")
+        logger.error(f"[ERROR] Error obteniendo info fechas corrida: {e}")
         raise HTTPException(
             status_code=500, detail=f"Error obteniendo fechas: {str(e)}"
         )
 
 
-@app.get("/verificar-estilo-completo/{codigo_estilo}", tags=["Búsqueda"])
+@app.get("/verificar-estilo-completo/{codigo_estilo}", tags=["Bsqueda"])
 async def verificar_estilo_completo(
     codigo_estilo: str,
     familia_producto: Optional[str] = None,
@@ -1027,30 +1028,30 @@ async def verificar_estilo_completo(
     version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
 ):
     """
-    ✅ ENDPOINT NUEVO: Verificación completa con auto-completado y ruta
-    Este endpoint era referenciado en el frontend pero no existía
+    [OK] ENDPOINT NUEVO: Verificacin completa con auto-completado y ruta
+    Este endpoint era referenciado en el frontend pero no exista
     """
     try:
         logger.info(
-            f"🔍 Verificación completa para estilo: {codigo_estilo} (versión: {version_calculo})"
+            f" Verificacin completa para estilo: {codigo_estilo} (versin: {version_calculo})"
         )
 
-        # PASO 1: Verificación básica
+        # PASO 1: Verificacin bsica
         existe = await tdv_queries.verificar_estilo_existente(
             codigo_estilo, version_calculo
         )
         es_nuevo = not existe
 
         logger.info(
-            f"🔍 Resultado verificación básica - existe: {existe}, es_nuevo: {es_nuevo}"
+            f" Resultado verificacin bsica - existe: {existe}, es_nuevo: {es_nuevo}"
         )
 
-        # PASO 2: Información detallada si existe
+        # PASO 2: Informacin detallada si existe
         info_detallada = await tdv_queries.obtener_info_detallada_estilo(
             codigo_estilo, version_calculo
         )
 
-        # PASO 3: Determinar categoría y auto-completado
+        # PASO 3: Determinar categora y auto-completado
         if info_detallada.get("encontrado", False):
             categoria = info_detallada.get("categoria", "Nuevo")
             volumen_historico = info_detallada.get("volumen_total", 0)
@@ -1058,7 +1059,7 @@ async def verificar_estilo_completo(
             tipo_autocompletado = info_detallada.get("tipo_prenda")
 
             logger.info(
-                f"✅ Info detallada encontrada - categoría: {categoria}, volumen: {volumen_historico}"
+                f"[OK] Info detallada encontrada - categora: {categoria}, volumen: {volumen_historico}"
             )
         else:
             categoria = "Nuevo"
@@ -1066,7 +1067,7 @@ async def verificar_estilo_completo(
             familia_autocompletada = None
             tipo_autocompletado = None
 
-            logger.info(f"⚠️ Info detallada NO encontrada para {codigo_estilo}")
+            logger.info(f"[WARN] Info detallada NO encontrada para {codigo_estilo}")
 
         # PASO 4: Respuesta estructurada
         resultado = {
@@ -1088,7 +1089,7 @@ async def verificar_estilo_completo(
             },
         }
 
-        # PASO 5: Ruta automática para estilos nuevos (si se proporcionan familia/tipo)
+        # PASO 5: Ruta automtica para estilos nuevos (si se proporcionan familia/tipo)
         if es_nuevo and familia_producto and tipo_prenda:
             try:
                 ruta_recomendada = await tdv_queries.obtener_ruta_textil_recomendada(
@@ -1133,43 +1134,43 @@ async def verificar_estilo_completo(
                 )
 
                 logger.info(
-                    f"✅ Ruta automática agregada para estilo nuevo: {codigo_estilo}"
+                    f"[OK] Ruta automtica agregada para estilo nuevo: {codigo_estilo}"
                 )
 
             except Exception as e:
-                logger.warning(f"⚠️ Error obteniendo ruta automática: {e}")
+                logger.warning(f"[WARN] Error obteniendo ruta automtica: {e}")
                 resultado["ruta_automatica"] = {"disponible": False, "error": str(e)}
 
         logger.info(
-            f"✅ Verificación completa finalizada para {codigo_estilo}: {resultado}"
+            f"[OK] Verificacin completa finalizada para {codigo_estilo}: {resultado}"
         )
         return resultado
 
     except Exception as e:
-        logger.error(f"❌ Error en verificación completa: {e}")
-        raise HTTPException(status_code=500, detail=f"Error en verificación: {str(e)}")
+        logger.error(f"[ERROR] Error en verificacin completa: {e}")
+        raise HTTPException(status_code=500, detail=f"Error en verificacin: {str(e)}")
 
 
-@app.get("/autocompletar-estilo/{codigo_estilo}", tags=["Búsqueda"])
+@app.get("/autocompletar-estilo/{codigo_estilo}", tags=["Bsqueda"])
 async def autocompletar_estilo_recurrente(
     codigo_estilo: str,
     version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
 ):
     """
-    ✅ ENDPOINT NUEVO: Auto-completa información para estilos recurrentes
+    [OK] ENDPOINT NUEVO: Auto-completa informacin para estilos recurrentes
     """
     try:
         logger.info(
-            f"🔍 Auto-completado solicitado para: {codigo_estilo} (versión: {version_calculo})"
+            f" Auto-completado solicitado para: {codigo_estilo} (versin: {version_calculo})"
         )
 
-        # Obtener información detallada
+        # Obtener informacin detallada
         info_detallada = await tdv_queries.obtener_info_detallada_estilo(
             codigo_estilo, version_calculo
         )
 
         if info_detallada.get("encontrado", False):
-            logger.info(f"✅ Auto-completado disponible para {codigo_estilo}")
+            logger.info(f"[OK] Auto-completado disponible para {codigo_estilo}")
 
             return {
                 "codigo_estilo": codigo_estilo,
@@ -1188,7 +1189,7 @@ async def autocompletar_estilo_recurrente(
                 },
             }
         else:
-            logger.info(f"⚠️ Auto-completado NO disponible para {codigo_estilo}")
+            logger.info(f"[WARN] Auto-completado NO disponible para {codigo_estilo}")
 
             return {
                 "codigo_estilo": codigo_estilo,
@@ -1200,7 +1201,7 @@ async def autocompletar_estilo_recurrente(
             }
 
     except Exception as e:
-        logger.error(f"❌ Error en autocompletado: {e}")
+        logger.error(f"[ERROR] Error en autocompletado: {e}")
         raise HTTPException(
             status_code=500, detail=f"Error obteniendo autocompletado: {str(e)}"
         )
@@ -1212,12 +1213,12 @@ async def debug_estilo_clasificacion(
     version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
 ):
     """
-    🔍 ENDPOINT DE DEBUG: Para diagnosticar problemas de clasificación
+     ENDPOINT DE DEBUG: Para diagnosticar problemas de clasificacin
     """
     try:
         debug_info = {}
 
-        # 1. Verificación en historial_estilos
+        # 1. Verificacin en historial_estilos
         query_historial = f"""
         SELECT COUNT(*) as total, MAX(fecha_corrida) as ultima_corrida
         FROM {settings.db_schema}.historial_estilos
@@ -1230,7 +1231,7 @@ async def debug_estilo_clasificacion(
             resultado_historial[0] if resultado_historial else {}
         )
 
-        # 2. Verificación en costo_op_detalle
+        # 2. Verificacin en costo_op_detalle
         query_ops = f"""
         SELECT
           COUNT(*) as total_ops,
@@ -1245,7 +1246,7 @@ async def debug_estilo_clasificacion(
         )
         debug_info["costo_op_detalle"] = resultado_ops[0] if resultado_ops else {}
 
-        # 3. Búsqueda con LIKE
+        # 3. Bsqueda con LIKE
         query_like = f"""
         SELECT codigo_estilo, COUNT(*) as total
         FROM {settings.db_schema}.historial_estilos
@@ -1258,7 +1259,7 @@ async def debug_estilo_clasificacion(
         )
         debug_info["busqueda_similar"] = resultado_like
 
-        # 4. Función actual de verificación
+        # 4. Funcin actual de verificacin
         existe_actual = await tdv_queries.verificar_estilo_existente(
             codigo_estilo, version_calculo
         )
@@ -1278,7 +1279,7 @@ async def debug_estilo_clasificacion(
         }
 
     except Exception as e:
-        logger.error(f"❌ Error en debug: {e}")
+        logger.error(f"[ERROR] Error en debug: {e}")
         return {
             "codigo_estilo": codigo_estilo,
             "error": str(e),
@@ -1286,18 +1287,18 @@ async def debug_estilo_clasificacion(
         }
 
 
-@app.get("/versiones-calculo", tags=["Configuración"])
+@app.get("/versiones-calculo", tags=["Configuracin"])
 async def obtener_versiones_calculo():
-    """✅ CORREGIDO: Obtiene información sobre las versiones de cálculo disponibles"""
+    """[OK] CORREGIDO: Obtiene informacin sobre las versiones de clculo disponibles"""
     try:
-        logger.info("📋 Obteniendo información de versiones de cálculo")
+        logger.info("[INFO] Obteniendo informacin de versiones de clculo")
 
         versiones_info = {}
         versiones = ["FLUIDO", "truncado"]
 
         for version in versiones:
             try:
-                # Obtener estadísticas básicas por versión
+                # Obtener estadsticas bsicas por versin
                 query = f"""
                 SELECT
                   COUNT(*) as total_registros,
@@ -1331,51 +1332,51 @@ async def obtener_versiones_calculo():
             "versiones_disponibles": versiones_info,
             "version_por_defecto": "FLUIDA",
             "descripcion": {
-                "FLUIDA": "Metodología de cálculo actual con optimizaciones",
-                "truncado": "Metodología de cálculo con datos truncados/limitados",
+                "FLUIDA": "Metodologa de clculo actual con optimizaciones",
+                "truncado": "Metodologa de clculo con datos truncados/limitados",
             },
             "timestamp_consulta": datetime.now(),
         }
 
-        logger.info(f"✅ Versiones de cálculo obtenidas: {list(versiones_info.keys())}")
+        logger.info(f"[OK] Versiones de clculo obtenidas: {list(versiones_info.keys())}")
         return respuesta
 
     except Exception as e:
-        logger.error(f"❌ Error obteniendo versiones de cálculo: {e}")
+        logger.error(f"[ERROR] Error obteniendo versiones de clculo: {e}")
         raise HTTPException(
             status_code=500, detail=f"Error obteniendo versiones: {str(e)}"
         )
 
 
 # =====================================================================
-# STARTUP Y CONFIGURACIÓN
+# STARTUP Y CONFIGURACIN
 # =====================================================================
 
 
 @app.on_event("startup")
 async def startup_event():
-    """Eventos de inicio de la aplicación"""
-    logger.info("🚀 Iniciando Sistema Cotizador TDV CORREGIDO")
-    logger.info(f"📋 Versión: {settings.api_version}")
-    logger.info(f"🗄️ Base de datos: {settings.db_host}")
-    logger.info(f"🌐 CORS habilitado para: {settings.cors_origins}")
-    logger.info("✅ CORRECCIONES APLICADAS:")
+    """Eventos de inicio de la aplicacin"""
+    logger.info("[STARTUP] Iniciando Sistema Cotizador TDV CORREGIDO")
+    logger.info(f"[VERSION] Versi_n: {settings.api_version}")
+    logger.info(f"[DATABASE] Base de datos: {settings.db_host}")
+    logger.info(f"[CORS] CORS habilitado para: {settings.cors_origins}")
+    logger.info("[OK] CORRECCIONES APLICADAS:")
     logger.info(
-        "   - ✅ Nuevos endpoints: /verificar-estilo-completo y /ops-utilizadas-cotizacion"
+        "   - [OK] Nuevos endpoints: /verificar-estilo-completo y /ops-utilizadas-cotizacion"
     )
-    logger.info("   - ✅ Auto-completado inteligente para estilos recurrentes")
-    logger.info("   - ✅ Manejo completo de version_calculo en todos los endpoints")
-    logger.info("   - ✅ WIPs por estabilidad (37,45 = 6 meses | resto = último)")
-    logger.info("   - ✅ Gastos indirectos: (MAX + PROMEDIO)/2")
-    logger.info("   - ✅ Materia prima/avios: último costo")
-    logger.info("   - ✅ Filtros por fecha_corrida en lugar de GETDATE()")
-    logger.info("   - ✅ Rutas textiles restauradas y mejoradas")
-    logger.info("   - ✅ Logging mejorado con emojis para mejor seguimiento")
+    logger.info("   - [OK] Auto-completado inteligente para estilos recurrentes")
+    logger.info("   - [OK] Manejo completo de version_calculo en todos los endpoints")
+    logger.info("   - [OK] WIPs por estabilidad (37,45 = 6 meses | resto = ultlast)")
+    logger.info("   - [OK] Gastos indirectos: (MAX + PROMEDIO)/2")
+    logger.info("   - [OK] Materia prima/avios: ltimo costo")
+    logger.info("   - [OK] Filtros por fecha_corrida en lugar de GETDATE()")
+    logger.info("   - [OK] Rutas textiles restauradas y mejoradas")
+    logger.info("   - [OK] Logging mejorado con emojis para mejor seguimiento")
 
-    # Verificar conexión inicial
+    # Verificar conexin inicial
     try:
         tablas = await tdv_queries.health_check()
-        logger.info(f"📋 Tablas verificadas: {tablas}")
+        logger.info(f"[INFO] Tablas verificadas: {tablas}")
 
         # Verificar versiones disponibles
         try:
@@ -1388,19 +1389,19 @@ async def startup_event():
             versiones_resultado = await tdv_queries.db.query(versiones_query)
 
             if versiones_resultado:
-                logger.info("📊 Versiones de cálculo disponibles:")
+                logger.info("[DATA] Versiones de clculo disponibles:")
                 for version_info in versiones_resultado:
                     version, registros = version_info
                     logger.info(f"     - {version}: {registros} registros")
             else:
                 logger.warning(
-                    "⚠️ No se encontraron versiones de cálculo en costo_op_detalle"
+                    "[WARN] No se encontraron versiones de clculo en costo_op_detalle"
                 )
 
         except Exception as e:
-            logger.warning(f"⚠️ Error verificando versiones de cálculo: {e}")
+            logger.warning(f"[WARN] Error verificando versiones de clculo: {e}")
 
-        # Verificar fechas de corrida por versión
+        # Verificar fechas de corrida por versin
         for tabla in ["costo_op_detalle", "resumen_wip_por_prenda"]:
             try:
                 for version in ["FLUIDO", "truncado"]:
@@ -1411,22 +1412,22 @@ async def startup_event():
                         if fecha_max:
                             dias_antiguedad = (datetime.now() - fecha_max).days
                             logger.info(
-                                f"📅 {tabla} ({version}): última corrida {fecha_max} ({dias_antiguedad} días)"
+                                f" {tabla} ({version}): ltima corrida {fecha_max} ({dias_antiguedad} das)"
                             )
                     except Exception:
-                        # Si no existe la versión, no es crítico
+                        # Si no existe la versin, no es crtico
                         pass
             except Exception as e:
-                logger.warning(f"⚠️ {tabla}: error obteniendo fechas corrida - {e}")
+                logger.warning(f"[WARN] {tabla}: error obteniendo fechas corrida - {e}")
 
     except Exception as e:
-        logger.error(f"❌ Error verificando BD en startup: {e}")
+        logger.error(f"[ERROR] Error verificando BD en startup: {e}")
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    """Eventos de cierre de la aplicación"""
-    logger.info("🛑 Cerrando Sistema Cotizador TDV")
+    """Eventos de cierre de la aplicacin"""
+    logger.info(" Cerrando Sistema Cotizador TDV")
 
 
 # =====================================================================
@@ -1436,7 +1437,7 @@ async def shutdown_event():
 if __name__ == "__main__":
     import uvicorn
 
-    logger.info(f"🚀 Iniciando servidor en {settings.api_host}:{settings.api_port}")
+    logger.info(f"[STARTUP] Iniciando servidor en {settings.api_host}:{settings.api_port}")
     uvicorn.run(
         "smp.main:app",
         host=settings.api_host,

@@ -2,11 +2,11 @@
 =====================================================================
 MODELOS PYDANTIC - BACKEND TDV COTIZADOR - COMPLETAMENTE CORREGIDOS
 =====================================================================
-✅ Nuevos modelos para auto-completado
-✅ Modelos para OPs reales utilizadas
-✅ Modelos mejorados para respuestas completas
-✅ Validaciones robustas
-✅ Compatibilidad total con frontend corregido
+ Nuevos modelos para auto-completado
+ Modelos para OPs reales utilizadas
+ Modelos mejorados para respuestas completas
+ Validaciones robustas
+ Compatibilidad total con frontend corregido
 """
 
 from pydantic import BaseModel, Field, field_validator
@@ -21,14 +21,14 @@ from enum import Enum
 
 
 class VersionCalculo(str, Enum):
-    """Versiones de cálculo disponibles"""
+    """Versiones de clculo disponibles"""
 
     FLUIDO = "FLUIDO"  # Valor que acepta el frontend/API
     TRUNCADO = "truncado"
 
 
 class TipoEstilo(str, Enum):
-    """Tipos de estilo según volumen histórico"""
+    """Tipos de estilo segn volumen histrico"""
 
     NUEVO = "Nuevo"
     RECURRENTE = "Recurrente"
@@ -61,7 +61,7 @@ class WipSeleccionada(BaseModel):
 
 
 class WipConfiguracion(BaseModel):
-    """Configuración de WIP para respuesta"""
+    """Configuracin de WIP para respuesta"""
 
     wip_id: str = Field(..., description="ID de la WIP")
     nombre: str = Field(..., description="Nombre de la WIP")
@@ -70,7 +70,7 @@ class WipConfiguracion(BaseModel):
 
 
 class CotizacionInput(BaseModel):
-    """✅ MODELO PRINCIPAL CORREGIDO: Input para cotización (alineado con frontend)"""
+    """ MODELO PRINCIPAL CORREGIDO: Input para cotizacin (alineado con frontend)"""
 
     # Campos exactos del frontend
     cliente_marca: str = Field(
@@ -78,7 +78,7 @@ class CotizacionInput(BaseModel):
     )
     # NOTA: temporada y familia_producto ahora son OPCIONALES (no se usan en la UI)
     temporada: Optional[str] = Field(None, max_length=50, description="Temporada (opcional)")
-    categoria_lote: str = Field(..., description="Categoría del lote")
+    categoria_lote: str = Field(..., description="Categora del lote")
     familia_producto: Optional[str] = Field(
         None, max_length=100, description="Familia de producto (opcional)"
     )
@@ -86,7 +86,7 @@ class CotizacionInput(BaseModel):
         ..., min_length=1, max_length=100, description="Tipo de prenda"
     )
     codigo_estilo: str = Field(
-        ..., min_length=1, max_length=50, description="Código del estilo"
+        ..., min_length=1, max_length=50, description="Cdigo del estilo"
     )
     usuario: str = Field(
         default="Sistema", max_length=100, description="Usuario que cotiza"
@@ -101,19 +101,19 @@ class CotizacionInput(BaseModel):
         None, ge=0, le=100, description="Margen adicional en %"
     )
 
-    # ✅ CORREGIDO: Campo para versión de cálculo con enum
+    #  CORREGIDO: Campo para versin de clculo con enum
     version_calculo: VersionCalculo = Field(
-        default=VersionCalculo.FLUIDO, description="Versión de cálculo"
+        default=VersionCalculo.FLUIDO, description="Versin de clculo"
     )
 
-    # Campos determinados automáticamente por el backend
+    # Campos determinados automticamente por el backend
     es_estilo_nuevo: Optional[bool] = Field(
-        None, description="Se determina automáticamente"
+        None, description="Se determina automticamente"
     )
 
     # OPs seleccionadas para estimar costos ponderados
     cod_ordpros: Optional[List[str]] = Field(
-        None, description="Códigos de OPs seleccionadas para calcular costos ponderados"
+        None, description="Cdigos de OPs seleccionadas para calcular costos ponderados"
     )
 
     # WIPs para estilos nuevos
@@ -128,18 +128,18 @@ class CotizacionInput(BaseModel):
     def validar_categoria_lote(cls, v):
         categorias_validas = [
             "Micro Lote",
-            "Lote Pequeño",
+            "Lote Pequeo",
             "Lote Mediano",
             "Lote Grande",
             "Lote Masivo",
         ]
         if v not in categorias_validas:
-            raise ValueError(f"Categoría debe ser una de: {categorias_validas}")
+            raise ValueError(f"Categora debe ser una de: {categorias_validas}")
         return v
 
     @field_validator("version_calculo", mode="before")
     def validar_version_calculo(cls, v):
-        """Valida y normaliza la versión de cálculo"""
+        """Valida y normaliza la versin de clculo"""
         if isinstance(v, str):
             # Aceptar tanto "FLUIDO" (UI) como "FLUIDA" (BD)
             if v.upper() in ("FLUIDO", "FLUIDA"):
@@ -147,19 +147,19 @@ class CotizacionInput(BaseModel):
             elif v.lower() == "truncado":
                 return VersionCalculo.TRUNCADO
             else:
-                raise ValueError(f"Versión debe ser FLUIDO/FLUIDA o truncado, recibido: {v}")
+                raise ValueError(f"Versin debe ser FLUIDO/FLUIDA o truncado, recibido: {v}")
         return v
 
 
 # =====================================================================
-# 🆕 NUEVOS MODELOS PARA AUTO-COMPLETADO
+#  NUEVOS MODELOS PARA AUTO-COMPLETADO
 # =====================================================================
 
 
 class AutoCompletadoInfo(BaseModel):
-    """✅ NUEVO: Información de auto-completado para estilos recurrentes"""
+    """ NUEVO: Informacin de auto-completado para estilos recurrentes"""
 
-    disponible: bool = Field(..., description="Si el auto-completado está disponible")
+    disponible: bool = Field(..., description="Si el auto-completado est disponible")
     familia_producto: Optional[str] = Field(
         None, description="Familia de producto sugerida"
     )
@@ -167,80 +167,80 @@ class AutoCompletadoInfo(BaseModel):
 
 
 class InfoEstiloDetallada(BaseModel):
-    """✅ NUEVO: Información detallada de un estilo"""
+    """ NUEVO: Informacin detallada de un estilo"""
 
-    codigo_estilo: str = Field(..., description="Código del estilo")
+    codigo_estilo: str = Field(..., description="Cdigo del estilo")
     familia_producto: Optional[str] = Field(None, description="Familia de producto")
     tipo_prenda: Optional[str] = Field(None, description="Tipo de prenda")
     cliente_principal: Optional[str] = Field(None, description="Cliente principal")
     total_ops: int = Field(default=0, description="Total de OPs encontradas")
-    volumen_total: int = Field(default=0, description="Volumen total histórico")
+    volumen_total: int = Field(default=0, description="Volumen total histrico")
     esfuerzo_promedio: float = Field(default=6.0, description="Esfuerzo promedio")
     ultima_facturacion: Optional[datetime] = Field(
-        None, description="Última facturación"
+        None, description="ltima facturacin"
     )
     primera_facturacion: Optional[datetime] = Field(
-        None, description="Primera facturación"
+        None, description="Primera facturacin"
     )
     categoria: TipoEstilo = Field(
-        default=TipoEstilo.NUEVO, description="Categoría del estilo"
+        default=TipoEstilo.NUEVO, description="Categora del estilo"
     )
     encontrado: bool = Field(default=False, description="Si fue encontrado en BD")
-    fuente: Optional[str] = Field(None, description="Fuente de la información")
+    fuente: Optional[str] = Field(None, description="Fuente de la informacin")
     version_calculo: VersionCalculo = Field(
-        default=VersionCalculo.FLUIDO, description="Versión usada"
+        default=VersionCalculo.FLUIDO, description="Versin usada"
     )
 
 
 class VerificacionEstiloCompleta(BaseModel):
-    """✅ NUEVO: Respuesta completa de verificación de estilo"""
+    """ NUEVO: Respuesta completa de verificacin de estilo"""
 
-    codigo_estilo: str = Field(..., description="Código del estilo verificado")
+    codigo_estilo: str = Field(..., description="Cdigo del estilo verificado")
     existe_en_bd: bool = Field(..., description="Si existe en base de datos")
     es_estilo_nuevo: bool = Field(..., description="Si es considerado nuevo")
-    categoria: TipoEstilo = Field(..., description="Categoría determinada")
-    volumen_historico: int = Field(default=0, description="Volumen histórico")
-    version_calculo: VersionCalculo = Field(..., description="Versión de cálculo usada")
+    categoria: TipoEstilo = Field(..., description="Categora determinada")
+    volumen_historico: int = Field(default=0, description="Volumen histrico")
+    version_calculo: VersionCalculo = Field(..., description="Versin de clculo usada")
     autocompletado: AutoCompletadoInfo = Field(
         ..., description="Info de auto-completado"
     )
     info_detallada: Optional[InfoEstiloDetallada] = Field(
-        None, description="Información detallada si existe"
+        None, description="Informacin detallada si existe"
     )
     timestamp: datetime = Field(
-        default_factory=datetime.now, description="Momento de la verificación"
+        default_factory=datetime.now, description="Momento de la verificacin"
     )
 
 
 # =====================================================================
-# 🆕 NUEVOS MODELOS PARA OPS REALES
+#  NUEVOS MODELOS PARA OPS REALES
 # =====================================================================
 
 
 class CostosComponentesOP(BaseModel):
-    """✅ NUEVO: Costos por componentes de una OP"""
+    """ NUEVO: Costos por componentes de una OP"""
 
     textil: float = Field(default=0.0, description="Costo textil unitario")
     manufactura: float = Field(default=0.0, description="Costo manufactura unitario")
-    avios: float = Field(default=0.0, description="Costo avíos unitario")
+    avios: float = Field(default=0.0, description="Costo avos unitario")
     materia_prima: float = Field(
         default=0.0, description="Costo materia prima unitario"
     )
     indirecto_fijo: float = Field(
         default=0.0, description="Costo indirecto fijo unitario"
     )
-    gasto_admin: float = Field(default=0.0, description="Gasto administración unitario")
+    gasto_admin: float = Field(default=0.0, description="Gasto administracin unitario")
     gasto_ventas: float = Field(default=0.0, description="Gasto ventas unitario")
 
 
 class OpReal(BaseModel):
-    """✅ NUEVO: Orden de producción real utilizada en cálculo"""
+    """ NUEVO: Orden de produccin real utilizada en clculo"""
 
-    cod_ordpro: str = Field(..., description="Código de orden de producción")
-    estilo_propio: str = Field(..., description="Código del estilo")
+    cod_ordpro: str = Field(..., description="Cdigo de orden de produccin")
+    estilo_propio: str = Field(..., description="Cdigo del estilo")
     cliente: str = Field(..., description="Cliente de la OP")
     fecha_facturacion: Optional[datetime] = Field(
-        None, description="Fecha de facturación"
+        None, description="Fecha de facturacin"
     )
     prendas_requeridas: int = Field(..., ge=0, description="Cantidad de prendas")
     monto_factura: float = Field(..., ge=0, description="Monto total facturado")
@@ -253,28 +253,28 @@ class OpReal(BaseModel):
         default=6, ge=1, le=10, description="Esfuerzo total de la OP"
     )
 
-    # ✅ NUEVOS: Campos para límites aplicados
+    #  NUEVOS: Campos para lmites aplicados
     precio_ajustado: Optional[bool] = Field(
-        default=False, description="Si el precio fue ajustado por límites"
+        default=False, description="Si el precio fue ajustado por lmites"
     )
     precio_original: Optional[float] = Field(
         None, description="Precio original antes de ajustes"
     )
     total_ajustes_aplicados: Optional[int] = Field(
-        default=0, description="Número de ajustes aplicados"
+        default=0, description="Nmero de ajustes aplicados"
     )
 
 
 class EstadisticasOPs(BaseModel):
-    """✅ NUEVO: Estadísticas de las OPs utilizadas"""
+    """ NUEVO: Estadsticas de las OPs utilizadas"""
 
     total_ops: int = Field(..., ge=0, description="Total de OPs encontradas")
     costo_promedio: float = Field(..., ge=0, description="Costo promedio")
-    costo_min: float = Field(..., ge=0, description="Costo mínimo")
-    costo_max: float = Field(..., ge=0, description="Costo máximo")
+    costo_min: float = Field(..., ge=0, description="Costo mnimo")
+    costo_max: float = Field(..., ge=0, description="Costo mximo")
     precio_promedio: Optional[float] = Field(None, ge=0, description="Precio promedio")
-    precio_min: Optional[float] = Field(None, ge=0, description="Precio mínimo")
-    precio_max: Optional[float] = Field(None, ge=0, description="Precio máximo")
+    precio_min: Optional[float] = Field(None, ge=0, description="Precio mnimo")
+    precio_max: Optional[float] = Field(None, ge=0, description="Precio mximo")
     esfuerzo_promedio: float = Field(
         default=6.0, ge=1, le=10, description="Esfuerzo promedio"
     )
@@ -287,33 +287,33 @@ class EstadisticasOPs(BaseModel):
 
 
 class ParametrosBusquedaOPs(BaseModel):
-    """✅ NUEVO: Parámetros usados para buscar OPs"""
+    """ NUEVO: Parmetros usados para buscar OPs"""
 
-    codigo_estilo: Optional[str] = Field(None, description="Código de estilo buscado")
+    codigo_estilo: Optional[str] = Field(None, description="Cdigo de estilo buscado")
     familia_producto: Optional[str] = Field(None, description="Familia de producto")
     tipo_prenda: Optional[str] = Field(None, description="Tipo de prenda")
     cliente: Optional[str] = Field(None, description="Cliente")
-    version_calculo: VersionCalculo = Field(..., description="Versión de cálculo usada")
+    version_calculo: VersionCalculo = Field(..., description="Versin de clculo usada")
 
 
 class OpsDataResponse(BaseModel):
-    """✅ NUEVO: Datos de OPs utilizadas"""
+    """ NUEVO: Datos de OPs utilizadas"""
 
     ops_utilizadas: List[OpReal] = Field(..., description="Lista de OPs utilizadas")
     metodo_utilizado: str = Field(
-        ..., description="Método usado para encontrar las OPs"
+        ..., description="Mtodo usado para encontrar las OPs"
     )
-    estadisticas: EstadisticasOPs = Field(..., description="Estadísticas de las OPs")
+    estadisticas: EstadisticasOPs = Field(..., description="Estadsticas de las OPs")
     parametros_busqueda: ParametrosBusquedaOPs = Field(
-        ..., description="Parámetros de búsqueda"
+        ..., description="Parmetros de bsqueda"
     )
     limites_aplicados: Optional[bool] = Field(
-        default=False, description="Si se aplicaron límites"
+        default=False, description="Si se aplicaron lmites"
     )
 
 
 class OpsUtilizadasResponse(BaseModel):
-    """✅ NUEVO: Respuesta completa de OPs utilizadas"""
+    """ NUEVO: Respuesta completa de OPs utilizadas"""
 
     ops_data: OpsDataResponse = Field(..., description="Datos de las OPs")
     timestamp: datetime = Field(
@@ -323,23 +323,23 @@ class OpsUtilizadasResponse(BaseModel):
         ..., ge=0, description="Total de OPs encontradas"
     )
     parametros_entrada: Dict[str, Any] = Field(
-        ..., description="Parámetros de entrada originales"
+        ..., description="Parmetros de entrada originales"
     )
 
 
 # =====================================================================
-# MODELOS DE BÚSQUEDA Y RESPUESTA (MEJORADOS)
+# MODELOS DE BSQUEDA Y RESPUESTA (MEJORADOS)
 # =====================================================================
 
 
 class EstiloSimilar(BaseModel):
-    """Estilo similar encontrado en búsqueda"""
+    """Estilo similar encontrado en bsqueda"""
 
-    codigo: str = Field(..., description="Código del estilo")
+    codigo: str = Field(..., description="Cdigo del estilo")
     familia_producto: str = Field(..., description="Familia de producto")
     tipo_prenda: str = Field(..., description="Tipo de prenda")
     temporada: Optional[str] = Field(None, description="Temporada")
-    ops_encontradas: int = Field(..., description="Número de OPs encontradas")
+    ops_encontradas: int = Field(..., description="Nmero de OPs encontradas")
     costo_promedio: float = Field(..., description="Costo promedio por prenda")
 
 
@@ -349,12 +349,12 @@ class WipDisponible(BaseModel):
     wip_id: str = Field(..., description="ID de la WIP")
     nombre: str = Field(..., description="Nombre descriptivo")
     costo_actual: float = Field(..., description="Costo actual por prenda")
-    disponible: bool = Field(..., description="Si está disponible")
+    disponible: bool = Field(..., description="Si est disponible")
     grupo: str = Field(..., description="Textil o Manufactura")
 
 
 class ComponenteCosto(BaseModel):
-    """✅ MODELO MEJORADO: Componente individual de costo"""
+    """ MODELO MEJORADO: Componente individual de costo"""
 
     nombre: str = Field(..., description="Nombre del componente")
     costo_unitario: float = Field(..., description="Costo unitario")
@@ -381,54 +381,54 @@ class ComponenteCosto(BaseModel):
 
 
 class InfoComercial(BaseModel):
-    """✅ MODELO MEJORADO: Información comercial avanzada"""
+    """ MODELO MEJORADO: Informacin comercial avanzada"""
 
-    ops_utilizadas: int = Field(..., description="OPs utilizadas para cálculo")
-    historico_volumen: Dict[str, Any] = Field(..., description="Histórico de volumen")
+    ops_utilizadas: int = Field(..., description="OPs utilizadas para clculo")
+    historico_volumen: Dict[str, Any] = Field(..., description="Histrico de volumen")
     tendencias_costos: List[Dict[str, Any]] = Field(
         ..., description="Tendencias de costos"
     )
     analisis_competitividad: Optional[List[Dict[str, Any]]] = Field(
-        None, description="Análisis competitivo"
+        None, description="Anlisis competitivo"
     )
 
 
 # =====================================================================
-# 🆕 NUEVOS MODELOS PARA RUTAS TEXTILES
+#  NUEVOS MODELOS PARA RUTAS TEXTILES
 # =====================================================================
 
 
 class WipRecomendada(BaseModel):
-    """✅ NUEVO: WIP recomendada en ruta textil"""
+    """ NUEVO: WIP recomendada en ruta textil"""
 
     wip_id: str = Field(..., description="ID de la WIP")
     nombre: str = Field(..., description="Nombre de la WIP")
     frecuencia_uso: int = Field(..., ge=0, description="Frecuencia de uso")
     costo_promedio: float = Field(..., ge=0, description="Costo promedio")
-    ultimo_uso: Optional[datetime] = Field(None, description="Último uso registrado")
+    ultimo_uso: Optional[datetime] = Field(None, description="ltimo uso registrado")
     recomendacion: str = Field(
-        ..., description="Nivel de recomendación (Alta/Media/Baja)"
+        ..., description="Nivel de recomendacin (Alta/Media/Baja)"
     )
 
 
 class RutaTextilResponse(BaseModel):
-    """✅ NUEVO: Respuesta de ruta textil recomendada"""
+    """ NUEVO: Respuesta de ruta textil recomendada"""
 
     tipo_prenda: str = Field(..., description="Tipo de prenda")
-    version_calculo: VersionCalculo = Field(..., description="Versión de cálculo usada")
+    version_calculo: VersionCalculo = Field(..., description="Versin de clculo usada")
     wips_recomendadas: List[WipRecomendada] = Field(
         ..., description="WIPs recomendadas"
     )
     wips_textiles_recomendadas: List[WipRecomendada] = Field(
-        ..., description="WIPs textiles específicas"
+        ..., description="WIPs textiles especficas"
     )
     wips_manufactura_recomendadas: List[WipRecomendada] = Field(
-        ..., description="WIPs manufactura específicas"
+        ..., description="WIPs manufactura especficas"
     )
     total_recomendadas: int = Field(..., ge=0, description="Total de WIPs recomendadas")
-    metodo: str = Field(..., description="Método usado para recomendación")
+    metodo: str = Field(..., description="Mtodo usado para recomendacin")
     fecha_analisis: datetime = Field(
-        default_factory=datetime.now, description="Fecha del análisis"
+        default_factory=datetime.now, description="Fecha del anlisis"
     )
     timestamp: Optional[str] = Field(None, description="Timestamp adicional")
 
@@ -439,19 +439,19 @@ class RutaTextilResponse(BaseModel):
 
 
 class CotizacionResponse(BaseModel):
-    """✅ MODELO PRINCIPAL MEJORADO: Respuesta de cotización (formato exacto frontend)"""
+    """ MODELO PRINCIPAL MEJORADO: Respuesta de cotizacin (formato exacto frontend)"""
 
-    # Identificación
-    id_cotizacion: str = Field(..., description="ID único de cotización")
-    fecha_cotizacion: datetime = Field(..., description="Fecha de cotización")
+    # Identificacin
+    id_cotizacion: str = Field(..., description="ID nico de cotizacin")
+    fecha_cotizacion: datetime = Field(..., description="Fecha de cotizacin")
 
     # Inputs procesados (incluye version_calculo)
     inputs: CotizacionInput = Field(..., description="Datos de entrada")
 
-    # Categorización automática
-    categoria_lote: str = Field(..., description="Categoría del lote determinada")
+    # Categorizacin automtica
+    categoria_lote: str = Field(..., description="Categora del lote determinada")
     categoria_esfuerzo: Optional[int] = Field(None, description="Nivel de esfuerzo")
-    categoria_estilo: TipoEstilo = Field(..., description="Categoría del estilo")
+    categoria_estilo: TipoEstilo = Field(..., description="Categora del estilo")
     factor_marca: float = Field(..., description="Factor aplicado por marca")
 
     # Componentes de costo
@@ -459,16 +459,16 @@ class CotizacionResponse(BaseModel):
         ..., description="Desglose de componentes"
     )
 
-    # Cálculos individuales
+    # Clculos individuales
     costo_textil: float = Field(..., description="Costo textil unitario")
     costo_manufactura: float = Field(..., description="Costo manufactura unitario")
-    costo_avios: float = Field(..., description="Costo avíos unitario")
+    costo_avios: float = Field(..., description="Costo avos unitario")
     costo_materia_prima: float = Field(..., description="Costo materia prima unitario")
     costo_indirecto_fijo: float = Field(
         ..., description="Costo indirecto fijo unitario"
     )
     gasto_administracion: float = Field(
-        ..., description="Gasto administración unitario"
+        ..., description="Gasto administracin unitario"
     )
     gasto_ventas: float = Field(..., description="Gasto ventas unitario")
     costo_base_total: float = Field(..., description="Costo base total unitario")
@@ -488,20 +488,20 @@ class CotizacionResponse(BaseModel):
     alertas: List[str] = Field(..., description="Lista de alertas/advertencias")
 
     # Info comercial avanzada
-    info_comercial: InfoComercial = Field(..., description="Información comercial")
+    info_comercial: InfoComercial = Field(..., description="Informacin comercial")
 
     # Metadatos de procesamiento
-    metodos_usados: List[str] = Field(..., description="Métodos utilizados")
+    metodos_usados: List[str] = Field(..., description="Mtodos utilizados")
     registros_encontrados: int = Field(..., description="Registros encontrados en BD")
-    precision_estimada: float = Field(..., description="Precisión estimada del cálculo")
+    precision_estimada: float = Field(..., description="Precisin estimada del clculo")
 
-    # ✅ CAMPOS MEJORADOS Y NUEVOS
+    #  CAMPOS MEJORADOS Y NUEVOS
     version_calculo_usada: VersionCalculo = Field(
-        ..., description="Versión de cálculo aplicada"
+        ..., description="Versin de clculo aplicada"
     )
-    codigo_estilo: Optional[str] = Field(None, description="Código del estilo")
+    codigo_estilo: Optional[str] = Field(None, description="Cdigo del estilo")
     volumen_historico: Optional[int] = Field(
-        None, description="Volumen histórico del estilo"
+        None, description="Volumen histrico del estilo"
     )
     estrategia_costos: Optional[str] = Field(
         None, description="Estrategia de costos usada"
@@ -513,15 +513,15 @@ class CotizacionResponse(BaseModel):
         default_factory=dict, description="Metadatos adicionales"
     )
     timestamp: Optional[datetime] = Field(
-        None, description="Timestamp de la cotización"
+        None, description="Timestamp de la cotizacin"
     )
     usuario: Optional[str] = Field(
-        None, description="Usuario que realizó la cotización"
+        None, description="Usuario que realiz la cotizacin"
     )
 
 
 # =====================================================================
-# MODELOS DE UTILIDAD Y CONFIGURACIÓN (MEJORADOS)
+# MODELOS DE UTILIDAD Y CONFIGURACIN (MEJORADOS)
 # =====================================================================
 
 
@@ -535,7 +535,7 @@ class HealthCheck(BaseModel):
 
 
 class ConfiguracionResponse(BaseModel):
-    """Respuesta de configuración del sistema"""
+    """Respuesta de configuracin del sistema"""
 
     rangos_lote: Dict[str, Any] = Field(..., description="Rangos de lote")
     factores_esfuerzo: Dict[str, Any] = Field(..., description="Factores de esfuerzo")
@@ -546,24 +546,24 @@ class ConfiguracionResponse(BaseModel):
 
 
 class WipsDisponiblesResponse(BaseModel):
-    """✅ MODELO MEJORADO: Respuesta de WIPs disponibles"""
+    """ MODELO MEJORADO: Respuesta de WIPs disponibles"""
 
     wips_textiles: List[WipDisponible] = Field(..., description="WIPs textiles")
     wips_manufactura: List[WipDisponible] = Field(..., description="WIPs manufactura")
     total_disponibles: int = Field(..., description="Total de WIPs disponibles")
     fuente: str = Field(..., description="Fuente de los datos")
-    fecha_actualizacion: datetime = Field(..., description="Fecha de actualización")
-    metodo_analisis: Optional[str] = Field(None, description="Método de análisis usado")
+    fecha_actualizacion: datetime = Field(..., description="Fecha de actualizacin")
+    metodo_analisis: Optional[str] = Field(None, description="Mtodo de anlisis usado")
     tipo_prenda_filtro: Optional[str] = Field(
         None, description="Tipo de prenda filtrado"
     )
     version_calculo: VersionCalculo = Field(
-        default=VersionCalculo.FLUIDO, description="Versión de cálculo usada"
+        default=VersionCalculo.FLUIDO, description="Versin de clculo usada"
     )
 
 
 class ErrorResponse(BaseModel):
-    """Respuesta de error estándar"""
+    """Respuesta de error estndar"""
 
     error: str = Field(..., description="Tipo de error")
     mensaje: str = Field(..., description="Mensaje descriptivo")
@@ -574,70 +574,70 @@ class ErrorResponse(BaseModel):
 
 
 # =====================================================================
-# 🆕 NUEVOS MODELOS PARA DATOS MAESTROS
+#  NUEVOS MODELOS PARA DATOS MAESTROS
 # =====================================================================
 
 
 class ClientesResponse(BaseModel):
-    """✅ NUEVO: Respuesta de clientes disponibles"""
+    """ NUEVO: Respuesta de clientes disponibles"""
 
     clientes: List[str] = Field(..., description="Lista de clientes")
     total: int = Field(..., ge=0, description="Total de clientes")
     fuente: str = Field(..., description="Fuente de los datos")
-    version_calculo: VersionCalculo = Field(..., description="Versión de cálculo usada")
+    version_calculo: VersionCalculo = Field(..., description="Versin de clculo usada")
     timestamp: datetime = Field(
         default_factory=datetime.now, description="Timestamp de la consulta"
     )
 
 
 class FamiliasResponse(BaseModel):
-    """✅ NUEVO: Respuesta de familias de productos"""
+    """ NUEVO: Respuesta de familias de productos"""
 
     familias: List[str] = Field(..., description="Lista de familias")
     total: int = Field(..., ge=0, description="Total de familias")
     fuente: str = Field(..., description="Fuente de los datos")
-    version_calculo: VersionCalculo = Field(..., description="Versión de cálculo usada")
+    version_calculo: VersionCalculo = Field(..., description="Versin de clculo usada")
     timestamp: datetime = Field(
         default_factory=datetime.now, description="Timestamp de la consulta"
     )
 
 
 class TiposPrendaResponse(BaseModel):
-    """✅ NUEVO: Respuesta de tipos de prenda"""
+    """ NUEVO: Respuesta de tipos de prenda"""
 
     tipos: List[str] = Field(..., description="Lista de tipos")
     familia: str = Field(..., description="Familia de producto")
     total: int = Field(..., ge=0, description="Total de tipos")
     fuente: str = Field(..., description="Fuente de los datos")
-    version_calculo: VersionCalculo = Field(..., description="Versión de cálculo usada")
+    version_calculo: VersionCalculo = Field(..., description="Versin de clculo usada")
     timestamp: datetime = Field(
         default_factory=datetime.now, description="Timestamp de la consulta"
     )
 
 
 # =====================================================================
-# 🆕 MODELO PARA ANÁLISIS HISTÓRICO
+#  MODELO PARA ANLISIS HISTRICO
 # =====================================================================
 
 
 class AnalisisHistoricoData(BaseModel):
-    """✅ NUEVO: Datos de análisis histórico"""
+    """ NUEVO: Datos de anlisis histrico"""
 
     total_ops: int = Field(..., ge=0, description="Total de OPs")
     total_prendas: int = Field(..., ge=0, description="Total de prendas")
     precio_promedio: float = Field(..., ge=0, description="Precio promedio")
     costo_promedio: float = Field(..., ge=0, description="Costo promedio")
     esfuerzo_promedio: float = Field(..., ge=1, le=10, description="Esfuerzo promedio")
-    clientes_unicos: int = Field(..., ge=0, description="Clientes únicos")
+    clientes_unicos: int = Field(..., ge=0, description="Clientes nicos")
 
 
 class AnalisisHistoricoResponse(BaseModel):
-    """✅ NUEVO: Respuesta de análisis histórico"""
+    """ NUEVO: Respuesta de anlisis histrico"""
 
-    analisis: AnalisisHistoricoData = Field(..., description="Datos del análisis")
-    parametros: Dict[str, Any] = Field(..., description="Parámetros usados")
+    analisis: AnalisisHistoricoData = Field(..., description="Datos del anlisis")
+    parametros: Dict[str, Any] = Field(..., description="Parmetros usados")
     fuente: str = Field(..., description="Fuente de los datos")
-    metodo: str = Field(..., description="Método de análisis")
+    metodo: str = Field(..., description="Mtodo de anlisis")
     timestamp: datetime = Field(
-        default_factory=datetime.now, description="Timestamp del análisis"
+        default_factory=datetime.now, description="Timestamp del anlisis"
     )

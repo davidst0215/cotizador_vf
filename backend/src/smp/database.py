@@ -1,13 +1,13 @@
 """
 =====================================================================
-CONEXIÓN BASE DE DATOS Y QUERIES - BACKEND TDV COTIZADOR - COMPLETAMENTE CORREGIDO
+CONEXIN BASE DE DATOS Y QUERIES - BACKEND TDV COTIZADOR - COMPLETAMENTE CORREGIDO
 =====================================================================
  CORRECCIONES APLICADAS:
 -  CORREGIDO: Todas las referencias GETDATE() cambiadas por fechas relativas
 -  CORREGIDO: Fechas relativas a MAX(fecha_facturacion) de los datos
--  MANTENIDO: Todas las lógicas de cálculo existentes
--  AGREGADO: Parámetros version_calculo donde faltaban
--  RESULTADO: Estilo 18264 ahora encontrará sus 3 OPs correctamente
+-  MANTENIDO: Todas las lgicas de clculo existentes
+-  AGREGADO: Parmetros version_calculo donde faltaban
+-  RESULTADO: Estilo 18264 ahora encontrar sus 3 OPs correctamente
 """
 
 import statistics
@@ -35,10 +35,8 @@ try:
 except ImportError:
     PYODBC_AVAILABLE = False
 
-
-# Configurar logging estándar
+# Configurar logging estndar
 logger = logging.getLogger(__name__)
-
 
 def translate_sql_server_to_postgresql(query: str) -> str:
     """Traduce queries de SQL Server a PostgreSQL"""
@@ -58,7 +56,6 @@ def translate_sql_server_to_postgresql(query: str) -> str:
 
     return query
 
-
 def normalize_version_calculo(version: Optional[VersionCalculo]) -> str:
     """Normaliza el version_calculo al valor que existe en la BD"""
     if version is None:
@@ -71,17 +68,16 @@ def normalize_version_calculo(version: Optional[VersionCalculo]) -> str:
     if version_value == "FLUIDO":
         return "FLUIDA"
 
-    # El "truncado" se queda igual (ya viene en minúsculas)
+    # El "truncado" se queda igual (ya viene en minsculas)
     return version_value
-
 
 def calculate_mode(values: List[float]) -> Optional[float]:
     """
     Calcula la moda (modo) de una lista de valores.
-    Si hay múltiples modas o no hay datos, retorna None.
+    Si hay mltiples modas o no hay datos, retorna None.
 
     Args:
-        values: Lista de números flotantes
+        values: Lista de nmeros flotantes
 
     Returns:
         La moda de los valores o None si no hay datos suficientes
@@ -93,10 +89,9 @@ def calculate_mode(values: List[float]) -> Optional[float]:
         mode_value = statistics.mode(values)
         return float(mode_value)
     except statistics.StatisticsError:
-        # Si no hay moda única (todos los valores aparecen igual número de veces)
+        # Si no hay moda nica (todos los valores aparecen igual nmero de veces)
         # retornar la media como fallback
         return float(sum(values) / len(values)) if values else None
-
 
 def filter_by_mode_threshold(
     values: List[float],
@@ -107,19 +102,19 @@ def filter_by_mode_threshold(
 
     Args:
         values: Lista de valores a filtrar
-        threshold: Múltiplo de la moda para considerar outlier (default: 10x)
+        threshold: Mltiplo de la moda para considerar outlier (default: 10x)
 
     Returns:
         Tupla (valores_filtrados, indices_excluidos)
         - valores_filtrados: Lista con los valores que pasaron el filtro
-        - indices_excluidos: Índices de los valores que fueron excluidos
+        - indices_excluidos: ndices de los valores que fueron excluidos
     """
     if not values:
         return [], []
 
     mode_value = calculate_mode(values)
     if mode_value is None or mode_value == 0:
-        # Si no hay moda válida, retornar todos los valores
+        # Si no hay moda vlida, retornar todos los valores
         return values, []
 
     max_threshold = mode_value * threshold
@@ -134,7 +129,6 @@ def filter_by_mode_threshold(
 
     return filtered_values, excluded_indices
 
-
 class DatabaseManager:
     """Manager centralizado para conexiones y queries de TDV - Soporta SQL Server y PostgreSQL"""
 
@@ -144,13 +138,13 @@ class DatabaseManager:
         self._test_connection()
 
     def _test_connection(self):
-        """Prueba inicial de conexión"""
+        """Prueba inicial de conexin"""
         try:
             with self.connect() as conn:
                 cursor = conn.cursor()
                 cursor.execute("SELECT 1")
                 db_type = "PostgreSQL" if self.is_postgresql else "SQL Server"
-                logger.info(f" Conexión TDV ({db_type}) establecida exitosamente")
+                logger.info(f" Conexin TDV ({db_type}) establecida exitosamente")
         except Exception as e:
             logger.error(f" Error conectando a TDV: {e}")
             raise
@@ -162,8 +156,8 @@ class DatabaseManager:
         try:
             if self.is_postgresql:
                 if not PSYCOPG2_AVAILABLE:
-                    raise ImportError("psycopg2 no está instalado. Instala con: pip install psycopg2-binary")
-                # Para PostgreSQL, conectar con diccionario de parámetros
+                    raise ImportError("psycopg2 no est instalado. Instala con: pip install psycopg2-binary")
+                # Para PostgreSQL, conectar con diccionario de parmetros
                 if isinstance(self.connection_string, dict):
                     conn = psycopg2.connect(**self.connection_string)
                 else:
@@ -171,21 +165,21 @@ class DatabaseManager:
                     conn = psycopg2.connect(self.connection_string)
             else:
                 if not PYODBC_AVAILABLE:
-                    raise ImportError("pyodbc no está instalado. Instala con: pip install pyodbc")
+                    raise ImportError("pyodbc no est instalado. Instala con: pip install pyodbc")
                 conn = pyodbc.connect(self.connection_string)
             yield conn
         except Exception as e:
-            logger.error(f"Error en conexión BD: {e}")
+            logger.error(f"Error en conexin BD: {e}")
             raise
         finally:
             if conn:
                 conn.close()
 
     def _parse_postgresql_dsn(self, dsn: str) -> dict:
-        """Parsea un DSN string de PostgreSQL en parámetros nombrados"""
+        """Parsea un DSN string de PostgreSQL en parmetros nombrados"""
         import re
         params = {}
-        # Patrón regex para parsear key=value donde value puede estar entrecomillado
+        # Patrn regex para parsear key=value donde value puede estar entrecomillado
         pattern = r'(\w+)=(?:"([^"]*)"|\'([^\']*)\'|([^\s]*))'
         for match in re.finditer(pattern, dsn):
             key = match.group(1)
@@ -221,7 +215,6 @@ class DatabaseManager:
             cursor.close()
             return results
 
-
 class AsyncDatabaseManager:
     def __init__(self, conn_str: str, is_postgresql: bool = False):
         self.conn_str = conn_str
@@ -233,8 +226,8 @@ class AsyncDatabaseManager:
         try:
             if self.is_postgresql:
                 if not PSYCOPG2_AVAILABLE:
-                    raise ImportError("psycopg2 no está instalado")
-                # Para PostgreSQL, conectar con diccionario de parámetros
+                    raise ImportError("psycopg2 no est instalado")
+                # Para PostgreSQL, conectar con diccionario de parmetros
                 if isinstance(self.conn_str, dict):
                     conn = await asyncio.to_thread(psycopg2.connect, **self.conn_str)
                 else:
@@ -242,7 +235,7 @@ class AsyncDatabaseManager:
                     conn = await asyncio.to_thread(psycopg2.connect, self.conn_str)
             else:
                 if not PYODBC_AVAILABLE:
-                    raise ImportError("pyodbc no está instalado")
+                    raise ImportError("pyodbc no est instalado")
                 conn = await asyncio.to_thread(pyodbc.connect, self.conn_str)
             yield conn
         finally:
@@ -250,10 +243,10 @@ class AsyncDatabaseManager:
                 await asyncio.to_thread(conn.close)
 
     def _parse_postgresql_dsn(self, dsn: str) -> dict:
-        """Parsea un DSN string de PostgreSQL en parámetros nombrados"""
+        """Parsea un DSN string de PostgreSQL en parmetros nombrados"""
         import re
         params = {}
-        # Patrón regex para parsear key=value donde value puede estar entrecomillado
+        # Patrn regex para parsear key=value donde value puede estar entrecomillado
         pattern = r'(\w+)=(?:"([^"]*)"|\'([^\']*)\'|([^\s]*))'
         for match in re.finditer(pattern, dsn):
             key = match.group(1)
@@ -271,7 +264,7 @@ class AsyncDatabaseManager:
             await asyncio.to_thread(cur.close)
 
     async def query(
-        self, sql: str, params: Optional[tuple] = None
+        self, sql: str, params: Optional[tuple] = None, timeout: int = 30
     ) -> List[Dict[str, Any]]:
         # Translate SQL if PostgreSQL
         if self.is_postgresql:
@@ -279,21 +272,33 @@ class AsyncDatabaseManager:
 
         async with self.connect() as conn:
             async with self.cursor(conn) as cur:
-                # execute in thread
-                if params:
-                    await asyncio.to_thread(cur.execute, sql, params)
-                else:
-                    await asyncio.to_thread(cur.execute, sql)
+                try:
+                    # execute in thread with timeout
+                    if params:
+                        await asyncio.wait_for(
+                            asyncio.to_thread(cur.execute, sql, params),
+                            timeout=timeout
+                        )
+                    else:
+                        await asyncio.wait_for(
+                            asyncio.to_thread(cur.execute, sql),
+                            timeout=timeout
+                        )
 
-                desc = cur.description or []
-                cols = [c[0] for c in desc]  # column names
+                    desc = cur.description or []
+                    cols = [c[0] for c in desc]  # column names
 
-                rows = await asyncio.to_thread(cur.fetchall)
-                return [dict(zip(cols, row)) for row in rows]
-
+                    rows = await asyncio.wait_for(
+                        asyncio.to_thread(cur.fetchall),
+                        timeout=timeout
+                    )
+                    return [dict(zip(cols, row)) for row in rows]
+                except asyncio.TimeoutError:
+                    logger.error(f"Query timeout after {timeout}s: {sql[:100]}")
+                    return []
 
 class TDVQueries:
-    """Queries específicas para TDV - CORREGIDAS PARA FECHAS RELATIVAS"""
+    """Queries especficas para TDV - CORREGIDAS PARA FECHAS RELATIVAS"""
 
     _instance = None
 
@@ -322,14 +327,14 @@ class TDVQueries:
         tabla: str,
         version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
     ) -> datetime:
-        """Obtiene la fecha_corrida máxima de cada tabla para una versión específica"""
+        """Obtiene la fecha_corrida mxima de cada tabla para una versin especfica"""
 
         # historial_estilos no tiene version_calculo
         if tabla == "historial_estilos":
             query = f"SELECT MAX(fecha_corrida) as fecha_max FROM {settings.db_schema}.historial_estilos"
             resultado = await self.db.query(query)
         else:
-            # Para las otras tablas que SÍ tienen version_calculo
+            # Para las otras tablas que S tienen version_calculo
             queries = {
                 "costo_op_detalle": f"SELECT MAX(fecha_corrida) as fecha_max FROM {settings.db_schema}.costo_op_detalle WHERE version_calculo = ?",
                 "resumen_wip_por_prenda": f"SELECT MAX(fecha_corrida) as fecha_max FROM {settings.db_schema}.resumen_wip_por_prenda WHERE version_calculo = ?",
@@ -344,7 +349,7 @@ class TDVQueries:
         return resultado[0]["fecha_max"] if resultado else datetime.now()
 
     # ========================================
-    #  FUNCIÓN CRÍTICA CORREGIDA: VERIFICACIÓN DE ESTILOS
+    #  FUNCIN CRTICA CORREGIDA: VERIFICACIN DE ESTILOS
     # ========================================
 
     async def verificar_estilo_existente(
@@ -404,7 +409,7 @@ class TDVQueries:
             )
             total_ops = resultado_ops[0]["total_ops"] if resultado_ops else 0
 
-            #  LÓGICA MEJORADA: Priorizar historial formal
+            #  LGICA MEJORADA: Priorizar historial formal
             if existe_en_historial:
                 existe = True
                 motivo = "registrado_en_historial_formal"
@@ -417,7 +422,7 @@ class TDVQueries:
 
             #  LOGGING DETALLADO
             logger.info(
-                f" Verificación estilo '{codigo_estilo}' ({version_calculo}): "
+                f" Verificacin estilo '{codigo_estilo}' ({version_calculo}): "
                 f"historial={existe_en_historial}, ops={total_ops}, "
                 f"resultado={existe}, motivo={motivo}"
             )
@@ -429,7 +434,7 @@ class TDVQueries:
             return False
 
     # ========================================
-    #  FUNCIÓN NUEVA: INFORMACIÓN DETALLADA - CORREGIDA
+    #  FUNCIN NUEVA: INFORMACIN DETALLADA - CORREGIDA
     # ========================================
 
     async def obtener_info_detallada_estilo(
@@ -438,7 +443,7 @@ class TDVQueries:
         version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
     ) -> Dict[str, Any]:
         """
-         FUNCIÓN CORREGIDA: Obtiene información detallada de un estilo con fechas relativas
+         FUNCIN CORREGIDA: Obtiene informacin detallada de un estilo con fechas relativas
         """
 
         if not codigo_estilo:
@@ -550,7 +555,7 @@ class TDVQueries:
                 volumen_total = int(info["volumen_total"])
                 total_ops = int(info["total_ops"])
 
-                #  Solo considerar válido si tiene múltiples OPs
+                #  Solo considerar vlido si tiene mltiples OPs
                 if total_ops >= 2:
                     return {
                         "codigo_estilo": info["codigo_estilo"],
@@ -569,7 +574,7 @@ class TDVQueries:
                         "encontrado": True,
                         "fuente": "solo_ops_multiples",
                         "version_calculo": version_calculo,
-                        "nota": f"Encontrado solo en OPs ({total_ops} órdenes)",
+                        "nota": f"Encontrado solo en OPs ({total_ops} rdenes)",
                     }
                 else:
                     logger.info(
@@ -595,7 +600,7 @@ class TDVQueries:
             }
 
     def _determinar_categoria_por_volumen(self, volumen: int) -> str:
-        """Determina categoría basada en volumen histórico"""
+        """Determina categora basada en volumen histrico"""
         if volumen >= 4000:
             return "Muy Recurrente"
         elif volumen > 0:
@@ -604,7 +609,7 @@ class TDVQueries:
             return "Nuevo"
 
     # ========================================
-    #  FUNCIÓN CORREGIDA: BÚSQUEDA DE ESTILOS SIMILARES
+    #  FUNCIN CORREGIDA: BSQUEDA DE ESTILOS SIMILARES
     # ========================================
 
     async def buscar_estilos_similares(
@@ -614,7 +619,7 @@ class TDVQueries:
         limite: Optional[int] = 10,
         version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
     ) -> List[EstiloSimilar]:
-        """ FUNCIÓN CORREGIDA: Busca estilos similares con fechas relativas"""
+        """ FUNCIN CORREGIDA: Busca estilos similares con fechas relativas"""
 
         prefijo = codigo_estilo[:6] if len(codigo_estilo) >= 6 else codigo_estilo[:4]
 
@@ -624,7 +629,7 @@ class TDVQueries:
             h.codigo_estilo as codigo,
             COALESCE(c.familia_de_productos, 'N/A') as familia_producto,
             COALESCE(c.tipo_de_producto, 'N/A') as tipo_prenda,
-            'Histórico' as temporada,
+            'Histrico' as temporada,
             COUNT(c.cod_ordpro) as ops_encontradas,
             AVG(CAST(c.monto_factura AS FLOAT) / NULLIF(c.prendas_requeridas, 0)) as costo_promedio
         FROM {settings.db_schema}.historial_estilos h
@@ -689,7 +694,7 @@ class TDVQueries:
     async def obtener_clientes_disponibles(
         self, version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO
     ) -> List[str]:
-        """Obtiene lista de clientes únicos con fechas relativas"""
+        """Obtiene lista de clientes nicos con fechas relativas"""
         normalized_version = normalize_version_calculo(version_calculo)
         query = f"""
         SELECT DISTINCT cliente
@@ -732,7 +737,7 @@ class TDVQueries:
         familia: str,
         version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
     ) -> List[str]:
-        """ CORREGIDA: Obtiene tipos de prenda para una familia específica con fechas relativas"""
+        """ CORREGIDA: Obtiene tipos de prenda para una familia especfica con fechas relativas"""
         query = f"""
         SELECT DISTINCT tipo_de_producto
         FROM {settings.db_schema}.costo_op_detalle
@@ -765,7 +770,7 @@ class TDVQueries:
         self,
         version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
     ) -> List[str]:
-        """✅ Obtiene TODOS los tipos de prenda disponibles (sin filtro de familia)"""
+        """ Obtiene TODOS los tipos de prenda disponibles (sin filtro de familia)"""
         query = f"""
         SELECT DISTINCT tipo_de_producto
         FROM {settings.db_schema}.costo_op_detalle
@@ -804,7 +809,7 @@ class TDVQueries:
         cliente: Optional[str] = None,
         version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
     ) -> Dict[str, Any]:
-        """ CORREGIDA: Busca costos históricos con fechas relativas"""
+        """ CORREGIDA: Busca costos histricos con fechas relativas"""
 
         if cliente:
             #  CORREGIDO: Fechas relativas en lugar de GETDATE()
@@ -847,7 +852,7 @@ class TDVQueries:
 
             if resultados:
                 logger.info(
-                    f" Costos encontrados con cliente específico: {len(resultados)} registros"
+                    f" Costos encontrados con cliente especfico: {len(resultados)} registros"
                 )
                 return self._procesar_costos_historicos_con_limites_previos(
                     resultados, "exacta_con_cliente"
@@ -897,7 +902,7 @@ class TDVQueries:
             )
 
         raise ValueError(
-            f"No se encontraron costos históricos para {familia_producto} - {tipo_prenda}"
+            f"No se encontraron costos histricos para {familia_producto} - {tipo_prenda}"
         )
 
     async def buscar_costos_estilo_especifico(
@@ -907,7 +912,7 @@ class TDVQueries:
         version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
     ) -> Dict[str, Any]:
         """
-         FUNCIÓN CORREGIDA: Busca costos históricos de un estilo específico con fechas relativas
+         FUNCIN CORREGIDA: Busca costos histricos de un estilo especfico con fechas relativas
         """
 
         #  QUERY CORREGIDA: Con fechas relativas para PostgreSQL
@@ -947,9 +952,9 @@ class TDVQueries:
 
             if not resultados:
                 logger.warning(
-                    f" No se encontraron costos históricos para estilo {codigo_estilo} en {meses} meses"
+                    f" No se encontraron costos histricos para estilo {codigo_estilo} en {meses} meses"
                 )
-                # Retornar estructura vacía en lugar de lanzar excepción
+                # Retornar estructura vaca en lugar de lanzar excepcin
                 return {
                     "codigo_estilo": codigo_estilo,
                     "costo_textil": 0,
@@ -983,7 +988,7 @@ class TDVQueries:
             }
 
         logger.info(
-            f" Costos estilo específico encontrados: {len(resultados)} registros para {codigo_estilo}"
+            f" Costos estilo especfico encontrados: {len(resultados)} registros para {codigo_estilo}"
         )
         return self._procesar_costos_historicos_con_limites_previos(
             resultados, "estilo_especifico"
@@ -992,7 +997,7 @@ class TDVQueries:
     def _procesar_costos_historicos_con_limites_previos(
         self, recs: List[dict], strat: str
     ) -> Dict[str, Any]:
-        """Aplica límites de seguridad a valores antes de promediar."""
+        """Aplica lmites de seguridad a valores antes de promediar."""
         if not recs:
             raise ValueError("Sin resultados")
 
@@ -1061,7 +1066,7 @@ class TDVQueries:
         return out
 
     # ========================================
-    #  NUEVA FUNCIÓN: OBTENER OPS DETALLADAS PARA TABLA INTERACTIVA
+    #  NUEVA FUNCIN: OBTENER OPS DETALLADAS PARA TABLA INTERACTIVA
     # ========================================
 
     async def obtener_ops_detalladas_para_tabla(
@@ -1135,10 +1140,10 @@ class TDVQueries:
                     "fecha_facturacion": row['fecha_facturacion'].isoformat() if row['fecha_facturacion'] else None,
                     "esfuerzo_total": int(row['esfuerzo_total']) or 6,
                     "cliente": row['cliente'],
-                    "seleccionado": True,  # Por defecto todas las OPs están seleccionadas
+                    "seleccionado": True,  # Por defecto todas las OPs estn seleccionadas
                 }
 
-                # Calcular categoría de lote
+                # Calcular categora de lote
                 categoria_lote, _ = factores.categorizar_lote(int(prendas))
                 op_detalle["categoria_lote"] = categoria_lote
 
@@ -1149,6 +1154,98 @@ class TDVQueries:
 
         except Exception as e:
             logger.error(f" Error obteniendo OPs detalladas para {codigo_estilo}: {e}")
+            return []
+
+    async def obtener_costos_por_ops_especificas(
+        self,
+        cod_ordpros: List[str],
+        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
+    ) -> List[Dict[str, Any]]:
+        """
+        ✨ MÉTODO NUEVO: Obtiene los 7 componentes de costo para OPs específicas.
+
+        Utilizado por procesar_cotizacion_rapida_por_ops en utils.py para cotizaciones
+        rápidas basadas en selección de OPs del usuario.
+
+        Retorna lista de diccionarios con:
+        - costo_textil (unitario)
+        - costo_manufactura (unitario)
+        - costo_avios (unitario)
+        - costo_materia_prima (unitario)
+        - costo_indirecto_fijo (unitario)
+        - gasto_administracion (unitario)
+        - gasto_ventas (unitario)
+        """
+
+        if not cod_ordpros:
+            logger.warning(f" [COSTOS-OPS-ESPECIFICAS] No se proporcionaron cod_ordpros")
+            return []
+
+        version_norm = normalize_version_calculo(version_calculo)
+
+        # Crear lista de placeholders para los códigos de OP
+        placeholders = ','.join(['%s'] * len(cod_ordpros))
+
+        query = f"""
+        SELECT
+          cod_ordpro,
+          prendas_requeridas,
+          COALESCE(costo_textil, 0) as costo_textil_total,
+          COALESCE(costo_manufactura, 0) as costo_manufactura_total,
+          COALESCE(costo_avios, 0) as costo_avios_total,
+          COALESCE(costo_materia_prima, 0) as costo_materia_prima_total,
+          COALESCE(costo_indirecto_fijo, 0) as costo_indirecto_fijo_total,
+          COALESCE(gasto_administracion, 0) as gasto_administracion_total,
+          COALESCE(gasto_ventas, 0) as gasto_ventas_total
+        FROM {settings.db_schema}.costo_op_detalle
+        WHERE cod_ordpro IN ({placeholders})
+          AND version_calculo = %s
+          AND prendas_requeridas > 0
+        ORDER BY cod_ordpro DESC
+        """
+
+        try:
+            # Los parámetros son: los códigos de OP + la versión de cálculo
+            params = list(cod_ordpros) + [version_norm]
+            resultados = await self.db.query(query, tuple(params))
+
+            if not resultados:
+                logger.warning(
+                    f" [COSTOS-OPS-ESPECIFICAS] No se encontraron datos para OPs: {cod_ordpros}"
+                )
+                return []
+
+            # Procesar resultados para retornar costos unitarios
+            costos_ops = []
+            for row in resultados:
+                prendas = float(row['prendas_requeridas']) or 1
+
+                costo_op = {
+                    "cod_ordpro": row['cod_ordpro'],
+                    # Costos que se dividen por cantidad de prendas
+                    "costo_textil": float(row['costo_textil_total']) / prendas,
+                    "costo_manufactura": float(row['costo_manufactura_total']) / prendas,
+                    "costo_avios": float(row['costo_avios_total']) / prendas,
+                    "costo_materia_prima": float(row['costo_materia_prima_total']) / prendas,
+                    # Costos que ya son unitarios en BD
+                    "costo_indirecto_fijo": float(row['costo_indirecto_fijo_total']),
+                    "gasto_administracion": float(row['gasto_administracion_total']),
+                    "gasto_ventas": float(row['gasto_ventas_total']),
+                }
+
+                costos_ops.append(costo_op)
+
+            logger.info(
+                f" [COSTOS-OPS-ESPECIFICAS] Obtenidos costos para {len(costos_ops)} OPs: {[op['cod_ordpro'] for op in costos_ops]}"
+            )
+            return costos_ops
+
+        except Exception as e:
+            logger.error(
+                f" [COSTOS-OPS-ESPECIFICAS] Error obteniendo costos para OPs {cod_ordpros}: {e}"
+            )
+            import traceback
+            logger.error(f" [COSTOS-OPS-ESPECIFICAS] Traceback: {traceback.format_exc()}")
             return []
 
     async def obtener_desglose_wip_por_ops(
@@ -1224,13 +1321,13 @@ class TDVQueries:
 
             logger.debug(f" [WIP-DESGLOSE] Query: {query[:200]}...")
 
-            # Parámetros: version_calculo + cod_ordpros (aparece 1 vez en la query)
+            # Parmetros: version_calculo + cod_ordpros (aparece 1 vez en la query)
             params = [version_norm] + cod_ordpros
             logger.debug(f" [WIP-DESGLOSE] Params: version={version_norm}, ops={cod_ordpros}")
 
             resultados = await self.db.query(query, params)
 
-            logger.info(f" [WIP-DESGLOSE] Query retornó {len(resultados)} WIPs")
+            logger.info(f" [WIP-DESGLOSE] Query retorn {len(resultados)} WIPs")
 
             desgloses = []
             for row in resultados:
@@ -1263,7 +1360,7 @@ class TDVQueries:
         """
         Calcula los costos textil y manufactura ponderados por prendas para las OPs seleccionadas.
 
-        Fórmula:
+        Frmula:
             costo_ponderado = SUM(costo_op * prendas_op) / SUM(prendas_op)
 
         Returns:
@@ -1337,14 +1434,14 @@ class TDVQueries:
         version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
         marca: Optional[str] = None,
     ) -> Dict[str, float]:
-        """Usar análisis inteligente de variación con filtro de marca y prendas >= 200"""
+        """Usar anlisis inteligente de variacin con filtro de marca y prendas >= 200"""
         try:
             return await self.obtener_costos_wips_inteligente(
                 tipo_prenda, version_calculo, marca
             )
         except Exception as e:
             logger.warning(
-                f" Error en análisis inteligente, usando método legacy: {e}"
+                f" Error en anlisis inteligente, usando mtodo legacy: {e}"
             )
             return await self._obtener_costos_wips_legacy(tipo_prenda, version_calculo, marca)
 
@@ -1355,7 +1452,7 @@ class TDVQueries:
         marca: Optional[str] = None,
     ) -> Dict[str, float]:
         """
-        CORRECCIÓN: Filtra por marca y total_prendas >= 200
+        CORRECCIN: Filtra por marca y total_prendas >= 200
         """
 
         costos_wips = {}
@@ -1366,7 +1463,7 @@ class TDVQueries:
         query_variabilidad = f"""
         SELECT
           wip_id,
-          EXTRACT(YEAR FROM mes) as año,
+          EXTRACT(YEAR FROM mes) as ao,
           EXTRACT(MONTH FROM mes) as mes,
           AVG(CAST(costo_por_prenda AS FLOAT)) as costo_mensual,
           AVG(CAST(total_prendas AS FLOAT)) as prendas_promedio
@@ -1386,7 +1483,7 @@ class TDVQueries:
           AND total_prendas >= 200
           {f"AND marca = %s" if marca else ""}
         GROUP BY wip_id, EXTRACT(YEAR FROM mes), EXTRACT(MONTH FROM mes)
-        ORDER BY wip_id, año DESC, mes DESC
+        ORDER BY wip_id, ao DESC, mes DESC
         """
 
         params = [
@@ -1414,10 +1511,10 @@ class TDVQueries:
             wips_data[wip_id].append(costo_mensual)
 
         logger.info(
-            f" Análisis variabilidad: {len(wips_data)} WIPs encontrados para {tipo_prenda} ({version_calculo})"
+            f" Anlisis variabilidad: {len(wips_data)} WIPs encontrados para {tipo_prenda} ({version_calculo})"
         )
 
-        # Analizar variabilidad y decidir período
+        # Analizar variabilidad y decidir perodo
         for wip_id, costos_mensuales in wips_data.items():
             if len(costos_mensuales) < 2:
                 # Si hay pocos datos, usar promedio simple
@@ -1429,7 +1526,7 @@ class TDVQueries:
                 )
                 continue
 
-            # Calcular coeficiente de variación
+            # Calcular coeficiente de variacin
             try:
                 promedio = statistics.mean(costos_mensuales)
                 desviacion = (
@@ -1441,7 +1538,7 @@ class TDVQueries:
             except statistics.StatisticsError:
                 coef_variacion = 0.15
 
-            # Decisión inteligente del período
+            # Decisin inteligente del perodo
             if coef_variacion <= 0.10:
                 periodo_meses = 3
                 logger.debug(
@@ -1453,7 +1550,7 @@ class TDVQueries:
                     f"WIP {wip_id}: VARIABLE (CV: {coef_variacion:.1%}) - Usando 6 meses"
                 )
 
-            #  QUERY ESPECÍFICA CORREGIDA: marca + filtro prendas >= 200
+            #  QUERY ESPECFICA CORREGIDA: marca + filtro prendas >= 200
             if wip_id in ["37", "45"]:
                 # WIPs inestables: siempre promedio
                 query_wip = f"""
@@ -1494,7 +1591,7 @@ class TDVQueries:
                 )
             else:
                 if coef_variacion <= 0.10:
-                    # Estable: último costo
+                    # Estable: ltimo costo
                     query_wip = f"""
                     SELECT
                       CAST(costo_por_prenda AS FLOAT) as costo_promedio
@@ -1520,7 +1617,7 @@ class TDVQueries:
                         tuple(params_wip),
                     )
                 else:
-                    # Variable: promedio del período
+                    # Variable: promedio del perodo
                     query_wip = f"""
                     SELECT AVG(CAST(costo_por_prenda AS FLOAT)) as costo_promedio
                     FROM {settings.db_schema}.resumen_wip_por_prenda
@@ -1561,7 +1658,7 @@ class TDVQueries:
                 logger.debug(f" WIP {wip_id}: ${costos_wips[wip_id]:.2f}")
 
         logger.info(
-            f" Análisis inteligente completado: {len(costos_wips)} WIPs para {tipo_prenda} ({version_calculo})"
+            f" Anlisis inteligente completado: {len(costos_wips)} WIPs para {tipo_prenda} ({version_calculo})"
         )
         return costos_wips
 
@@ -1572,7 +1669,7 @@ class TDVQueries:
         marca: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
-        CORRECCIÓN: Filtra por marca y total_prendas >= 200
+        CORRECCIN: Filtra por marca y total_prendas >= 200
         """
 
         # Normalizar version_calculo (FLUIDO -> FLUIDA)
@@ -1624,7 +1721,7 @@ class TDVQueries:
             tuple(params),
         )
 
-        # Separar por grupos y enriquecer información
+        # Separar por grupos y enriquecer informacin
         wips_textiles = []
         wips_manufactura = []
         wips_recomendadas = []
@@ -1688,7 +1785,7 @@ class TDVQueries:
         version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
         marca: Optional[str] = None,
     ) -> Dict[str, float]:
-        """ CORRECCIÓN: Filtra por marca y total_prendas >= 200"""
+        """ CORRECCIN: Filtra por marca y total_prendas >= 200"""
         costos_wips = {}
         version_norm = normalize_version_calculo(version_calculo)
 
@@ -1731,7 +1828,7 @@ class TDVQueries:
         for row in resultados_inestables:
             costos_wips[row["wip_id"]] = float(row["costo_promedio"])
 
-        #  WIPs estables: Último costo, con marca + filtro prendas >= 200
+        #  WIPs estables: ltimo costo, con marca + filtro prendas >= 200
         query_estables = f"""
         WITH UltimosCostos AS (
           SELECT
@@ -1765,7 +1862,7 @@ class TDVQueries:
             costos_wips[row["wip_id"]] = float(row["costo_por_prenda"])
 
         logger.info(
-            f" Método legacy: {len(costos_wips)} WIPs encontrados para {tipo_prenda} ({version_calculo})"
+            f" Mtodo legacy: {len(costos_wips)} WIPs encontrados para {tipo_prenda} ({version_calculo})"
         )
         return costos_wips
 
@@ -1780,36 +1877,43 @@ class TDVQueries:
         try:
             if tipo_prenda:
                 logger.info(
-                    f" Obteniendo WIPs específicos para {tipo_prenda} ({version_calculo})"
+                    f" Obteniendo WIPs especficos para {tipo_prenda} ({version_calculo})"
                 )
                 costos_wips = await self.obtener_costos_wips_por_estabilidad(
                     tipo_prenda, version_calculo, marca
                 )
             else:
-                logger.info(f" Obteniendo WIPs genéricos ({version_calculo})")
+                logger.info(f" Obteniendo WIPs genricos ({version_calculo})")
                 version_norm = normalize_version_calculo(version_calculo)
-                #  QUERY GENÉRICA CORREGIDA: PostgreSQL placeholders %s
+
+                # OPTIMIZACIN: Obtener MAX(fecha_corrida) primero
+                query_max_fecha = f"""
+                SELECT MAX(fecha_corrida) as max_fecha
+                FROM {settings.db_schema}.resumen_wip_por_prenda
+                WHERE version_calculo = %s
+                """
+                max_fecha_result = await self.db.query(query_max_fecha, (version_norm,), timeout=10)
+
+                if not max_fecha_result or not max_fecha_result[0].get('max_fecha'):
+                    logger.warning(f" No hay datos para version {version_norm}")
+                    return [], []
+
+                max_fecha = max_fecha_result[0]['max_fecha']
+
+                #  QUERY OPTIMIZADA: PostgreSQL placeholders %s
                 query = f"""
-                WITH UltimosCostos AS (
-                  SELECT
-                    wip_id,
-                    AVG(costo_por_prenda) as costo_promedio,
-                    ROW_NUMBER() OVER (PARTITION BY wip_id ORDER BY MAX(mes) DESC) as rn
-                  FROM {settings.db_schema}.resumen_wip_por_prenda
-                  WHERE costo_por_prenda > 0
-                    AND version_calculo = %s
-                    AND fecha_corrida = (
-                      SELECT MAX(fecha_corrida)
-                      FROM {settings.db_schema}.resumen_wip_por_prenda
-                      WHERE version_calculo = %s)
-                  GROUP BY wip_id
-                )
-                SELECT wip_id, costo_promedio
-                FROM UltimosCostos WHERE rn = 1
+                SELECT
+                  wip_id,
+                  AVG(costo_por_prenda) as costo_promedio
+                FROM {settings.db_schema}.resumen_wip_por_prenda
+                WHERE costo_por_prenda > 0
+                  AND version_calculo = %s
+                  AND fecha_corrida = %s
+                GROUP BY wip_id
                 """
 
                 resultados = await self.db.query(
-                    query, (version_norm, version_norm)
+                    query, (version_norm, max_fecha), timeout=30
                 )
                 costos_wips = {}
                 for row in resultados:
@@ -1866,34 +1970,45 @@ class TDVQueries:
         """
         Obtiene gastos indirectos para estilos RECURRENTES usando MODA.
 
-        Busca todas las OPs que fueron producidas con ese código_estilo exacto,
-        calcula la MODA de los tres costos, filtra outliers (máx 10x la moda),
-        y retorna los gastos con los índices de OPs excluidas.
+        Busca todas las OPs que fueron producidas con ese cdigo_estilo exacto,
+        calcula la MODA de los tres costos, filtra outliers (mx 10x la moda),
+        y retorna los gastos con los ndices de OPs excluidas.
 
         Args:
-            codigo_estilo: El código de estilo propio exacto
+            codigo_estilo: El cdigo de estilo propio exacto
             version_calculo: FLUIDO o truncado
 
         Returns:
             Tupla (gastos_dict, ops_excluidas_indices)
             - gastos_dict: {"costo_indirecto_fijo": float, "gasto_administracion": float, "gasto_ventas": float}
-            - ops_excluidas_indices: Lista de índices de OPs que fueron excluidas
+            - ops_excluidas_indices: Lista de ndices de OPs que fueron excluidas
         """
-        print(f"\n=== obtener_gastos_por_estilo_recurrente DEBUG ===", flush=True)
-        print(f"codigo_estilo: {codigo_estilo}", flush=True)
-        print(f"version_calculo: {version_calculo}", flush=True)
 
         try:
-            # PRIMERO: Obtener el MAX fecha_corrida
-            query_max_fecha = f"""
-            SELECT MAX(fecha_corrida) as max_fecha_corrida
+            version_norm = normalize_version_calculo(version_calculo)
+
+            # OPTIMIZACION: Obtener fechas límite primero (dos queries rápidas)
+            query_fechas = f"""
+            SELECT
+                MAX(fecha_corrida) as max_fecha_corrida,
+                MAX(fecha_facturacion) - INTERVAL '24 months' as min_fecha_fact
             FROM {settings.db_schema}.costo_op_detalle
             WHERE version_calculo = %s
             """
-            max_fecha_result = await self.db.query(query_max_fecha, (normalize_version_calculo(version_calculo),))
-            max_fecha_corrida = max_fecha_result[0]['max_fecha_corrida'] if max_fecha_result else None
-            print(f"\n### MAX FECHA_CORRIDA en BD: {max_fecha_corrida} (tipo: {type(max_fecha_corrida).__name__})", flush=True)
+            fechas_result = await self.db.query(query_fechas, (version_norm,), timeout=10)
 
+            if not fechas_result or not fechas_result[0].get('max_fecha_corrida'):
+                logger.warning(f" No se encontraron OPs para estilo recurrente: {codigo_estilo}")
+                return {
+                    "costo_indirecto_fijo": 0,
+                    "gasto_administracion": 0,
+                    "gasto_ventas": 0,
+                }, []
+
+            max_fecha_corrida = fechas_result[0]['max_fecha_corrida']
+            min_fecha_fact = fechas_result[0]['min_fecha_fact']
+
+            # QUERY OPTIMIZADA: Sin subqueries en WHERE
             query = f"""
             SELECT
                 costo_indirecto_fijo,
@@ -1907,16 +2022,8 @@ class TDVQueries:
             FROM {settings.db_schema}.costo_op_detalle
             WHERE estilo_propio = %s
                 AND version_calculo = %s
-                AND fecha_corrida = (
-                    SELECT MAX(fecha_corrida)
-                    FROM {settings.db_schema}.costo_op_detalle
-                    WHERE version_calculo = %s
-                )
-                AND fecha_facturacion >= (
-                    SELECT (MAX(fecha_facturacion) - INTERVAL '24 months')
-                    FROM {settings.db_schema}.costo_op_detalle
-                    WHERE version_calculo = %s
-                )
+                AND fecha_corrida = %s
+                AND fecha_facturacion >= %s
                 AND prendas_requeridas >= 200
                 AND costo_indirecto_fijo > 0
                 AND gasto_administracion > 0
@@ -1924,27 +2031,15 @@ class TDVQueries:
             ORDER BY fecha_facturacion DESC
             """
 
-            version_norm = normalize_version_calculo(version_calculo)
             params = (
                 codigo_estilo,
                 version_norm,
-                version_norm,
-                version_norm,
+                max_fecha_corrida,
+                min_fecha_fact,
             )
-            resultado = await self.db.query(query, params)
-
-            print(f"\n=== QUERY DEBUG obtener_gastos_por_estilo_recurrente ===", flush=True)
-            print(f"Estilo: {codigo_estilo}", flush=True)
-            print(f"Version: {normalize_version_calculo(version_calculo)}", flush=True)
-            print(f"Query ejecutada, registros encontrados: {len(resultado) if resultado else 0}", flush=True)
-            if resultado:
-                print(f"\nPrimeros 5 registros con FECHAS:", flush=True)
-                for i, reg in enumerate(resultado[:5]):
-                    print(f"  [{i}] cod_ordpro={reg.get('cod_ordpro')}, fecha_corrida={reg.get('fecha_corrida')} (tipo: {type(reg.get('fecha_corrida')).__name__}), costo_indirecto={reg.get('costo_indirecto_fijo')}", flush=True)
-            print(f"=============================================\n", flush=True)
+            resultado = await self.db.query(query, params, timeout=30)
 
             if not resultado:
-                print(f"❌ NO hay OPs para este estilo", flush=True)
                 logger.warning(f" No se encontraron OPs para estilo recurrente: {codigo_estilo}")
                 return {
                     "costo_indirecto_fijo": 0,
@@ -2059,8 +2154,8 @@ class TDVQueries:
         Busca todas las OPs que tengan la misma marca + tipo_prenda.
         NOTA: familia_prenda es OPCIONAL y NO se usa como filtro
 
-        Calcula la MODA de los tres costos, filtra outliers (máx 10x la moda),
-        y retorna los gastos con los índices de OPs excluidas.
+        Calcula la MODA de los tres costos, filtra outliers (mx 10x la moda),
+        y retorna los gastos con los ndices de OPs excluidas.
 
         Args:
             marca: Cliente/marca
@@ -2221,7 +2316,7 @@ class TDVQueries:
     #  FUNCIONES DE SOPORTE CORREGIDAS
     # ========================================
 
-    #  CÓDIGO CORREGIDO - Ahora usa MODA en lugar de PROMEDIO
+    #  CDIGO CORREGIDO - Ahora usa MODA en lugar de PROMEDIO
     async def obtener_gastos_indirectos_formula(
         self,
         version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
@@ -2234,33 +2329,24 @@ class TDVQueries:
          CORREGIDA: Gastos indirectos UNITARIOS usando MODA y filtrado de outliers.
 
         Estrategia:
-        1. Si codigo_estilo está disponible → buscar OPs de ese estilo recurrente
-        2. Si no → usar marca+familia+tipo para buscar OPs de estilo nuevo
-        3. Si no se encuentran → usar fórmula genérica (fallback)
+        1. Si codigo_estilo est disponible  buscar OPs de ese estilo recurrente
+        2. Si no  usar marca+familia+tipo para buscar OPs de estilo nuevo
+        3. Si no se encuentran  usar frmula genrica (fallback)
 
         Retorna: (gastos_dict, ops_excluidas)
         """
 
-        print(f"\n=== obtener_gastos_indirectos_formula DEBUG ===", flush=True)
-        print(f"codigo_estilo: {codigo_estilo}", flush=True)
-        print(f"version_calculo: {version_calculo}", flush=True)
-
-        #  OPCIÓN 1: Intentar con ESTILO RECURRENTE (por código_estilo exacto)
+        #  OPCIN 1: Intentar con ESTILO RECURRENTE (por cdigo_estilo exacto)
         if codigo_estilo:
-            print(f"OPCIÓN 1: Buscando ESTILO RECURRENTE", flush=True)
             logger.info(f" Buscando gastos para ESTILO RECURRENTE: {codigo_estilo}")
             gastos, ops_excluidas = await self.obtener_gastos_por_estilo_recurrente(
                 codigo_estilo, version_calculo
             )
-            print(f"OPCIÓN 1 Resultado: gastos={gastos}, ops_excluidas={ops_excluidas}", flush=True)
             if any(gastos.values()):  # Si se encontraron datos
-                print(f"OPCIÓN 1 SUCCESS: Retornando resultados", flush=True)
                 logger.info(f" Gastos obtenidos por ESTILO RECURRENTE: {gastos}")
                 return gastos, ops_excluidas
-            else:
-                print(f"OPCIÓN 1 FAILED: todos los valores son 0/None", flush=True)
 
-        #  OPCIÓN 2: Intentar con ESTILO NUEVO (marca + tipo)
+        #  OPCIN 2: Intentar con ESTILO NUEVO (marca + tipo)
         #  NOTA: familia_producto ahora es OPCIONAL y NO se usa
         if cliente_marca and tipo_prenda:
             logger.info(
@@ -2273,8 +2359,8 @@ class TDVQueries:
                 logger.info(f" Gastos obtenidos por ESTILO NUEVO")
                 return gastos, ops_excluidas
 
-        #  OPCIÓN 3: FALLBACK - Fórmula genérica (promedio general)
-        logger.info(f" Usando FÓRMULA GENÉRICA como fallback")
+        #  OPCIN 3: FALLBACK - Frmula genrica (promedio general)
+        logger.info(f" Usando FRMULA GENRICA como fallback")
         query = f"""
         SELECT
             AVG(costo_indirecto_fijo / NULLIF(prendas_requeridas, 0)) as indirecto_fijo,
@@ -2302,7 +2388,7 @@ class TDVQueries:
                 query, (normalize_version_calculo(version_calculo), normalize_version_calculo(version_calculo), normalize_version_calculo(version_calculo))
             )
         except Exception as e:
-            logger.warning(f" Error en query de gastos genéricos: {e}. Usando valores por defecto")
+            logger.warning(f" Error en query de gastos genricos: {e}. Usando valores por defecto")
             resultado = None
         if resultado:
             gastos = {
@@ -2311,7 +2397,7 @@ class TDVQueries:
                 "gasto_ventas": float(resultado[0]["ventas"] or 0),
             }
             logger.info(
-                f" Gastos indirectos (FÓRMULA GENÉRICA) obtenidos ({version_calculo}): {gastos}"
+                f" Gastos indirectos (FRMULA GENRICA) obtenidos ({version_calculo}): {gastos}"
             )
             return gastos, []
 
@@ -2321,7 +2407,7 @@ class TDVQueries:
     async def obtener_ultimo_costo_materiales(
         self, version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO
     ) -> Dict[str, float]:
-        """ SIN CAMBIOS: Ya usa lógica correcta con fecha_corrida"""
+        """ SIN CAMBIOS: Ya usa lgica correcta con fecha_corrida"""
 
         query = f"""
         SELECT
@@ -2359,9 +2445,9 @@ class TDVQueries:
             costo_avios_unitario = float(registro["costo_avios"]) / prendas
 
             logger.info(
-                f" Último costo materiales ({version_calculo}): OP {registro['cod_ordpro']} - "
+                f" ltimo costo materiales ({version_calculo}): OP {registro['cod_ordpro']} - "
                 f"MP: ${costo_materia_prima_unitario:.2f}/u - "
-                f"Avíos: ${costo_avios_unitario:.2f}/u"
+                f"Avos: ${costo_avios_unitario:.2f}/u"
             )
 
             return {
@@ -2370,7 +2456,7 @@ class TDVQueries:
             }
 
         logger.warning(
-            f" No se encontró último costo de materiales válido para {version_calculo}"
+            f" No se encontr ltimo costo de materiales vlido para {version_calculo}"
         )
         return {"costo_materia_prima": 0, "costo_avios": 0}
 
@@ -2407,7 +2493,7 @@ class TDVQueries:
         )
 
         logger.info(
-            f" Volumen histórico {codigo_estilo} ({version_calculo}): {volumen} prendas"
+            f" Volumen histrico {codigo_estilo} ({version_calculo}): {volumen} prendas"
         )
         return volumen
 
@@ -2441,13 +2527,13 @@ class TDVQueries:
         version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
     ) -> Dict[str, Any]:
         """
-         FUNCIÓN CORREGIDA: Obtiene las OPs específicas utilizadas para una cotización con fechas relativas
+         FUNCIN CORREGIDA: Obtiene las OPs especficas utilizadas para una cotizacin con fechas relativas
         """
 
         ops_utilizadas = []
         metodo_usado = "sin_datos"
 
-        # PASO 1: Intentar por estilo específico (si es recurrente)
+        # PASO 1: Intentar por estilo especfico (si es recurrente)
         if codigo_estilo:
             try:
                 # Fechas relativas en lugar de GETDATE()
@@ -2528,7 +2614,7 @@ class TDVQueries:
                     metodo_usado = f"tipo_{tipo_prenda}"
 
                 #  CORREGIDO: Fechas relativas en lugar de GETDATE()
-                #  NOTA: Se eliminó el filtro de familia_de_productos
+                #  NOTA: Se elimin el filtro de familia_de_productos
                 query_familia = f"""
                 SELECT
                   c.cod_ordpro,
@@ -2662,13 +2748,13 @@ class TDVQueries:
                         "gasto_ventas": gasto_ventas_ajustado,
                     },
                     #  COSTOS TOTALES CALCULADOS CORRECTAMENTE
-                    "costo_total_unitario": costo_total_ajustado,  # Para cálculos seguros
+                    "costo_total_unitario": costo_total_ajustado,  # Para clculos seguros
                     "costo_total_original": costo_total_original,  # Para mostrar en frontend
                     "fue_ajustado": fue_ajustado,  # Si hubo ajustes aplicados
                 }
             )
 
-        #  ESTADÍSTICAS BASADAS EN COSTOS AJUSTADOS
+        #  ESTADSTICAS BASADAS EN COSTOS AJUSTADOS
         if ops_procesadas:
             costos_totales_ajustados = [
                 op["costo_total_unitario"] for op in ops_procesadas
@@ -2716,7 +2802,7 @@ class TDVQueries:
             }
 
         logger.info(
-            f" OPs utilizadas procesadas: {len(ops_procesadas)} encontradas con método {metodo_usado}"
+            f" OPs utilizadas procesadas: {len(ops_procesadas)} encontradas con mtodo {metodo_usado}"
         )
 
         return {
@@ -2741,7 +2827,7 @@ class TDVQueries:
     ) -> Dict[str, Any]:
         """ SIN CAMBIOS: Ya usa fecha_corrida correctamente"""
 
-        # 1. Volumen histórico (6 meses)
+        # 1. Volumen histrico (6 meses)
         query_volumen = f"""
         SELECT
           COUNT(*) as ops_producidas,
@@ -2768,7 +2854,7 @@ class TDVQueries:
         # 2. Tendencias de costos
         query_tendencias = f"""
         SELECT
-          EXTRACT(YEAR FROM fecha_facturacion)::INT as año,
+          EXTRACT(YEAR FROM fecha_facturacion)::INT as ao,
           EXTRACT(MONTH FROM fecha_facturacion)::INT as mes,
           COUNT(*) as ops_mes,
           AVG(CAST(costo_textil AS FLOAT)
@@ -2786,7 +2872,7 @@ class TDVQueries:
          AND fecha_facturacion >= (CURRENT_TIMESTAMP - INTERVAL '18 months')
           AND prendas_requeridas > 0
         GROUP BY EXTRACT(YEAR FROM fecha_facturacion), EXTRACT(MONTH FROM fecha_facturacion)
-        ORDER BY año DESC, mes DESC
+        ORDER BY ao DESC, mes DESC
         """
 
         tendencias = await self.db.query(
@@ -2794,7 +2880,7 @@ class TDVQueries:
             (familia_producto, tipo_prenda, normalize_version_calculo(version_calculo), normalize_version_calculo(version_calculo)),
         )
 
-        # 3. Análisis competitivo
+        # 3. Anlisis competitivo
         query_competitivo = f"""
         SELECT
           cliente,
@@ -2832,7 +2918,7 @@ class TDVQueries:
             },
             "tendencias_costos": [
                 {
-                    "año": int(t["año"]),
+                    "ao": int(t["ao"]),
                     "mes": int(t["mes"]),
                     "ops_mes": int(t["ops_mes"]),
                     "costo_textil_promedio": float(

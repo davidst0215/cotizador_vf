@@ -540,6 +540,26 @@ const SistemaCotizadorTDV = () => {
     [manejarCambioFormulario],
   );
 
+  // ✨ MEMOIZED CALLBACKS para evitar re-renders innecesarios en child components
+  // Callback memoizado para WipDesgloseTable - evita infinite requests por cambio de función
+  const handleCostosWipCalculados = useCallback(
+    (textil: number, manufactura: number) => {
+      setCostosWipCalculados({
+        textil_por_prenda: textil,
+        manufactura_por_prenda: manufactura,
+      });
+    },
+    []
+  );
+
+  // Callback memoizado para OpsSelectionTable - evita re-renders innecesarios
+  const handleOpsSelectionError = useCallback(
+    (error: string) => {
+      setErrorOps(error);
+    },
+    []
+  );
+
   // Efecto 3: Cargar WIPs cuando cambia tipo (usando debouncedFormData, solo para estilos nuevos)
   useEffect(() => {
     if (debouncedFormData.tipo_prenda && esEstiloNuevo) {
@@ -1433,6 +1453,8 @@ const SistemaCotizadorTDV = () => {
                     console.log("📊 OPs seleccionadas siendo procesadas:", codOrdpros);
                     console.log("📋 Full resultado from backend:", resultado);
                     setCotizacionActual(resultado);
+
+                    await cargarOpsReales(resultado);
                   } catch (error) {
                     console.error("Error generando cotización:", error);
                     alert("Error al generar cotización: " + (error instanceof Error ? error.message : "Error desconocido"));
@@ -1440,9 +1462,7 @@ const SistemaCotizadorTDV = () => {
                     setCargando(false);
                   }
                 }}
-                onError={(error) => {
-                  setErrorOps(error);
-                }}
+                onError={handleOpsSelectionError}
               />
 
               {/* Mostrar desglose WIP cuando hay OPs seleccionadas */}
@@ -1455,12 +1475,7 @@ const SistemaCotizadorTDV = () => {
                     codigoEstilo={cotizacionActual.inputs.codigo_estilo}
                     versionCalculo={cotizacionActual.inputs.version_calculo}
                     codOrdpros={selectedOpsCode}
-                    onCostosCalculados={(textil, manufactura) => {
-                      setCostosWipCalculados({
-                        textil_por_prenda: textil,
-                        manufactura_por_prenda: manufactura,
-                      });
-                    }}
+                    onCostosCalculados={handleCostosWipCalculados}
                   />
                 </div>
               )}

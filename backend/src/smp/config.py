@@ -1,8 +1,8 @@
 """
 =====================================================================
-CONFIGURACIÓN Y FACTORES - BACKEND TDV COTIZADOR v2.0
+CONFIGURACIN Y FACTORES - BACKEND TDV COTIZADOR v2.0
 =====================================================================
-Configuración centralizada basada en análisis real de TDV
+Configuracin centralizada basada en anlisis real de TDV
 """
 
 from typing import Any, Dict, Optional
@@ -11,7 +11,7 @@ from pydantic import ConfigDict, model_validator
 
 
 class Settings(BaseSettings):
-    """Configuración principal de la aplicación"""
+    """Configuracin principal de la aplicacin"""
 
     model_config = ConfigDict(env_file=".env", extra="ignore")
 
@@ -35,7 +35,7 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _build(self):
-        # ✅ DETECTAR PostgreSQL por puerto (5432) o por variables de entorno
+        #  DETECTAR PostgreSQL por puerto (5432) o por variables de entorno
         is_postgres = self.db_port == 5432 or self.pgsslmode is not None
 
         if not self.connection_driver:
@@ -43,7 +43,7 @@ class Settings(BaseSettings):
 
         if not self.connection_string:
             if is_postgres:
-                # PostgreSQL: usar diccionario de parámetros en lugar de DSN string
+                # PostgreSQL: usar diccionario de parmetros en lugar de DSN string
                 # Esto evita problemas con espacios en rutas de certificados
                 self.connection_string = {
                     'dbname': self.db_name,
@@ -97,19 +97,19 @@ class Settings(BaseSettings):
 
 
 # =====================================================================
-# FACTORES DE AJUSTE (BASADOS EN IMÁGENES PROPORCIONADAS)
+# FACTORES DE AJUSTE (BASADOS EN IMGENES PROPORCIONADAS)
 # =====================================================================
 
 Factores = Dict[str, Dict[str, Any]]
 
 
 class FactoresTDV:
-    """Factores de ajuste basados en análisis TDV real"""
+    """Factores de ajuste basados en anlisis TDV real"""
 
     # Rangos de lote (cantidad de prendas)
     RANGOS_LOTE: Factores = {
         "Micro Lote": {"min": 1, "max": 50, "factor": 1.15},
-        "Lote Pequeño": {"min": 51, "max": 500, "factor": 1.10},
+        "Lote Pequeo": {"min": 51, "max": 500, "factor": 1.10},
         "Lote Mediano": {"min": 501, "max": 1000, "factor": 1.05},
         "Lote Grande": {"min": 1001, "max": 4000, "factor": 1.00},
         "Lote Masivo": {"min": 4001, "max": 999999, "factor": 0.90},
@@ -125,14 +125,14 @@ class FactoresTDV:
     # Factores de estilo (de imagen 2)
     FACTORES_ESTILO: Factores = {
         "Muy Recurrente": {
-            "descripcion": "Más de 4,000 prendas fabricadas",
+            "descripcion": "Ms de 4,000 prendas fabricadas",
             "factor": 0.95,
         },
         "Recurrente": {
             "descripcion": "Menos de 4,000 prendas fabricadas",
             "factor": 1.00,
         },
-        "Nuevo": {"descripcion": "Estilo que aún no ha sido fabricado", "factor": 1.05},
+        "Nuevo": {"descripcion": "Estilo que an no ha sido fabricado", "factor": 1.05},
     }
 
     # Factores de marca (de imagen 3)
@@ -145,17 +145,17 @@ class FactoresTDV:
         "OTRAS MARCAS": 1.10,  # Default para cualquier otra marca
     }
 
-    # WIPs disponibles (basado en análisis previo)
+    # WIPs disponibles (basado en anlisis previo)
     WIPS_TEXTILES = ["10c", "14", "16", "19a", "19c", "24"]
     WIPS_MANUFACTURA = ["34", "37", "40", "43", "44", "45", "49", "50"]
 
-    # ✅ NUEVO: Mapeo de nombres específicos de WIPs (de tabla costos_procesos_tdv)
+    #  NUEVO: Mapeo de nombres especficos de WIPs (de tabla costos_procesos_tdv)
     NOMBRES_WIPS = {
         # WIPs Textiles
         "10c": "Abastecimiento de Hilo",
-        "14": "Teñido de Hilado",
-        "16": "Tejido de Tela y Rectilíneos",
-        "19a": "Teñido",
+        "14": "Teido de Hilado",
+        "16": "Tejido de Tela y Rectilneos",
+        "19a": "Teido",
         "19c": "Despacho",
         "24": "Estampado Tela",
         # WIPs Manufactura
@@ -164,12 +164,12 @@ class FactoresTDV:
         "40": "Costura",
         "43": "Bordado Prenda",
         "44": "Estampado Prendas",
-        "45": "Lavado en Prenda (Después de estampar)",
+        "45": "Lavado en Prenda (Despus de estampar)",
         "49": "Acabado",
-        "50": "Movimiento Logístico",
+        "50": "Movimiento Logstico",
     }
 
-    # Rangos de seguridad por componente (validación experta)
+    # Rangos de seguridad por componente (validacin experta)
     RANGOS_SEGURIDAD: Factores = {
         "costo_textil": {"min": 0.05, "max": 10},
         "costo_manufactura": {"min": 0.05, "max": 10},
@@ -221,7 +221,7 @@ class FactoresTDV:
     def validar_rango_seguridad(
         cls, valor: float, componente: str
     ) -> tuple[float, bool]:
-        """Valida y ajusta valor según rango de seguridad"""
+        """Valida y ajusta valor segn rango de seguridad"""
         if componente not in cls.RANGOS_SEGURIDAD:
             return valor, False
 
@@ -236,6 +236,6 @@ class FactoresTDV:
         return valor, valor != valor_original
 
 
-# Instancia global de configuración
+# Instancia global de configuracin
 settings = Settings()
 factores = FactoresTDV()

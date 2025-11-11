@@ -1181,17 +1181,13 @@ class TDVQueries:
                 END as grupo_wip,
                 ROUND(AVG(COALESCE(wip.costo_textil, 0))::NUMERIC, 4) as costo_textil_promedio,
                 ROUND(AVG(COALESCE(wip.costo_manufactura, 0))::NUMERIC, 4) as costo_manufactura_promedio,
-                COUNT(DISTINCT cod.cod_ordpro) as ops_con_wip
+                COUNT(*) as ops_con_wip
             FROM silver.costo_wip_op wip
-            INNER JOIN {settings.db_schema}.costo_op_detalle cod
-                ON wip.pr_id = cod.pr_id
-            WHERE cod.cod_ordpro IN ({placeholders_cod})
+            WHERE wip.pr_id IN ({placeholders_cod})
               AND wip.fecha_corrida = (
                 SELECT MAX(fecha_corrida)
-                FROM silver.costo_wip_op wip2
-                INNER JOIN {settings.db_schema}.costo_op_detalle cod2
-                    ON wip2.pr_id = cod2.pr_id
-                WHERE cod2.cod_ordpro IN ({placeholders_cod})
+                FROM silver.costo_wip_op
+                WHERE pr_id IN ({placeholders_cod})
               )
             GROUP BY wip.wip_id
             ORDER BY grupo_wip, wip.wip_id

@@ -333,7 +333,7 @@ class TDVQueries:
             queries = {
                 "costo_op_detalle": f"SELECT MAX(fecha_corrida) as fecha_max FROM {settings.db_schema}.costo_op_detalle WHERE version_calculo = ?",
                 "resumen_wip_por_prenda": f"SELECT MAX(fecha_corrida) as fecha_max FROM {settings.db_schema}.resumen_wip_por_prenda WHERE version_calculo = ?",
-                "costo_wip_op": f"SELECT MAX(fecha_corrida) as fecha_max FROM {settings.db_schema}.costo_wip_op WHERE version_calculo = ?",
+                "costo_wip_op": f"SELECT MAX(fecha_corrida) as fecha_max FROM silver.costo_wip_op WHERE version_calculo = ?",
             }
 
             if tabla in queries:
@@ -1182,13 +1182,13 @@ class TDVQueries:
                 ROUND(AVG(COALESCE(wip.costo_textil, 0))::NUMERIC, 4) as costo_textil_promedio,
                 ROUND(AVG(COALESCE(wip.costo_manufactura, 0))::NUMERIC, 4) as costo_manufactura_promedio,
                 COUNT(DISTINCT cod.cod_ordpro) as ops_con_wip
-            FROM {settings.db_schema}.costo_wip_op wip
+            FROM silver.costo_wip_op wip
             INNER JOIN {settings.db_schema}.costo_op_detalle cod
                 ON wip.pr_id = cod.pr_id
             WHERE cod.cod_ordpro IN ({placeholders_cod})
               AND wip.fecha_corrida = (
                 SELECT MAX(fecha_corrida)
-                FROM {settings.db_schema}.costo_wip_op wip2
+                FROM silver.costo_wip_op wip2
                 INNER JOIN {settings.db_schema}.costo_op_detalle cod2
                     ON wip2.pr_id = cod2.pr_id
                 WHERE cod2.cod_ordpro IN ({placeholders_cod})

@@ -7,9 +7,11 @@ import { AlertCircle, TrendingUp } from "lucide-react";
 interface DesgloseWip {
   wip_id: string;
   grupo_wip: "textil" | "manufactura" | "otro";
-  costo_textil_promedio: number;
-  costo_manufactura_promedio: number;
-  ops_con_wip: number;
+  total_prendas: number;
+  total_textil: number;
+  total_manufactura: number;
+  textil_por_prenda: number;
+  manufactura_por_prenda: number;
 }
 
 interface WipDesgloseResponse {
@@ -84,11 +86,11 @@ export const WipDesgloseTable = React.memo(
       if (!desgloseData) return { textil: 0, manufactura: 0 };
 
       const totalTextil = desgloseData.desgloses_textil.reduce(
-        (sum, d) => sum + d.costo_textil_promedio,
+        (sum, d) => sum + d.textil_por_prenda,
         0
       );
       const totalManufactura = desgloseData.desgloses_manufactura.reduce(
-        (sum, d) => sum + d.costo_manufactura_promedio,
+        (sum, d) => sum + d.manufactura_por_prenda,
         0
       );
 
@@ -141,7 +143,7 @@ export const WipDesgloseTable = React.memo(
             <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4 border border-blue-200">
               <div className="flex items-center gap-2 mb-2">
                 <TrendingUp className="h-4 w-4 text-blue-600" />
-                <h4 className="text-sm font-semibold text-blue-900">Costo Textil Promedio</h4>
+                <h4 className="text-sm font-semibold text-blue-900">Textil Por Prenda</h4>
               </div>
               <p className="text-2xl font-bold text-blue-900">
                 ${totalesPorGrupo.textil.toFixed(2)}
@@ -157,7 +159,7 @@ export const WipDesgloseTable = React.memo(
             <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg p-4 border border-orange-200">
               <div className="flex items-center gap-2 mb-2">
                 <TrendingUp className="h-4 w-4 text-orange-600" />
-                <h4 className="text-sm font-semibold text-orange-900">Costo Manufactura Promedio</h4>
+                <h4 className="text-sm font-semibold text-orange-900">Manufactura Por Prenda</h4>
               </div>
               <p className="text-2xl font-bold text-orange-900">
                 ${totalesPorGrupo.manufactura.toFixed(2)}
@@ -181,9 +183,9 @@ export const WipDesgloseTable = React.memo(
                 <tr className="border-b border-gray-200 bg-gray-50">
                   <th className="px-4 py-3 text-left font-semibold text-gray-600">WIP ID</th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-600">Grupo</th>
-                  <th className="px-4 py-3 text-right font-semibold text-gray-600">Costo Textil</th>
-                  <th className="px-4 py-3 text-right font-semibold text-gray-600">Costo Manufactura</th>
-                  <th className="px-4 py-3 text-center font-semibold text-gray-600">OPs</th>
+                  <th className="px-4 py-3 text-right font-semibold text-gray-600">Total Prendas</th>
+                  <th className="px-4 py-3 text-right font-semibold text-gray-600">Textil/Prenda</th>
+                  <th className="px-4 py-3 text-right font-semibold text-gray-600">Manufactura/Prenda</th>
                 </tr>
               </thead>
               <tbody>
@@ -208,13 +210,13 @@ export const WipDesgloseTable = React.memo(
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right text-gray-900">
-                      ${desglose.costo_textil_promedio.toFixed(4)}
+                      {desglose.total_prendas.toLocaleString()}
                     </td>
                     <td className="px-4 py-3 text-right text-gray-900">
-                      ${desglose.costo_manufactura_promedio.toFixed(4)}
+                      ${desglose.textil_por_prenda.toFixed(4)}
                     </td>
-                    <td className="px-4 py-3 text-center text-gray-600">
-                      {desglose.ops_con_wip}
+                    <td className="px-4 py-3 text-right text-gray-900">
+                      ${desglose.manufactura_por_prenda.toFixed(4)}
                     </td>
                   </tr>
                 ))}

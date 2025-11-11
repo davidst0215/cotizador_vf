@@ -1004,11 +1004,15 @@ const SistemaCotizadorTDV = () => {
         version_calculo: formData.version_calculo,
         wips_textiles: esEstiloNuevo ? wipsTextiles : null,
         wips_manufactura: esEstiloNuevo ? wipsManufactura : null,
+        cod_ordpros: selectedOpsCode && selectedOpsCode.length > 0 ? selectedOpsCode : null,
       };
 
       // console.log("🚀 Procesando cotización:", payload);
 
       const resultado = await post<any>("/cotizar", payload);
+      console.log("🔍 BACKEND RESPONSE (Tab 1) - costo_textil:", resultado.costo_textil, "costo_manufactura:", resultado.costo_manufactura);
+      console.log("📊 selectedOpsCode being used:", selectedOpsCode);
+      console.log("📋 Full resultado from backend:", resultado);
       setCotizacionActual(resultado);
 
       await cargarOpsReales(resultado);
@@ -1026,7 +1030,7 @@ const SistemaCotizadorTDV = () => {
     } finally {
       setCargando(false);
     }
-  }, [formData, esEstiloNuevo, wipsTextiles, wipsManufactura, cargarOpsReales]);
+  }, [formData, esEstiloNuevo, wipsTextiles, wipsManufactura, selectedOpsCode, cargarOpsReales]);
 
   // ========================================
   // 🎨 COMPONENTES MEMOIZADOS CORREGIDOS
@@ -1386,48 +1390,44 @@ const SistemaCotizadorTDV = () => {
               <OpsSelectionTable
                 codigoEstilo={cotizacionActual.inputs.codigo_estilo}
                 versionCalculo={cotizacionActual.inputs.version_calculo}
+                opsSeleccionadasPrevia={selectedOpsCode}
                 onOpsSelected={async (opsSeleccionadas) => {
                   try {
-                    // Capturar los códigos de OP seleccionadas para mostrar el desglose WIP
-                    setSelectedOpsCode(opsSeleccionadas.map((op) => op.cod_ordpro));
+                    // Guardar los códigos de OP seleccionadas
+                    const codOrdpros = opsSeleccionadas.map((op) => op.cod_ordpro);
+                    setSelectedOpsCode(codOrdpros);
 
-                    const response = await fetch(
-                      "http://localhost:8000/calcular-promedios-ops-seleccionadas",
-                      {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify(opsSeleccionadas),
-                      }
-                    );
+                    setFormData(prev => ({
+                      ...prev,
+                      cod_ordpros: codOrdpros
+                    }));
 
-                    if (!response.ok) {
-                      throw new Error("Error recalculando promedios");
-                    }
+                    // Procesar la cotización completa
+                    setCargando(true);
+                    const payload = {
+                      cliente_marca: formData.cliente_marca,
+                      temporada: formData.temporada,
+                      categoria_lote: formData.categoria_lote,
+                      familia_producto: formData.familia_producto,
+                      tipo_prenda: formData.tipo_prenda,
+                      codigo_estilo: formData.codigo_estilo,
+                      usuario: formData.usuario,
+                      version_calculo: formData.version_calculo,
+                      wips_textiles: esEstiloNuevo ? wipsTextiles : null,
+                      wips_manufactura: esEstiloNuevo ? wipsManufactura : null,
+                      cod_ordpros: codOrdpros,
+                    };
 
-                    const resultado = await response.json();
-                    console.log(
-                      "Promedios recalculados:",
-                      resultado.promedios
-                    );
-
-                    // Actualizar cotizacionActual con los nuevos promedios
-                    if (cotizacionActual && resultado.promedios) {
-                      setCotizacionActual({
-                        ...cotizacionActual,
-                        costo_textil: resultado.promedios.textil_unitario,
-                        costo_manufactura: resultado.promedios.manufactura_unitario,
-                        costo_materia_prima: resultado.promedios.materia_prima_unitario,
-                        costo_avios: resultado.promedios.avios_unitario,
-                        costo_indirecto_fijo: resultado.promedios.indirecto_fijo_unitario,
-                        gasto_administracion: resultado.promedios.administracion_unitario,
-                        gasto_ventas: resultado.promedios.ventas_unitario,
-                      });
-                      // Mostrar mensaje de éxito
-                      alert(`✓ Promedios recalculados exitosamente con ${resultado.ops_usadas} OPs seleccionadas`);
-                    }
+                    const resultado = await post<any>("/cotizar", payload);
+                    console.log("🔍 BACKEND RESPONSE - costo_textil:", resultado.costo_textil, "costo_manufactura:", resultado.costo_manufactura);
+                    console.log("📊 OPs seleccionadas siendo procesadas:", codOrdpros);
+                    console.log("📋 Full resultado from backend:", resultado);
+                    setCotizacionActual(resultado);
                   } catch (error) {
-                    console.error("Error en recálculo de promedios:", error);
-                    alert("Error al recalcular promedios: " + (error instanceof Error ? error.message : "Error desconocido"));
+                    console.error("Error generando cotización:", error);
+                    alert("Error al generar cotización: " + (error instanceof Error ? error.message : "Error desconocido"));
+                  } finally {
+                    setCargando(false);
                   }
                 }}
                 onError={(error) => {
@@ -1771,7 +1771,7 @@ const SistemaCotizadorTDV = () => {
             ) : (
               <div className="flex items-center gap-3">
                 <DollarSign className="h-6 w-6" />
-                <span className="text-lg">Generar Cotización</span>
+                <span className="text-lg">Configurar Producción</span>
               </div>
             )}
           </button>

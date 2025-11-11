@@ -35,13 +35,14 @@ interface OpsSelectionTableProps {
   versionCalculo: string;
   onOpsSelected: (opsSeleccionadas: OP[]) => Promise<void>;
   onError?: (error: string) => void;
+  opsSeleccionadasPrevia?: string[]; // Mantener selección anterior
 }
 
 type SortField = "cod_ordpro" | "textil_unitario" | "manufactura_unitario" | "prendas_requeridas" | "fecha_facturacion";
 type SortDirection = "asc" | "desc";
 
 export const OpsSelectionTable = React.memo(
-  ({ codigoEstilo, versionCalculo, onOpsSelected, onError }: OpsSelectionTableProps) => {
+  ({ codigoEstilo, versionCalculo, onOpsSelected, onError, opsSeleccionadasPrevia }: OpsSelectionTableProps) => {
     const [opsData, setOpsData] = useState<OP[]>([]);
     const [cargando, setCargando] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -69,9 +70,16 @@ export const OpsSelectionTable = React.memo(
           setError("No hay OPs disponibles para este estilo (estilo nuevo)");
           setOpsData([]);
         } else {
-          // Inicializar todas las OPs como seleccionadas
+          // Inicializar OPs y mantener selección anterior si la hay
           setOpsData(data.ops);
-          setSelectedOps(new Set(data.ops.map((op) => op.cod_ordpro)));
+          if (opsSeleccionadasPrevia && opsSeleccionadasPrevia.length > 0) {
+            // Si hay selección previa, mantenerla
+            setSelectedOps(new Set(opsSeleccionadasPrevia));
+            console.log("✅ Restaurada selección anterior de OPs:", opsSeleccionadasPrevia);
+          } else {
+            // Si no hay selección previa, seleccionar todas
+            setSelectedOps(new Set(data.ops.map((op) => op.cod_ordpro)));
+          }
         }
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : "Error desconocido";
@@ -327,11 +335,13 @@ export const OpsSelectionTable = React.memo(
               <p className="text-xs text-gray-500 mt-1">
                 Promedio textil: $
                 {(
-                  opsSeleccionadas.reduce((sum, op) => sum + op.textil_unitario, 0) / selectedOps.size
+                  opsSeleccionadas.reduce((sum, op) => sum + op.textil_unitario * op.prendas_requeridas, 0) /
+                  opsSeleccionadas.reduce((sum, op) => sum + op.prendas_requeridas, 0)
                 ).toFixed(2)}{" "}
                 | Promedio manufactura: $
                 {(
-                  opsSeleccionadas.reduce((sum, op) => sum + op.manufactura_unitario, 0) / selectedOps.size
+                  opsSeleccionadas.reduce((sum, op) => sum + op.manufactura_unitario * op.prendas_requeridas, 0) /
+                  opsSeleccionadas.reduce((sum, op) => sum + op.prendas_requeridas, 0)
                 ).toFixed(2)}
               </p>
             )}
@@ -341,7 +351,7 @@ export const OpsSelectionTable = React.memo(
             disabled={selectedOps.size === 0}
             className="px-6 py-3 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
           >
-            Recalcular Promedios
+            Generar Cotización
           </button>
         </div>
       </div>

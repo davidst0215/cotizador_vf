@@ -88,7 +88,7 @@ export const OpsSelectionTable = React.memo(
       } finally {
         setCargando(false);
       }
-    }, [codigoEstilo, versionCalculo, onError]);
+    }, [codigoEstilo, versionCalculo, onError, opsSeleccionadasPrevia]);
 
     // Cargar OPs al montar el componente
     React.useEffect(() => {

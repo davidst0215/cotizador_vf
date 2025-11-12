@@ -57,7 +57,7 @@ export const OpsSelectionTable = React.memo(
 
       try {
         const response = await fetch(
-          `http://localhost:8000/obtener-ops-detalladas/${codigoEstilo}?version_calculo=${versionCalculo}`
+          `http://localhost:8001/obtener-ops-detalladas/${codigoEstilo}?version_calculo=${versionCalculo}`
         );
 
         if (!response.ok) {

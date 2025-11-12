@@ -59,6 +59,7 @@ export const OpsSelectionTable = forwardRef<OpsSelectionTableRef, OpsSelectionTa
     const [selectedOps, setSelectedOps] = useState<Set<string>>(new Set());
     const [debeCargar, setDebeCargar] = useState(false); // Control para evitar búsqueda automática
     const [busquedaPorMarca, setBusquedaPorMarca] = useState<{ marca: string; tipoPrenda: string } | null>(null); // Para búsqueda alternativa
+    const [filtrosCategoriaLote, setFiltrosCategoriaLote] = useState<Set<string>>(new Set()); // Filtros post-búsqueda
 
     // Exponer métodos imperativos al componente padre
     useImperativeHandle(ref, () => ({
@@ -138,28 +139,6 @@ export const OpsSelectionTable = forwardRef<OpsSelectionTableRef, OpsSelectionTa
       }
     }, [opsSeleccionadasPrevia, opsData]);
 
-    // Toggle selección de una OP
-    const toggleOp = useCallback((codOrdpro: string) => {
-      setSelectedOps((prev) => {
-        const newSet = new Set(prev);
-        if (newSet.has(codOrdpro)) {
-          newSet.delete(codOrdpro);
-        } else {
-          newSet.add(codOrdpro);
-        }
-        return newSet;
-      });
-    }, []);
-
-    // Toggle seleccionar todas
-    const toggleSelectAll = useCallback(() => {
-      if (selectedOps.size === opsData.length) {
-        setSelectedOps(new Set());
-      } else {
-        setSelectedOps(new Set(opsData.map((op) => op.cod_ordpro)));
-      }
-    }, [opsData, selectedOps.size]);
-
     // Ordenar OPs
     const sortedOps = useMemo(() => {
       const sorted = [...opsData].sort((a, b) => {
@@ -177,6 +156,40 @@ export const OpsSelectionTable = forwardRef<OpsSelectionTableRef, OpsSelectionTa
       });
       return sorted;
     }, [opsData, sortField, sortDirection]);
+
+    // Obtener categorías únicas para filtros
+    const categoriasUnicas = useMemo(() => {
+      return Array.from(new Set(opsData.map(op => op.categoria_lote))).sort();
+    }, [opsData]);
+
+    // Aplicar filtro de categoría lote (post-búsqueda)
+    const opsFiltradasPorCategoria = useMemo(() => {
+      if (filtrosCategoriaLote.size === 0) return sortedOps; // Sin filtros, mostrar todas
+      return sortedOps.filter(op => filtrosCategoriaLote.has(op.categoria_lote));
+    }, [sortedOps, filtrosCategoriaLote]);
+
+    // Toggle selección de una OP
+    const toggleOp = useCallback((codOrdpro: string) => {
+      setSelectedOps((prev) => {
+        const newSet = new Set(prev);
+        if (newSet.has(codOrdpro)) {
+          newSet.delete(codOrdpro);
+        } else {
+          newSet.add(codOrdpro);
+        }
+        return newSet;
+      });
+    }, []);
+
+    // Toggle seleccionar todas (sobre el universo de OPs filtradas)
+    const toggleSelectAll = useCallback(() => {
+      const opsATratar = filtrosCategoriaLote.size === 0 ? opsData : opsFiltradasPorCategoria;
+      if (selectedOps.size === opsATratar.length) {
+        setSelectedOps(new Set());
+      } else {
+        setSelectedOps(new Set(opsATratar.map((op) => op.cod_ordpro)));
+      }
+    }, [opsData, opsFiltradasPorCategoria, selectedOps.size, filtrosCategoriaLote.size]);
 
     // Manejar cambio de sorting
     const handleSort = (field: SortField) => {
@@ -265,13 +278,43 @@ export const OpsSelectionTable = forwardRef<OpsSelectionTableRef, OpsSelectionTa
           <div className="flex justify-between items-center mb-3">
             <h3 className="text-xl font-bold text-white">OPs de Referencia - Tabla Interactiva</h3>
             <span className="text-white/80 text-sm">
-              {selectedOps.size} de {opsData.length} seleccionadas
+              {selectedOps.size} de {opsFiltradasPorCategoria.length} seleccionadas
             </span>
           </div>
           <p className="text-white/80 text-sm">
             Selecciona las OPs que deseas usar para calcular los promedios de costos
           </p>
         </div>
+
+        {/* Filtros de Categoría Lote */}
+        {categoriasUnicas.length > 0 && (
+          <div className="p-4 border-b border-gray-200 bg-gray-50">
+            <h4 className="font-semibold text-sm text-gray-700 mb-3">Filtrar por Categoría de Lote:</h4>
+            <div className="flex flex-wrap gap-3">
+              {categoriasUnicas.map((categoria) => (
+                <label key={categoria} className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={filtrosCategoriaLote.size === 0 || filtrosCategoriaLote.has(categoria)}
+                    onChange={(e) => {
+                      setFiltrosCategoriaLote((prev) => {
+                        const newSet = new Set(prev);
+                        if (e.target.checked) {
+                          newSet.add(categoria);
+                        } else {
+                          newSet.delete(categoria);
+                        }
+                        return newSet;
+                      });
+                    }}
+                    className="rounded"
+                  />
+                  <span className="text-sm text-gray-700">{categoria}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Tabla */}
         <div className="overflow-x-auto">
@@ -306,7 +349,7 @@ export const OpsSelectionTable = forwardRef<OpsSelectionTableRef, OpsSelectionTa
               </tr>
             </thead>
             <tbody>
-              {sortedOps.map((op) => {
+              {opsFiltradasPorCategoria.map((op) => {
                 const isSelected = selectedOps.has(op.cod_ordpro);
                 return (
                   <tr

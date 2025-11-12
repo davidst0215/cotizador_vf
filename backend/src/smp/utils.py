@@ -186,7 +186,7 @@ class CotizadorTDV:
         if not hasattr(input_data, "version_calculo") or not input_data.version_calculo:
             input_data.version_calculo = VersionCalculo.FLUIDA  # Default
         else:
-            versiones_validas = ["FLUIDO", "truncado"]
+            versiones_validas = ["FLUIDA", "truncado"]
             version_value = input_data.version_calculo.value if hasattr(input_data.version_calculo, 'value') else str(input_data.version_calculo)
             if version_value not in versiones_validas:
                 errores.append(f"version_calculo debe ser una de: {versiones_validas}")

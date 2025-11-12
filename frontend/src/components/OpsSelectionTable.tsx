@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useCallback, useMemo } from "react";
+import React, { useState, useCallback, useMemo, forwardRef } from "react";
+import { useImperativeHandle } from "react";
 import { ChevronDown, ChevronUp, CheckSquare, Square } from "lucide-react";
 
 // Interface para una OP individual
@@ -36,29 +37,56 @@ interface OpsSelectionTableProps {
   onOpsSelected: (opsSeleccionadas: OP[]) => Promise<void>;
   onError?: (error: string) => void;
   opsSeleccionadasPrevia?: string[]; // Mantener selección anterior
+  marca?: string; // Para búsqueda alternativa por marca + tipo_prenda
+  tipoPrenda?: string; // Para búsqueda alternativa por marca + tipo_prenda
+}
+
+export interface OpsSelectionTableRef {
+  iniciarBusqueda: () => void;
+  iniciarBusquedaPorMarca: (marca: string, tipoPrenda: string) => void;
 }
 
 type SortField = "cod_ordpro" | "textil_unitario" | "manufactura_unitario" | "prendas_requeridas" | "fecha_facturacion";
 type SortDirection = "asc" | "desc";
 
-export const OpsSelectionTable = React.memo(
-  ({ codigoEstilo, versionCalculo, onOpsSelected, onError, opsSeleccionadasPrevia }: OpsSelectionTableProps) => {
+export const OpsSelectionTable = forwardRef<OpsSelectionTableRef, OpsSelectionTableProps>(
+  ({ codigoEstilo, versionCalculo, onOpsSelected, onError, opsSeleccionadasPrevia, marca, tipoPrenda }, ref) => {
     const [opsData, setOpsData] = useState<OP[]>([]);
     const [cargando, setCargando] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [sortField, setSortField] = useState<SortField>("fecha_facturacion");
     const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
     const [selectedOps, setSelectedOps] = useState<Set<string>>(new Set());
+    const [debeCargar, setDebeCargar] = useState(false); // Control para evitar búsqueda automática
+    const [busquedaPorMarca, setBusquedaPorMarca] = useState<{ marca: string; tipoPrenda: string } | null>(null); // Para búsqueda alternativa
 
-    // Cargar OPs detalladas del nuevo endpoint
+    // Exponer métodos imperativos al componente padre
+    useImperativeHandle(ref, () => ({
+      iniciarBusqueda: () => setDebeCargar(true),
+      iniciarBusquedaPorMarca: (m: string, t: string) => {
+        setBusquedaPorMarca({ marca: m, tipoPrenda: t });
+        setDebeCargar(true);
+      },
+    }), []);
+
+    // Cargar OPs detalladas - soporta búsqueda por código_estilo o por marca+tipo_prenda
     const cargarOpsDetalladas = useCallback(async () => {
       setCargando(true);
       setError(null);
 
       try {
-        const response = await fetch(
-          `http://localhost:8001/obtener-ops-detalladas/${codigoEstilo}?version_calculo=${versionCalculo}`
-        );
+        let url: string;
+
+        // Determinar URL según tipo de búsqueda
+        if (busquedaPorMarca && busquedaPorMarca.marca && busquedaPorMarca.tipoPrenda) {
+          // Búsqueda alternativa por marca + tipo_prenda
+          url = `http://localhost:8001/obtener-ops-por-marca/${encodeURIComponent(busquedaPorMarca.marca)}/${encodeURIComponent(busquedaPorMarca.tipoPrenda)}?version_calculo=${versionCalculo}`;
+        } else {
+          // Búsqueda por código_estilo (default)
+          url = `http://localhost:8001/obtener-ops-detalladas/${codigoEstilo}?version_calculo=${versionCalculo}`;
+        }
+
+        const response = await fetch(url);
 
         if (!response.ok) {
           throw new Error(`Error ${response.status}: No se pudieron cargar las OPs`);
@@ -67,7 +95,10 @@ export const OpsSelectionTable = React.memo(
         const data: OpsResponse = await response.json();
 
         if (data.ops.length === 0) {
-          setError("No hay OPs disponibles para este estilo (estilo nuevo)");
+          const tipoError = busquedaPorMarca
+            ? `No hay OPs disponibles para ${busquedaPorMarca.marca} - ${busquedaPorMarca.tipoPrenda}`
+            : "No hay OPs disponibles para este estilo (estilo nuevo)";
+          setError(tipoError);
           setOpsData([]);
           setSelectedOps(new Set());
         } else {
@@ -82,13 +113,16 @@ export const OpsSelectionTable = React.memo(
       } finally {
         setCargando(false);
       }
-    }, [codigoEstilo, versionCalculo, onError]);
+    }, [codigoEstilo, versionCalculo, onError, busquedaPorMarca]);
 
-    // Cargar OPs cuando cambia el código de estilo o versión de cálculo
-    // ✨ CORREGIDO: No incluir cargarOpsDetalladas en dependencias para evitar loop infinito
+    // Cargar OPs solo cuando se solicita explícitamente (NO automáticamente)
+    // ✨ CORREGIDO: useEffect solo se ejecuta cuando debeCargar es true
     React.useEffect(() => {
-      cargarOpsDetalladas();
-    }, [codigoEstilo, versionCalculo]);
+      if (debeCargar) {
+        cargarOpsDetalladas();
+        setDebeCargar(false); // Resetear para próxima búsqueda
+      }
+    }, [debeCargar]);
 
     // Restaurar selección anterior cuando opsSeleccionadasPrevia cambia
     React.useEffect(() => {
@@ -365,7 +399,7 @@ export const OpsSelectionTable = React.memo(
         </div>
       </div>
     );
-  }
+  },
 );
 
 OpsSelectionTable.displayName = "OpsSelectionTable";

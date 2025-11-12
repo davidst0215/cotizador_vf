@@ -7,6 +7,7 @@ import React, {
   useRef,
   useMemo,
 } from "react";
+import type { OpsSelectionTableRef } from "./OpsSelectionTable";
 import { get, post } from "@/libs/api";
 import {
   Settings,
@@ -497,6 +498,7 @@ const SistemaCotizadorTDV = () => {
   const familiaDebounceRef = useRef<NodeJS.Timeout | null>(null);
   const tipoDebounceRef = useRef<NodeJS.Timeout | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const opsSelectionTableRef = useRef<OpsSelectionTableRef>(null); // Ref para dispara búsqueda de OPs
 
   // Memoized validation
   const erroresFormulario = useMemo(() => {
@@ -507,14 +509,10 @@ const SistemaCotizadorTDV = () => {
     if (!formData.tipo_prenda) errores.push("Tipo de Prenda es requerido");
     if (!formData.codigo_estilo) errores.push("Código de estilo propio es requerido");
 
-    if (esEstiloNuevo && formData.codigo_estilo) {
-      if (wipsTextiles.length === 0 && wipsManufactura.length === 0) {
-        errores.push("Estilo nuevo requiere al menos una WIP");
-      }
-    }
+    // NOTA: Se removió validación de WIPs requeridas - ahora es opcional
 
     return errores;
-  }, [formData, esEstiloNuevo, wipsTextiles.length, wipsManufactura.length]);
+  }, [formData]);
 
   // Manejador de cambio de formulario con actualización inmediata
   const manejarCambioFormulario = useCallback(
@@ -1044,6 +1042,9 @@ const SistemaCotizadorTDV = () => {
       console.log("📋 Full resultado from backend:", resultado);
       setCotizacionActual(resultado);
 
+      // Dispara la búsqueda de OPs en OpsSelectionTable (sin búsqueda automática)
+      opsSelectionTableRef.current?.iniciarBusqueda();
+
       await cargarOpsReales(resultado);
 
       setPestanaActiva("resultados");
@@ -1417,6 +1418,7 @@ const SistemaCotizadorTDV = () => {
           ) : cotizacionActual ? (
             <>
               <OpsSelectionTable
+                ref={opsSelectionTableRef}
                 codigoEstilo={cotizacionActual.inputs.codigo_estilo}
                 versionCalculo={cotizacionActual.inputs.version_calculo}
                 opsSeleccionadasPrevia={selectedOpsCode}

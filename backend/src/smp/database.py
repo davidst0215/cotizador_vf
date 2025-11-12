@@ -64,8 +64,8 @@ def normalize_version_calculo(version: Optional[VersionCalculo]) -> str:
     # Obtener el valor real del enum usando .value
     version_value = version.value if hasattr(version, 'value') else str(version)
 
-    # Convertir "FLUIDO" (del API) a "FLUIDA" (valor en BD)
-    if version_value == "FLUIDO":
+    # Convertir "FLUIDA" (del API) a "FLUIDA" (valor en BD)
+    if version_value == "FLUIDA":
         return "FLUIDA"
 
     # El "truncado" se queda igual (ya viene en minsculas)
@@ -325,7 +325,7 @@ class TDVQueries:
     async def obtener_fecha_maxima_corrida(
         self,
         tabla: str,
-        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
+        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
     ) -> datetime:
         """Obtiene la fecha_corrida mxima de cada tabla para una versin especfica"""
 
@@ -355,7 +355,7 @@ class TDVQueries:
     async def verificar_estilo_existente(
         self,
         codigo_estilo: str,
-        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
+        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
     ) -> bool:
         """
         Verifica si un estilo existe historial_estilos no tiene
@@ -440,7 +440,7 @@ class TDVQueries:
     async def obtener_info_detallada_estilo(
         self,
         codigo_estilo: str,
-        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
+        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
     ) -> Dict[str, Any]:
         """
          FUNCIN CORREGIDA: Obtiene informacin detallada de un estilo con fechas relativas
@@ -617,7 +617,7 @@ class TDVQueries:
         codigo_estilo: str,
         cliente: str,
         limite: Optional[int] = 10,
-        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
+        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
     ) -> List[EstiloSimilar]:
         """ FUNCIN CORREGIDA: Busca estilos similares con fechas relativas"""
 
@@ -657,7 +657,7 @@ class TDVQueries:
         ORDER BY COUNT(c.cod_ordpro) DESC
         """
 
-        # Normalizar version_calculo (FLUIDO -> FLUIDA)
+        # Normalizar version_calculo (FLUIDA -> FLUIDA)
         version_normalized = normalize_version_calculo(version_calculo)
 
         params = (
@@ -692,7 +692,7 @@ class TDVQueries:
     # ========================================
 
     async def obtener_clientes_disponibles(
-        self, version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO
+        self, version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA
     ) -> List[str]:
         """Obtiene lista de clientes nicos con fechas relativas"""
         normalized_version = normalize_version_calculo(version_calculo)
@@ -721,7 +721,7 @@ class TDVQueries:
         return clientes
 
     async def obtener_familias_productos(
-        self, version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO
+        self, version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA
     ) -> List[str]:
         """ CORREGIDA: Obtiene familias de productos disponibles con fechas relativas"""
         # Test query - simplified to debug PostgreSQL connectivity
@@ -735,7 +735,7 @@ class TDVQueries:
     async def obtener_tipos_prenda(
         self,
         familia: str,
-        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
+        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
     ) -> List[str]:
         """ CORREGIDA: Obtiene tipos de prenda para una familia especfica con fechas relativas"""
         query = f"""
@@ -768,7 +768,7 @@ class TDVQueries:
 
     async def obtener_todos_tipos_prenda(
         self,
-        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
+        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
     ) -> List[str]:
         """ Obtiene TODOS los tipos de prenda disponibles (sin filtro de familia)"""
         query = f"""
@@ -807,7 +807,7 @@ class TDVQueries:
         familia_producto: str,
         tipo_prenda: str,
         cliente: Optional[str] = None,
-        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
+        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
     ) -> Dict[str, Any]:
         """ CORREGIDA: Busca costos histricos con fechas relativas"""
 
@@ -909,7 +909,7 @@ class TDVQueries:
         self,
         codigo_estilo: str,
         meses: int = 12,
-        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
+        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
     ) -> Dict[str, Any]:
         """
          FUNCIN CORREGIDA: Busca costos histricos de un estilo especfico con fechas relativas
@@ -1073,7 +1073,7 @@ class TDVQueries:
         self,
         codigo_estilo: str,
         meses: int = 12,
-        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
+        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
     ) -> List[Dict[str, Any]]:
         """
         Obtiene lista detallada de OPs sin aplicar factor de seguridad.
@@ -1159,7 +1159,7 @@ class TDVQueries:
     async def obtener_costos_por_ops_especificas(
         self,
         cod_ordpros: List[str],
-        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
+        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
     ) -> List[Dict[str, Any]]:
         """
         ✨ MÉTODO NUEVO: Obtiene los 7 componentes de costo para OPs específicas.
@@ -1251,7 +1251,7 @@ class TDVQueries:
     async def obtener_desglose_wip_por_ops(
         self,
         cod_ordpros: List[str],
-        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
+        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
     ) -> List[Dict[str, Any]]:
         """
         Obtiene desglose de costos por WIP para OPs seleccionadas.
@@ -1355,7 +1355,7 @@ class TDVQueries:
     async def calcular_costos_ponderados_por_ops(
         self,
         cod_ordpros: List[str],
-        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
+        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
     ) -> Dict[str, float]:
         """
         Calcula los costos textil y manufactura ponderados por prendas para las OPs seleccionadas.
@@ -1431,7 +1431,7 @@ class TDVQueries:
     async def obtener_costos_wips_por_estabilidad(
         self,
         tipo_prenda: str,
-        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
+        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
         marca: Optional[str] = None,
     ) -> Dict[str, float]:
         """Usar anlisis inteligente de variacin con filtro de marca y prendas >= 200"""
@@ -1448,7 +1448,7 @@ class TDVQueries:
     async def obtener_costos_wips_inteligente(
         self,
         tipo_prenda: str,
-        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
+        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
         marca: Optional[str] = None,
     ) -> Dict[str, float]:
         """
@@ -1665,14 +1665,14 @@ class TDVQueries:
     async def obtener_ruta_textil_recomendada(
         self,
         tipo_prenda: str,
-        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
+        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
         marca: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         CORRECCIN: Filtra por marca y total_prendas >= 200
         """
 
-        # Normalizar version_calculo (FLUIDO -> FLUIDA)
+        # Normalizar version_calculo (FLUIDA -> FLUIDA)
         version_normalized = normalize_version_calculo(version_calculo)
 
         #  QUERY CORREGIDA: marca + filtro prendas >= 200
@@ -1782,7 +1782,7 @@ class TDVQueries:
     async def _obtener_costos_wips_legacy(
         self,
         tipo_prenda: str,
-        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
+        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
         marca: Optional[str] = None,
     ) -> Dict[str, float]:
         """ CORRECCIN: Filtra por marca y total_prendas >= 200"""
@@ -1869,7 +1869,7 @@ class TDVQueries:
     async def obtener_wips_disponibles_estructurado(
         self,
         tipo_prenda: Optional[str] = None,
-        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
+        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
         marca: Optional[str] = None,
     ) -> Tuple[List[WipDisponible], List[WipDisponible]]:
         """ CORREGIDO: Filtra por marca y prendas >= 200"""
@@ -1965,7 +1965,7 @@ class TDVQueries:
     async def obtener_gastos_por_estilo_recurrente(
         self,
         codigo_estilo: str,
-        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
+        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
     ) -> Tuple[Dict[str, float], List[str]]:
         """
         Obtiene gastos indirectos para estilos RECURRENTES usando MODA.
@@ -1976,7 +1976,7 @@ class TDVQueries:
 
         Args:
             codigo_estilo: El cdigo de estilo propio exacto
-            version_calculo: FLUIDO o truncado
+            version_calculo: FLUIDA o truncado
 
         Returns:
             Tupla (gastos_dict, ops_excluidas_indices)
@@ -2146,7 +2146,7 @@ class TDVQueries:
         marca: str,
         familia_prenda: Optional[str],
         tipo_prenda: str,
-        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
+        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
     ) -> Tuple[Dict[str, float], List[str]]:
         """
         Obtiene gastos indirectos para estilos NUEVOS usando MODA.
@@ -2161,7 +2161,7 @@ class TDVQueries:
             marca: Cliente/marca
             familia_prenda: (OPCIONAL - no se usa como filtro)
             tipo_prenda: Tipo de prenda
-            version_calculo: FLUIDO o truncado
+            version_calculo: FLUIDA o truncado
 
         Returns:
             Tupla (gastos_dict, ops_excluidas_indices)
@@ -2319,7 +2319,7 @@ class TDVQueries:
     #  CDIGO CORREGIDO - Ahora usa MODA en lugar de PROMEDIO
     async def obtener_gastos_indirectos_formula(
         self,
-        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
+        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
         codigo_estilo: Optional[str] = None,
         cliente_marca: Optional[str] = None,
         familia_producto: Optional[str] = None,
@@ -2405,7 +2405,7 @@ class TDVQueries:
         return {"costo_indirecto_fijo": 0, "gasto_administracion": 0, "gasto_ventas": 0}, []
 
     async def obtener_ultimo_costo_materiales(
-        self, version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO
+        self, version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA
     ) -> Dict[str, float]:
         """ SIN CAMBIOS: Ya usa lgica correcta con fecha_corrida"""
 
@@ -2463,7 +2463,7 @@ class TDVQueries:
     async def obtener_volumen_historico_estilo(
         self,
         codigo_estilo: str,
-        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
+        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
     ) -> int:
         # Solo filtrar version_calculo en costo_op_detalle
         query = f"""
@@ -2524,7 +2524,7 @@ class TDVQueries:
         familia_producto: Optional[str] = None,
         tipo_prenda: Optional[str] = None,
         cliente: Optional[str] = None,
-        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
+        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
     ) -> Dict[str, Any]:
         """
          FUNCIN CORREGIDA: Obtiene las OPs especficas utilizadas para una cotizacin con fechas relativas
@@ -2823,7 +2823,7 @@ class TDVQueries:
         self,
         familia_producto: str,
         tipo_prenda: str,
-        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
+        version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDA,
     ) -> Dict[str, Any]:
         """ SIN CAMBIOS: Ya usa fecha_corrida correctamente"""
 

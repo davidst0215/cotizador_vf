@@ -23,7 +23,7 @@ from enum import Enum
 class VersionCalculo(str, Enum):
     """Versiones de clculo disponibles"""
 
-    FLUIDO = "FLUIDO"  # Valor que acepta el frontend/API
+    FLUIDA = "FLUIDA"  # Versión fluida (compatible con BD)
     TRUNCADO = "truncado"
 
 
@@ -141,9 +141,9 @@ class CotizacionInput(BaseModel):
     def validar_version_calculo(cls, v):
         """Valida y normaliza la versin de clculo"""
         if isinstance(v, str):
-            # Aceptar tanto "FLUIDO" (UI) como "FLUIDA" (BD)
+            # Aceptar tanto "FLUIDO" (UI frontend) como "FLUIDA" (BD)
             if v.upper() in ("FLUIDO", "FLUIDA"):
-                return VersionCalculo.FLUIDO
+                return VersionCalculo.FLUIDA
             elif v.lower() == "truncado":
                 return VersionCalculo.TRUNCADO
             else:

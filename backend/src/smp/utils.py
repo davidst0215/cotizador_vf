@@ -184,7 +184,7 @@ class CotizadorTDV:
 
         # Validar version_calculo
         if not hasattr(input_data, "version_calculo") or not input_data.version_calculo:
-            input_data.version_calculo = VersionCalculo.FLUIDO  # Default
+            input_data.version_calculo = VersionCalculo.FLUIDA  # Default
         else:
             versiones_validas = ["FLUIDO", "truncado"]
             version_value = input_data.version_calculo.value if hasattr(input_data.version_calculo, 'value') else str(input_data.version_calculo)
@@ -1297,7 +1297,7 @@ class CotizadorTDV:
                 ],
                 registros_encontrados=len(costos_ops),
                 precision_estimada=95.0 if len(costos_ops) >= 2 else 90.0,  # Mayor precisión con más OPs
-                version_calculo_usada=input_data.version_calculo or VersionCalculo.FLUIDO,
+                version_calculo_usada=input_data.version_calculo or VersionCalculo.FLUIDA,
                 codigo_estilo=input_data.codigo_estilo,
                 estrategia_costos="promedio_ops_seleccionadas",
                 metadatos_adicionales={

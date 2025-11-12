@@ -182,14 +182,9 @@ class CotizadorTDV:
         if not input_data.tipo_prenda or len(input_data.tipo_prenda.strip()) == 0:
             errores.append("El tipo de prenda es requerido")
 
-        # Validar version_calculo
+        # Validar version_calculo - el validador de Pydantic en models.py ya lo valida
         if not hasattr(input_data, "version_calculo") or not input_data.version_calculo:
             input_data.version_calculo = VersionCalculo.FLUIDA  # Default
-        else:
-            versiones_validas = ["FLUIDA", "truncado"]
-            version_value = input_data.version_calculo.value if hasattr(input_data.version_calculo, 'value') else str(input_data.version_calculo)
-            if version_value not in versiones_validas:
-                errores.append(f"version_calculo debe ser una de: {versiones_validas}")
 
         # Validar categora de lote
         if input_data.categoria_lote not in factores.RANGOS_LOTE:

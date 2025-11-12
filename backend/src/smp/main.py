@@ -821,15 +821,8 @@ async def crear_cotizacion(input_data: CotizacionInput):
             f" Nueva cotizacin: {input_data.usuario} | {input_data.codigo_estilo} | Versin: {input_data.version_calculo} | OPs: {input_data.cod_ordpros}"
         )
 
-        # Validar version_calculo
-        if hasattr(input_data, "version_calculo") and input_data.version_calculo:
-            versiones_validas = ["FLUIDA", "truncado"]
-            version_value = input_data.version_calculo.value if hasattr(input_data.version_calculo, 'value') else str(input_data.version_calculo)
-            if version_value not in versiones_validas:
-                raise ValueError(
-                    f"version_calculo debe ser una de: {versiones_validas}"
-                )
-        else:
+        # Validar version_calculo - el validador de Pydantic en models.py ya lo valida
+        if not hasattr(input_data, "version_calculo") or not input_data.version_calculo:
             # Asignar default si no viene en input
             input_data.version_calculo = VersionCalculo.FLUIDA
 

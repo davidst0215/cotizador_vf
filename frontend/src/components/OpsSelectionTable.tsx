@@ -81,10 +81,10 @@ export const OpsSelectionTable = forwardRef<OpsSelectionTableRef, OpsSelectionTa
         // Determinar URL según tipo de búsqueda
         if (busquedaPorMarca && busquedaPorMarca.marca && busquedaPorMarca.tipoPrenda) {
           // Búsqueda alternativa por marca + tipo_prenda
-          url = `http://localhost:8001/obtener-ops-por-marca/${encodeURIComponent(busquedaPorMarca.marca)}/${encodeURIComponent(busquedaPorMarca.tipoPrenda)}?version_calculo=${versionCalculo}`;
+          url = `http://localhost:8000/obtener-ops-por-marca/${encodeURIComponent(busquedaPorMarca.marca)}/${encodeURIComponent(busquedaPorMarca.tipoPrenda)}?version_calculo=${versionCalculo}`;
         } else {
           // Búsqueda por código_estilo (default)
-          url = `http://localhost:8001/obtener-ops-detalladas/${codigoEstilo}?version_calculo=${versionCalculo}`;
+          url = `http://localhost:8000/obtener-ops-detalladas/${codigoEstilo}?version_calculo=${versionCalculo}`;
         }
 
         const response = await fetch(url);

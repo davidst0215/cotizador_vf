@@ -473,7 +473,7 @@ const SistemaCotizadorTDV = () => {
     tipo_prenda: "",
     codigo_estilo: "",
     usuario: "Usuario Demo",
-    version_calculo: "FLUIDA",
+    version_calculo: "FLUIDO",
   });
 
   // Estado debounced para los efectos - evita que se disparen en cada keystroke
@@ -615,7 +615,7 @@ const SistemaCotizadorTDV = () => {
   // ========================================
 
   const cargarWipsDisponibles = useCallback(
-    async (versionCalculo: string = "FLUIDA") => {
+    async (versionCalculo: string = "FLUIDO") => {
       try {
         const data = await get<{
           wips_textiles: any[];
@@ -667,7 +667,7 @@ const SistemaCotizadorTDV = () => {
   );
 
   const cargarClientesDisponibles = useCallback(
-    async (versionCalculo: string = "FLUIDA") => {
+    async (versionCalculo: string = "FLUIDO") => {
       try {
         const data = await get<{ clientes: any[] }>(
           `clientes?version_calculo=${encodeURIComponent(versionCalculo)}`,
@@ -685,7 +685,7 @@ const SistemaCotizadorTDV = () => {
   );
 
   const cargarFamiliasProductos = useCallback(
-    async (versionCalculo: string = "FLUIDA") => {
+    async (versionCalculo: string = "FLUIDO") => {
       setCargandoFamilias(true);
       try {
         const data = await get<{ familias: any[] }>(
@@ -706,7 +706,7 @@ const SistemaCotizadorTDV = () => {
   );
 
   const cargarTiposPrenda = useCallback(
-    async (familia: string, versionCalculo: string = "FLUIDA") => {
+    async (familia: string, versionCalculo: string = "FLUIDO") => {
       if (!familia) {
         setTiposDisponibles([]);
         return;
@@ -733,7 +733,7 @@ const SistemaCotizadorTDV = () => {
 
   // Cargar TODOS los tipos de prenda (sin filtrar por familia)
   const cargarTodosTipos = useCallback(
-    async (versionCalculo: string = "FLUIDA") => {
+    async (versionCalculo: string = "FLUIDO") => {
       setCargandoTipos(true);
       try {
         // Obtener todas las familias primero
@@ -1088,13 +1088,13 @@ const SistemaCotizadorTDV = () => {
           <div className="flex items-center gap-4 bg-gray-50 px-4 py-2 rounded-lg">
             <span
               className={`font-medium transition-colors ${
-                formData.version_calculo === "FLUIDA"
+                formData.version_calculo === "FLUIDO"
                   ? "text-gray-900"
                   : "text-gray-400"
               }`}
               style={{
                 fontWeight:
-                  formData.version_calculo === "FLUIDA" ? "600" : "400",
+                  formData.version_calculo === "FLUIDO" ? "600" : "400",
                 textTransform: "uppercase",
               }}
             >
@@ -1104,7 +1104,7 @@ const SistemaCotizadorTDV = () => {
               type="button"
               onClick={() => {
                 const nuevaVersion =
-                  formData.version_calculo === "FLUIDA" ? "truncado" : "FLUIDA";
+                  formData.version_calculo === "FLUIDO" ? "truncado" : "FLUIDO";
                 // console.log(
                 //   `🔄 Cambiando versión: ${formData.version_calculo} → ${nuevaVersion}`,
                 // );
@@ -1113,14 +1113,14 @@ const SistemaCotizadorTDV = () => {
               className="relative inline-flex h-8 w-16 items-center rounded-full transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2"
               style={{
                 backgroundColor:
-                  formData.version_calculo === "FLUIDA" ? "#821417" : "#bd4c42",
+                  formData.version_calculo === "FLUIDO" ? "#821417" : "#bd4c42",
               }}
             >
               <span
                 className="inline-block h-6 w-6 transform rounded-full bg-white shadow-lg transition-transform duration-300"
                 style={{
                   transform:
-                    formData.version_calculo === "FLUIDA"
+                    formData.version_calculo === "FLUIDO"
                       ? "translateX(2px)"
                       : "translateX(34px)",
                 }}
@@ -1146,7 +1146,7 @@ const SistemaCotizadorTDV = () => {
         <div className="mt-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div
-              className={`w-2 h-2 rounded-full ${formData.version_calculo === "FLUIDA" ? "bg-green-500" : "bg-blue-500"}`}
+              className={`w-2 h-2 rounded-full ${formData.version_calculo === "FLUIDO" ? "bg-green-500" : "bg-blue-500"}`}
             ></div>
             <span className="text-xs text-gray-600">
               Usando datos:{" "}

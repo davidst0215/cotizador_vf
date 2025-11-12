@@ -23,7 +23,7 @@ from enum import Enum
 class VersionCalculo(str, Enum):
     """Versiones de clculo disponibles"""
 
-    FLUIDA = "FLUIDA"  # Versión fluida (compatible con BD)
+    FLUIDO = "FLUIDO"  # Versión fluida (compatible con BD y frontend)
     TRUNCADO = "truncado"
 
 
@@ -103,7 +103,7 @@ class CotizacionInput(BaseModel):
 
     #  CORREGIDO: Campo para versin de clculo con enum
     version_calculo: VersionCalculo = Field(
-        default=VersionCalculo.FLUIDA, description="Versin de clculo"
+        default=VersionCalculo.FLUIDO, description="Versin de clculo"
     )
 
     # Campos determinados automticamente por el backend
@@ -141,13 +141,13 @@ class CotizacionInput(BaseModel):
     def validar_version_calculo(cls, v):
         """Valida y normaliza la versin de clculo"""
         if isinstance(v, str):
-            # Aceptar tanto "FLUIDO" (UI frontend) como "FLUIDA" (BD)
+            # Aceptar tanto "FLUIDO" (UI frontend) como "FLUIDA" (BD compatibility)
             if v.upper() in ("FLUIDO", "FLUIDA"):
-                return VersionCalculo.FLUIDA
+                return VersionCalculo.FLUIDO
             elif v.lower() == "truncado":
                 return VersionCalculo.TRUNCADO
             else:
-                raise ValueError(f"Versin debe ser FLUIDO/FLUIDA o truncado, recibido: {v}")
+                raise ValueError(f"Versin debe ser FLUIDO o truncado, recibido: {v}")
         return v
 
 
@@ -188,7 +188,7 @@ class InfoEstiloDetallada(BaseModel):
     encontrado: bool = Field(default=False, description="Si fue encontrado en BD")
     fuente: Optional[str] = Field(None, description="Fuente de la informacin")
     version_calculo: VersionCalculo = Field(
-        default=VersionCalculo.FLUIDA, description="Versin usada"
+        default=VersionCalculo.FLUIDO, description="Versin usada"
     )
 
 
@@ -558,7 +558,7 @@ class WipsDisponiblesResponse(BaseModel):
         None, description="Tipo de prenda filtrado"
     )
     version_calculo: VersionCalculo = Field(
-        default=VersionCalculo.FLUIDA, description="Versin de clculo usada"
+        default=VersionCalculo.FLUIDO, description="Versin de clculo usada"
     )
 
 

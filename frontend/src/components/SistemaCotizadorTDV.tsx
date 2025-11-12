@@ -442,8 +442,7 @@ const SistemaCotizadorTDV = () => {
 
   // Estados de datos maestros dinámicos
   const [clientesDisponibles, setClientesDisponibles] = useState<string[]>([]);
-  const [familiasDisponibles, setFamiliasDisponibles] = useState<string[]>([]);
-  const [tiposDisponibles, setTiposDisponibles] = useState<string[]>([]);
+    const [tiposDisponibles, setTiposDisponibles] = useState<string[]>([]);
   const [cargandoFamilias, setCargandoFamilias] = useState(false);
   const [cargandoTipos, setCargandoTipos] = useState(false);
 
@@ -689,9 +688,9 @@ const SistemaCotizadorTDV = () => {
       setCargandoFamilias(true);
       try {
         const data = await get<{ familias: any[] }>(
-          `familias-productos?version_calculo=${encodeURIComponent(versionCalculo)}`,
+          `tipos-prenda?version_calculo=${encodeURIComponent(versionCalculo)}`,
         );
-        setFamiliasDisponibles(data.familias);
+        
         // console.log(
         //   `✅ Familias cargadas para ${versionCalculo}: ${data.familias.length}`,
         // );
@@ -738,7 +737,7 @@ const SistemaCotizadorTDV = () => {
       try {
         // Obtener todas las familias primero
         const familiasData = await get<{ familias: string[] }>(
-          `familias-productos?version_calculo=${encodeURIComponent(versionCalculo)}`,
+          `tipos-prenda?version_calculo=${encodeURIComponent(versionCalculo)}`,
         );
 
         // Obtener tipos para todas las familias y combinarlos
@@ -1155,17 +1154,14 @@ const SistemaCotizadorTDV = () => {
           </div>
 
           <div className="text-xs text-gray-500">
-            📊 {familiasDisponibles.length} familias | {tiposDisponibles.length}{" "}
-            tipos
+            📊 {tiposDisponibles.length} tipos
           </div>
         </div>
       </div>
     ),
     [
       formData.version_calculo,
-      cargandoFamilias,
       cargandoTipos,
-      familiasDisponibles.length,
       tiposDisponibles.length,
       manejarCambioFormulario,
     ],
@@ -2030,7 +2026,6 @@ const SistemaCotizadorTDV = () => {
                       manufactura: wipsManufactura.length,
                     });
                     console.log("📊 Datos:", {
-                      familias: familiasDisponibles.length,
                       tipos: tiposDisponibles.length,
                     });
                     console.log("💰 Cotización:", !!cotizacionActual);

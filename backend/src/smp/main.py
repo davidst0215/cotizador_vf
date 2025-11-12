@@ -39,26 +39,26 @@ logger = logging.getLogger(__name__)
 # =====================================================================
 # VALIDADOR PARA version_calculo EN QUERY PARAMS
 # =====================================================================
-def normalize_version_calculo(version_str: Optional[str]) -> VersionCalculo:
+def normalize_version_calculo(version_str: Optional[str]) -> str:
     """
-    Normaliza version_calculo de query parameters.
-    Acepta tanto "FLUIDO" como "FLUIDA" y retorna VersionCalculo.FLUIDO
-    Acepta "truncado" y retorna VersionCalculo.TRUNCADO
+    Normaliza version_calculo de query parameters a valor de BD.
+    Acepta "FLUIDO" o "FLUIDA" (del frontend/API) y retorna "FLUIDA" (valor en BD)
+    Acepta "truncado" y retorna "truncado" (valor en BD)
     """
     if not version_str:
-        return VersionCalculo.FLUIDO
+        return "FLUIDA"
 
     version_upper = version_str.upper()
 
-    # Aceptar tanto "FLUIDO" como "FLUIDA" para backward compatibility
+    # Aceptar tanto "FLUIDO" como "FLUIDA" pero retornar "FLUIDA" (valor en BD)
     if version_upper in ("FLUIDO", "FLUIDA"):
-        return VersionCalculo.FLUIDO
+        return "FLUIDA"
     elif version_upper == "TRUNCADO":
-        return VersionCalculo.TRUNCADO
+        return "truncado"
     else:
-        # Si no es válido, retornar FLUIDO por defecto
-        logger.warning(f"⚠️ version_calculo no válida: {version_str}, usando FLUIDO")
-        return VersionCalculo.FLUIDO
+        # Si no es válido, retornar FLUIDA por defecto
+        logger.warning(f"version_calculo no válida: {version_str}, usando FLUIDA")
+        return "FLUIDA"
 
 
 tdv_queries: TDVQueries = TDVQueries.get_instance()
@@ -527,36 +527,6 @@ async def obtener_clientes(
         )
 
 
-@app.get("/familias-productos", tags=["Datos Maestros"])
-async def obtener_familias_productos(
-    version_calculo: Optional[str] = None,
-):
-    """Obtiene familias de productos disponibles CON VERSION_CALCULO"""
-    try:
-        # Normalizar version_calculo (acepta FLUIDO, FLUIDA, truncado, etc)
-        version_calculo_normalizada = normalize_version_calculo(version_calculo)
-
-        logger.info(f" Cargando familias para versin: {version_calculo}")
-
-        familias = await tdv_queries.obtener_familias_productos(version_calculo)
-
-        respuesta = {
-            "familias": familias,
-            "total": len(familias),
-            "fuente": "costo_op_detalle",
-            "version_calculo": version_calculo,
-            "timestamp": datetime.now().isoformat(),
-        }
-
-        logger.info(f"[OK] Familias cargadas: {len(familias)} para {version_calculo}")
-        return respuesta
-
-    except Exception as e:
-        logger.error(f"[ERROR] Error obteniendo familias: {e}")
-        raise HTTPException(
-            status_code=500, detail=f"Error obteniendo familias: {str(e)}"
-        )
-
 
 @app.get("/tipos-prenda", tags=["Datos Maestros"])
 async def obtener_todos_tipos_prenda(
@@ -600,7 +570,7 @@ async def obtener_tipos_prenda(
 
         logger.info(f"Cargando tipos para familia: {familia} ({version_calculo})")
 
-        tipos = await tdv_queries.obtener_tipos_prenda(familia, version_calculo)
+        tipos = await tdv_queries.obtener_tipos_prenda(familia, normalize_version_calculo(version_calculo))
 
         respuesta = {
             "tipos": tipos,

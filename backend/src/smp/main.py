@@ -153,7 +153,7 @@ async def root():
             "Informacin comercial avanzada",
             "Anlisis inteligente WIPs por estabilidad + fecha_corrida",
         ],
-        "versiones_calculo_soportadas": ["FLUIDO", "truncado"],
+        "versiones_calculo_soportadas": ["FLUIDA", "truncado"],
         "endpoints_nuevos": [
             "/verificar-estilo-completo/{codigo_estilo}",
             "/ops-utilizadas-cotizacion",
@@ -759,7 +759,7 @@ async def desglose_wip_ops(data: Dict[str, Any] = Body(...)):
     """
     try:
         cod_ordpros = data.get("cod_ordpros", [])
-        version_calculo = data.get("version_calculo", "FLUIDO")
+        version_calculo = data.get("version_calculo", "FLUIDA")
 
         logger.info(f" [ENDPOINT-DESGLOSE-WIP] Request recibida")
         logger.info(f" [ENDPOINT-DESGLOSE-WIP] cod_ordpros recibidos: {cod_ordpros} (tipo: {type(cod_ordpros)}, len: {len(cod_ordpros) if cod_ordpros else 0})")
@@ -823,7 +823,7 @@ async def crear_cotizacion(input_data: CotizacionInput):
 
         # Validar version_calculo
         if hasattr(input_data, "version_calculo") and input_data.version_calculo:
-            versiones_validas = ["FLUIDO", "truncado"]
+            versiones_validas = ["FLUIDA", "truncado"]
             version_value = input_data.version_calculo.value if hasattr(input_data.version_calculo, 'value') else str(input_data.version_calculo)
             if version_value not in versiones_validas:
                 raise ValueError(
@@ -1294,7 +1294,7 @@ async def obtener_versiones_calculo():
         logger.info("[INFO] Obteniendo informacin de versiones de clculo")
 
         versiones_info = {}
-        versiones = ["FLUIDO", "truncado"]
+        versiones = ["FLUIDA", "truncado"]
 
         for version in versiones:
             try:
@@ -1404,7 +1404,7 @@ async def startup_event():
         # Verificar fechas de corrida por versin
         for tabla in ["costo_op_detalle", "resumen_wip_por_prenda"]:
             try:
-                for version in ["FLUIDO", "truncado"]:
+                for version in ["FLUIDA", "truncado"]:
                     try:
                         fecha_max = await tdv_queries.obtener_fecha_maxima_corrida(
                             tabla, version

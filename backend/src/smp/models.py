@@ -103,7 +103,7 @@ class CotizacionInput(BaseModel):
 
     #  CORREGIDO: Campo para versin de clculo con enum
     version_calculo: VersionCalculo = Field(
-        default=VersionCalculo.FLUIDO, description="Versin de clculo"
+        default=VersionCalculo.FLUIDA, description="Versin de clculo"
     )
 
     # Campos determinados automticamente por el backend
@@ -188,7 +188,7 @@ class InfoEstiloDetallada(BaseModel):
     encontrado: bool = Field(default=False, description="Si fue encontrado en BD")
     fuente: Optional[str] = Field(None, description="Fuente de la informacin")
     version_calculo: VersionCalculo = Field(
-        default=VersionCalculo.FLUIDO, description="Versin usada"
+        default=VersionCalculo.FLUIDA, description="Versin usada"
     )
 
 
@@ -558,7 +558,7 @@ class WipsDisponiblesResponse(BaseModel):
         None, description="Tipo de prenda filtrado"
     )
     version_calculo: VersionCalculo = Field(
-        default=VersionCalculo.FLUIDO, description="Versin de clculo usada"
+        default=VersionCalculo.FLUIDA, description="Versin de clculo usada"
     )
 
 

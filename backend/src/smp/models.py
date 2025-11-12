@@ -488,7 +488,7 @@ class CotizacionResponse(BaseModel):
     alertas: List[str] = Field(..., description="Lista de alertas/advertencias")
 
     # Info comercial avanzada
-    info_comercial: InfoComercial = Field(..., description="Informacin comercial")
+    info_comercial: Optional[InfoComercial] = Field(None, description="Informacin comercial (opcional)")
 
     # Metadatos de procesamiento
     metodos_usados: List[str] = Field(..., description="Mtodos utilizados")

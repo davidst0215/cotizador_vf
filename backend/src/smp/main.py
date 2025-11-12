@@ -226,7 +226,7 @@ async def health_check():
 @app.get("/verificar-estilo-completo/{codigo_estilo}", tags=["Bsqueda"])
 async def verificar_estilo_completo_con_autocompletado(
     codigo_estilo: str,
-    version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
+    version_calculo: Optional[str] = None,
 ):
     """
     [OK] NUEVO ENDPOINT: Verificacin completa de estilo con auto-completado
@@ -238,9 +238,15 @@ async def verificar_estilo_completo_con_autocompletado(
     4. Volumen histrico y categorizacin
     """
     try:
+        # Normalizar version_calculo (acepta FLUIDO, FLUIDA, truncado, etc)
+        version_calculo_normalizada = normalize_version_calculo(version_calculo)
+
+        # Normalizar version_calculo (acepta FLUIDO, FLUIDA, truncado, etc)
+        version_calculo_normalizada = normalize_version_calculo(version_calculo)
+
         # PASO 1: Verificacin bsica
         existe = await tdv_queries.verificar_estilo_existente(
-            codigo_estilo, version_calculo
+            codigo_estilo, version_calculo_normalizada
         )
         es_nuevo = not existe
 
@@ -252,7 +258,7 @@ async def verificar_estilo_completo_con_autocompletado(
         if not es_nuevo:
             try:
                 info_detallada = await tdv_queries.obtener_info_detallada_estilo(
-                    codigo_estilo, version_calculo
+                    codigo_estilo, version_calculo_normalizada
                 )
 
                 if info_detallada.get("encontrado", False):
@@ -283,7 +289,7 @@ async def verificar_estilo_completo_con_autocompletado(
             # Fallback: obtener volumen directamente
             try:
                 volumen_historico = await tdv_queries.obtener_volumen_historico_estilo(
-                    codigo_estilo, version_calculo
+                    codigo_estilo, version_calculo_normalizada
                 )
                 categoria = (
                     "Muy Recurrente"
@@ -399,10 +405,13 @@ async def obtener_configuracion():
 )
 async def obtener_wips_disponibles(
     tipo_prenda: Optional[str] = None,
-    version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
+    version_calculo: Optional[str] = None,
 ):
     """[OK] CORREGIDO: Obtiene WIPs disponibles con costos actuales - ANLISIS INTELIGENTE CON VERSION_CALCULO"""
     try:
+        # Normalizar version_calculo (acepta FLUIDO, FLUIDA, truncado, etc)
+        version_calculo_normalizada = normalize_version_calculo(version_calculo)
+
         logger.info(
             f" Obteniendo WIPs disponibles: tipo_prenda={tipo_prenda}, version={version_calculo}"
         )
@@ -442,10 +451,13 @@ async def obtener_wips_disponibles(
 @app.get("/ruta-textil-recomendada/{tipo_prenda}", tags=["Configuracin"])
 async def obtener_ruta_textil_recomendada(
     tipo_prenda: str,
-    version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
+    version_calculo: Optional[str] = None,
 ):
     """[OK] CORREGIDO: Obtiene ruta textil recomendada para un tipo de prenda especfico"""
     try:
+        # Normalizar version_calculo (acepta FLUIDO, FLUIDA, truncado, etc)
+        version_calculo_normalizada = normalize_version_calculo(version_calculo)
+
         logger.info(
             f" Obteniendo ruta textil para: {tipo_prenda} ({version_calculo})"
         )
@@ -486,10 +498,13 @@ async def obtener_ruta_textil_recomendada(
 
 @app.get("/clientes", tags=["Datos Maestros"])
 async def obtener_clientes(
-    version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
+    version_calculo: Optional[str] = None,
 ):
     """[OK] CORREGIDO: Obtiene lista de clientes disponibles CON VERSION_CALCULO"""
     try:
+        # Normalizar version_calculo (acepta FLUIDO, FLUIDA, truncado, etc)
+        version_calculo_normalizada = normalize_version_calculo(version_calculo)
+
         logger.info(f" Cargando clientes para versin: {version_calculo}")
 
         clientes = await tdv_queries.obtener_clientes_disponibles(version_calculo)
@@ -514,10 +529,13 @@ async def obtener_clientes(
 
 @app.get("/familias-productos", tags=["Datos Maestros"])
 async def obtener_familias_productos(
-    version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
+    version_calculo: Optional[str] = None,
 ):
     """Obtiene familias de productos disponibles CON VERSION_CALCULO"""
     try:
+        # Normalizar version_calculo (acepta FLUIDO, FLUIDA, truncado, etc)
+        version_calculo_normalizada = normalize_version_calculo(version_calculo)
+
         logger.info(f" Cargando familias para versin: {version_calculo}")
 
         familias = await tdv_queries.obtener_familias_productos(version_calculo)
@@ -542,10 +560,13 @@ async def obtener_familias_productos(
 
 @app.get("/tipos-prenda", tags=["Datos Maestros"])
 async def obtener_todos_tipos_prenda(
-    version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO
+    version_calculo: Optional[str] = None
 ):
     """[OK] Obtiene TODOS los tipos de prenda disponibles (sin familia)"""
     try:
+        # Normalizar version_calculo (acepta FLUIDO, FLUIDA, truncado, etc)
+        version_calculo_normalizada = normalize_version_calculo(version_calculo)
+
         logger.info(f"Cargando todos los tipos de prenda ({version_calculo})")
 
         tipos = await tdv_queries.obtener_todos_tipos_prenda(version_calculo)
@@ -570,10 +591,13 @@ async def obtener_todos_tipos_prenda(
 
 @app.get("/tipos-prenda/{familia}", tags=["Datos Maestros"])
 async def obtener_tipos_prenda(
-    familia: str, version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO
+    familia: str, version_calculo: Optional[str] = None
 ):
     """[OK] CORREGIDO: Obtiene tipos de prenda para una familia especfica CON VERSION_CALCULO"""
     try:
+        # Normalizar version_calculo (acepta FLUIDO, FLUIDA, truncado, etc)
+        version_calculo_normalizada = normalize_version_calculo(version_calculo)
+
         logger.info(f"Cargando tipos para familia: {familia} ({version_calculo})")
 
         tipos = await tdv_queries.obtener_tipos_prenda(familia, version_calculo)
@@ -611,10 +635,13 @@ async def buscar_estilos_similares(
     codigo_estilo: str,
     cliente: Optional[str] = None,
     limite: Optional[int] = 10,
-    version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
+    version_calculo: Optional[str] = None,
 ):
     """[OK] CORREGIDO: Busca estilos similares por cdigo y cliente CON VERSION_CALCULO"""
     try:
+        # Normalizar version_calculo (acepta FLUIDO, FLUIDA, truncado, etc)
+        version_calculo_normalizada = normalize_version_calculo(version_calculo)
+
         if len(codigo_estilo) < 3:
             return []
 
@@ -639,10 +666,13 @@ async def buscar_estilos_similares(
 @app.get("/verificar-estilo/{codigo_estilo}", tags=["Bsqueda"])
 async def verificar_estilo_existente(
     codigo_estilo: str,
-    version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
+    version_calculo: Optional[str] = None,
 ):
     """[OK] MANTENIDO: Verificacin bsica de estilo (compatibilidad)"""
     try:
+        # Normalizar version_calculo (acepta FLUIDO, FLUIDA, truncado, etc)
+        version_calculo_normalizada = normalize_version_calculo(version_calculo)
+
         existe = await tdv_queries.verificar_estilo_existente(
             codigo_estilo, version_calculo
         )
@@ -654,6 +684,9 @@ async def verificar_estilo_existente(
 
         if not es_nuevo:
             try:
+                # Normalizar version_calculo (acepta FLUIDO, FLUIDA, truncado, etc)
+                version_calculo_normalizada = normalize_version_calculo(version_calculo)
+
                 volumen_total = await tdv_queries.obtener_volumen_historico_estilo(
                     codigo_estilo, version_calculo
                 )
@@ -695,7 +728,7 @@ async def verificar_estilo_existente(
 @app.get("/obtener-ops-detalladas/{codigo_estilo}", tags=["Bsqueda"])
 async def obtener_ops_detalladas(
     codigo_estilo: str,
-    version_calculo: Optional[str] = "FLUIDO",
+    version_calculo: Optional[str] = None,
     meses: int = 12,
 ):
     """
@@ -704,6 +737,9 @@ async def obtener_ops_detalladas(
     Si no hay OPs con los filtros (>= 200 prendas), retorna lista vaca (estilo nuevo).
     """
     try:
+        # Normalizar version_calculo (acepta FLUIDO, FLUIDA, truncado, etc)
+        version_calculo_normalizada = normalize_version_calculo(version_calculo)
+
         # Normalizar version_calculo (aceptar tanto "FLUIDO" como "FLUIDA")
         version_normalizada = normalize_version_calculo(version_calculo)
 
@@ -851,26 +887,36 @@ async def crear_cotizacion(input_data: CotizacionInput):
             f" Nueva cotizacin: {input_data.usuario} | {input_data.codigo_estilo} | Versin: {input_data.version_calculo} | OPs: {input_data.cod_ordpros}"
         )
 
-        # DEBUG: Log de datos de entrada
-        logger.debug(f"[DEBUG-INPUT] Cliente: {input_data.cliente_marca}")
-        logger.debug(f"[DEBUG-INPUT] Estilo: {input_data.codigo_estilo}")
-        logger.debug(f"[DEBUG-INPUT] Tipo: {input_data.tipo_prenda}")
-        logger.debug(f"[DEBUG-INPUT] Version: {input_data.version_calculo}")
-        logger.debug(f"[DEBUG-INPUT] OPs: {input_data.cod_ordpros}")
+        # DEBUG: Log de datos de entrada - DETALLADO
+        logger.info(f"[COTIZAR-LOG] ==================== INICIANDO COTIZACION ====================")
+        logger.info(f"[COTIZAR-LOG] Cliente: '{input_data.cliente_marca}' (tipo: {type(input_data.cliente_marca).__name__})")
+        logger.info(f"[COTIZAR-LOG] Estilo: '{input_data.codigo_estilo}' (tipo: {type(input_data.codigo_estilo).__name__})")
+        logger.info(f"[COTIZAR-LOG] Tipo Prenda: '{input_data.tipo_prenda}' (tipo: {type(input_data.tipo_prenda).__name__})")
+        logger.info(f"[COTIZAR-LOG] Categoria Lote: '{input_data.categoria_lote}' (tipo: {type(input_data.categoria_lote).__name__})")
+        logger.info(f"[COTIZAR-LOG] Version Calculo: '{input_data.version_calculo}' (tipo: {type(input_data.version_calculo).__name__})")
+        logger.info(f"[COTIZAR-LOG] OPs: {input_data.cod_ordpros} (tipo: {type(input_data.cod_ordpros).__name__})")
+        logger.info(f"[COTIZAR-LOG] WIPs Textiles: {input_data.wips_textiles}")
+        logger.info(f"[COTIZAR-LOG] WIPs Manufactura: {input_data.wips_manufactura}")
+        logger.info(f"[COTIZAR-LOG] Cantidad Prendas: {input_data.cantidad_prendas}")
+        logger.info(f"[COTIZAR-LOG] Esfuerzo Total: {input_data.esfuerzo_total}")
+        logger.info(f"[COTIZAR-LOG] Margen Adicional: {input_data.margen_adicional}")
 
         # Validar version_calculo - el validador de Pydantic en models.py ya lo valida
         if not hasattr(input_data, "version_calculo") or not input_data.version_calculo:
             # Asignar default si no viene en input
+            logger.warning(f"[COTIZAR-LOG] version_calculo no está definido, asignando default FLUIDO")
             input_data.version_calculo = VersionCalculo.FLUIDO
 
         # Rutear a método optimizado si hay OPs seleccionadas
         if input_data.cod_ordpros and len(input_data.cod_ordpros) > 0:
-            logger.info(f"[COTIZACION RAPIDA] Usando método optimizado para {len(input_data.cod_ordpros)} OPs seleccionadas")
-            logger.debug(f"[DEBUG-OPS] OPs seleccionadas: {input_data.cod_ordpros}")
+            logger.info(f"[COTIZAR-LOG] RUTA: COTIZACION RAPIDA - {len(input_data.cod_ordpros)} OPs seleccionadas")
+            logger.info(f"[COTIZAR-LOG] OPs: {input_data.cod_ordpros}")
+            logger.info(f"[COTIZAR-LOG] Llamando procesar_cotizacion_rapida_por_ops...")
             resultado = await cotizador_tdv.procesar_cotizacion_rapida_por_ops(input_data)
         else:
             # Usar método estándar si no hay OPs seleccionadas
-            logger.info(f"[COTIZACION ESTANDAR] Sin OPs seleccionadas - Usando método estándar")
+            logger.info(f"[COTIZAR-LOG] RUTA: COTIZACION ESTANDAR - Sin OPs seleccionadas")
+            logger.info(f"[COTIZAR-LOG] Llamando procesar_cotizacion...")
             resultado = await cotizador_tdv.procesar_cotizacion(input_data)
 
         logger.info(
@@ -904,10 +950,13 @@ async def obtener_analisis_historico(
     familia: str,
     tipo: Optional[str] = None,
     meses: Optional[int] = 12,
-    version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
+    version_calculo: Optional[str] = None,
 ):
     """[OK] CORREGIDO: Anlisis histrico para benchmarking CON VERSION_CALCULO"""
     try:
+        # Normalizar version_calculo (acepta FLUIDO, FLUIDA, truncado, etc)
+        version_calculo_normalizada = normalize_version_calculo(version_calculo)
+
         logger.info(f"[DATA] Anlisis histrico: {familia}/{tipo} ({version_calculo})")
 
         # Query base actualizada CON VERSION_CALCULO
@@ -1012,10 +1061,13 @@ async def obtener_factor_marca(cliente: str):
 
 @app.get("/info-fechas-corrida", tags=["Anlisis"])
 async def obtener_info_fechas_corrida(
-    version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
+    version_calculo: Optional[str] = None,
 ):
     """[OK] CORREGIDO: Obtiene informacin sobre las fechas de corrida CON VERSION_CALCULO"""
     try:
+        # Normalizar version_calculo (acepta FLUIDO, FLUIDA, truncado, etc)
+        version_calculo_normalizada = normalize_version_calculo(version_calculo)
+
         logger.info(f" Obteniendo fechas corrida para versin: {version_calculo}")
 
         info_fechas = {}
@@ -1023,6 +1075,9 @@ async def obtener_info_fechas_corrida(
 
         for tabla in tablas:
             try:
+                # Normalizar version_calculo (acepta FLUIDO, FLUIDA, truncado, etc)
+                version_calculo_normalizada = normalize_version_calculo(version_calculo)
+
                 fecha_max = await tdv_queries.obtener_fecha_maxima_corrida(
                     tabla, version_calculo
                 )
@@ -1065,13 +1120,16 @@ async def verificar_estilo_completo(
     codigo_estilo: str,
     familia_producto: Optional[str] = None,
     tipo_prenda: Optional[str] = None,
-    version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
+    version_calculo: Optional[str] = None,
 ):
     """
     [OK] ENDPOINT NUEVO: Verificacin completa con auto-completado y ruta
     Este endpoint era referenciado en el frontend pero no exista
     """
     try:
+        # Normalizar version_calculo (acepta FLUIDO, FLUIDA, truncado, etc)
+        version_calculo_normalizada = normalize_version_calculo(version_calculo)
+
         logger.info(
             f" Verificacin completa para estilo: {codigo_estilo} (versin: {version_calculo})"
         )
@@ -1194,12 +1252,15 @@ async def verificar_estilo_completo(
 @app.get("/autocompletar-estilo/{codigo_estilo}", tags=["Bsqueda"])
 async def autocompletar_estilo_recurrente(
     codigo_estilo: str,
-    version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
+    version_calculo: Optional[str] = None,
 ):
     """
     [OK] ENDPOINT NUEVO: Auto-completa informacin para estilos recurrentes
     """
     try:
+        # Normalizar version_calculo (acepta FLUIDO, FLUIDA, truncado, etc)
+        version_calculo_normalizada = normalize_version_calculo(version_calculo)
+
         logger.info(
             f" Auto-completado solicitado para: {codigo_estilo} (versin: {version_calculo})"
         )
@@ -1250,12 +1311,15 @@ async def autocompletar_estilo_recurrente(
 @app.get("/debug-estilo/{codigo_estilo}", tags=["Debug"])
 async def debug_estilo_clasificacion(
     codigo_estilo: str,
-    version_calculo: Optional[VersionCalculo] = VersionCalculo.FLUIDO,
+    version_calculo: Optional[str] = None,
 ):
     """
      ENDPOINT DE DEBUG: Para diagnosticar problemas de clasificacin
     """
     try:
+        # Normalizar version_calculo (acepta FLUIDO, FLUIDA, truncado, etc)
+        version_calculo_normalizada = normalize_version_calculo(version_calculo)
+
         debug_info = {}
 
         # 1. Verificacin en historial_estilos

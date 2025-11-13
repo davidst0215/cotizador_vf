@@ -719,22 +719,33 @@ async def obtener_ops_detalladas(
     codigo_estilo: str,
     version_calculo: Optional[str] = None,
     meses: int = 12,
+    marca: Optional[str] = None,
+    tipo_prenda: Optional[str] = None,
 ):
     """
     Obtiene lista detallada de OPs para un estilo sin aplicar factor de seguridad.
     Retorna todos los datos unitarios para mostrar en tabla interactiva.
-    Si no hay OPs con los filtros (>= 200 prendas), retorna lista vaca (estilo nuevo).
+
+    FALLBACK INTEGRADO:
+    1. Primero intenta buscar por código_estilo
+    2. Si no encuentra OPs y marca + tipo_prenda están disponibles, intenta buscar por esos
+    3. Si tampoco encuentra, retorna es_estilo_nuevo = true
     """
     try:
         # Normalizar version_calculo (acepta FLUIDO, FLUIDA, truncado, etc)
-        version_calculo_normalizada = normalize_version_calculo(version_calculo)
-
-        # Normalizar version_calculo (aceptar tanto "FLUIDO" como "FLUIDA")
         version_normalizada = normalize_version_calculo(version_calculo)
 
+        # Paso 1: Intentar búsqueda por código_estilo
         ops_detalladas = await tdv_queries.obtener_ops_detalladas_para_tabla(
             codigo_estilo, meses, version_normalizada
         )
+
+        # Paso 2: Si no hay OPs y tenemos marca+tipo_prenda, intentar búsqueda alternativa
+        if len(ops_detalladas) == 0 and marca and tipo_prenda:
+            logger.info(f" No hay OPs por codigo_estilo {codigo_estilo}, intentando por marca+tipo_prenda...")
+            ops_detalladas = await tdv_queries.obtener_ops_por_marca_tipo(
+                marca, tipo_prenda, meses, version_normalizada
+            )
 
         es_estilo_nuevo = len(ops_detalladas) == 0
 

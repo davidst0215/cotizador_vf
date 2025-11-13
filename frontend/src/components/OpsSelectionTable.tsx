@@ -37,8 +37,8 @@ interface OpsSelectionTableProps {
   onOpsSelected: (opsSeleccionadas: OP[]) => Promise<void>;
   onError?: (error: string) => void;
   opsSeleccionadasPrevia?: string[]; // Mantener selección anterior
-  marca?: string; // Para búsqueda alternativa por marca + tipo_prenda
-  tipoPrenda?: string; // Para búsqueda alternativa por marca + tipo_prenda
+  marca: string; // Para búsqueda alternativa por marca + tipo_prenda (REQUERIDO)
+  tipoPrenda: string; // Para búsqueda alternativa por marca + tipo_prenda (REQUERIDO)
 }
 
 export interface OpsSelectionTableRef {
@@ -50,60 +50,59 @@ type SortField = "cod_ordpro" | "textil_unitario" | "manufactura_unitario" | "pr
 type SortDirection = "asc" | "desc";
 
 export const OpsSelectionTable = forwardRef<OpsSelectionTableRef, OpsSelectionTableProps>(
-  ({ codigoEstilo, versionCalculo, onOpsSelected, onError, opsSeleccionadasPrevia }, ref) => {
+  ({ codigoEstilo, versionCalculo, onOpsSelected, onError, opsSeleccionadasPrevia, marca, tipoPrenda }, ref) => {
     const [opsData, setOpsData] = useState<OP[]>([]);
     const [cargando, setCargando] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [sortField, setSortField] = useState<SortField>("fecha_facturacion");
     const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
     const [selectedOps, setSelectedOps] = useState<Set<string>>(new Set());
-    const [debeCargar, setDebeCargar] = useState(false); // Control para evitar búsqueda automática
-    const [busquedaPorMarca, setBusquedaPorMarca] = useState<{ marca: string; tipoPrenda: string } | null>(null); // Para búsqueda alternativa
     const [filtrosCategoriaLote, setFiltrosCategoriaLote] = useState<Set<string>>(new Set()); // Filtros post-búsqueda
 
-    // Exponer métodos imperativos al componente padre
-    useImperativeHandle(ref, () => ({
-      iniciarBusqueda: () => setDebeCargar(true),
-      iniciarBusquedaPorMarca: (m: string, t: string) => {
-        setBusquedaPorMarca({ marca: m, tipoPrenda: t });
-        setDebeCargar(true);
-      },
-    }), []);
-
-    // Cargar OPs detalladas - soporta búsqueda por código_estilo o por marca+tipo_prenda
+    // Cargar OPs detalladas - el endpoint maneja fallback automáticamente
     const cargarOpsDetalladas = useCallback(async () => {
+      console.log("📋 cargarOpsDetalladas iniciada");
+      console.log("  - codigoEstilo:", codigoEstilo);
+      console.log("  - marca:", marca);
+      console.log("  - tipoPrenda:", tipoPrenda);
+      console.log("  - versionCalculo:", versionCalculo);
+
       setCargando(true);
       setError(null);
 
       try {
-        let url: string;
+        // Construir URL con fallback integrado en el backend
+        const params = new URLSearchParams({
+          version_calculo: versionCalculo,
+        });
 
-        // Determinar URL según tipo de búsqueda
-        if (busquedaPorMarca && busquedaPorMarca.marca && busquedaPorMarca.tipoPrenda) {
-          // Búsqueda alternativa por marca + tipo_prenda
-          url = `http://localhost:8000/obtener-ops-por-marca/${encodeURIComponent(busquedaPorMarca.marca)}/${encodeURIComponent(busquedaPorMarca.tipoPrenda)}?version_calculo=${versionCalculo}`;
-        } else {
-          // Búsqueda por código_estilo (default)
-          url = `http://localhost:8000/obtener-ops-detalladas/${codigoEstilo}?version_calculo=${versionCalculo}`;
-        }
+        // Pasar marca y tipo_prenda para fallback
+        if (marca) params.append("marca", marca);
+        if (tipoPrenda) params.append("tipo_prenda", tipoPrenda);
+
+        const url = `http://localhost:8000/obtener-ops-detalladas/${codigoEstilo}?${params.toString()}`;
+        console.log("🔗 URL de OPs:", url);
 
         const response = await fetch(url);
+        console.log("📦 Response status:", response.status);
 
         if (!response.ok) {
           throw new Error(`Error ${response.status}: No se pudieron cargar las OPs`);
         }
 
         const data: OpsResponse = await response.json();
+        console.log("✅ Datos recibidos:", data);
+        console.log("📊 Cantidad de OPs:", data.ops.length);
+        console.log("🔍 es_estilo_nuevo:", data.es_estilo_nuevo);
 
         if (data.ops.length === 0) {
-          const tipoError = busquedaPorMarca
-            ? `No hay OPs disponibles para ${busquedaPorMarca.marca} - ${busquedaPorMarca.tipoPrenda}`
-            : "No hay OPs disponibles para este estilo (estilo nuevo)";
-          setError(tipoError);
+          console.log("ℹ️ Estilo nuevo - no hay OPs previas");
+          setError(null);
           setOpsData([]);
           setSelectedOps(new Set());
         } else {
           // Inicializar OPs - seleccionar todas por defecto
+          console.log("✨ Guardando OPs en estado:", data.ops);
           setOpsData(data.ops);
           setSelectedOps(new Set(data.ops.map((op) => op.cod_ordpro)));
         }
@@ -114,16 +113,19 @@ export const OpsSelectionTable = forwardRef<OpsSelectionTableRef, OpsSelectionTa
       } finally {
         setCargando(false);
       }
-    }, [codigoEstilo, versionCalculo, onError, busquedaPorMarca]);
+    }, [codigoEstilo, versionCalculo, marca, tipoPrenda, onError]);
 
-    // Cargar OPs solo cuando se solicita explícitamente (NO automáticamente)
-    // ✨ CORREGIDO: useEffect solo se ejecuta cuando debeCargar es true
-    React.useEffect(() => {
-      if (debeCargar) {
+    // Exponer métodos imperativos al componente padre
+    useImperativeHandle(ref, () => ({
+      iniciarBusqueda: () => {
+        console.log("🔄 OpsSelectionTable: iniciarBusqueda llamado desde padre");
         cargarOpsDetalladas();
-        setDebeCargar(false); // Resetear para próxima búsqueda
-      }
-    }, [debeCargar, cargarOpsDetalladas]);
+      },
+      iniciarBusquedaPorMarca: (m: string, t: string) => {
+        console.log(`🔄 OpsSelectionTable: iniciarBusquedaPorMarca llamado: ${m}/${t}`);
+        // Ya no necesario - el endpoint maneja fallback automáticamente
+      },
+    }), [cargarOpsDetalladas]);
 
     // Restaurar selección anterior cuando opsSeleccionadasPrevia cambia
     React.useEffect(() => {

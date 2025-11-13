@@ -1119,6 +1119,96 @@ class TDVQueries:
             logger.error(f" Error obteniendo OPs detalladas para {codigo_estilo}: {e}")
             return []
 
+    async def obtener_ops_por_marca_tipo(
+        self,
+        marca: str,
+        tipo_prenda: str,
+        meses: int = 12,
+        version_calculo: str = "FLUIDA",
+    ) -> List[Dict[str, Any]]:
+        """
+        Obtiene lista detallada de OPs por marca y tipo de prenda (búsqueda alternativa/fallback).
+        Utilizado cuando no hay OPs por código_estilo para estilos nuevos o sin OPs filtradas.
+        Retorna datos unitarios para cada OP para mostrar en tabla interactiva.
+        """
+
+        query = f"""
+        SELECT
+          cod_ordpro,
+          prendas_requeridas,
+          COALESCE(costo_textil, 0) as costo_textil_total,
+          COALESCE(costo_manufactura, 0) as costo_manufactura_total,
+          COALESCE(costo_avios, 0) as costo_avios_total,
+          COALESCE(costo_materia_prima, 0) as costo_materia_prima_total,
+          COALESCE(costo_indirecto_fijo, 0) as costo_indirecto_fijo_total,
+          COALESCE(gasto_administracion, 0) as gasto_administracion_total,
+          COALESCE(gasto_ventas, 0) as gasto_ventas_total,
+          COALESCE(esfuerzo_total, 6) as esfuerzo_total,
+          fecha_facturacion,
+          cliente
+        FROM {settings.db_schema}.costo_op_detalle c
+        WHERE c.cliente ILIKE %s
+          AND c.tipo_de_producto = %s
+          AND c.version_calculo = %s
+          AND c.fecha_corrida = (
+            SELECT MAX(fecha_corrida)
+            FROM {settings.db_schema}.costo_op_detalle
+            WHERE version_calculo = %s)
+          AND c.prendas_requeridas >= 200
+          AND c.fecha_facturacion >= (
+            SELECT (MAX(fecha_facturacion) - (%s || ' months')::INTERVAL)
+            FROM {settings.db_schema}.costo_op_detalle
+            WHERE version_calculo = %s
+          )
+        ORDER BY c.fecha_facturacion DESC
+        """
+
+        try:
+            resultados = await self.db.query(
+                query,
+                (f"%{marca}%", tipo_prenda, version_calculo,
+                 version_calculo, str(meses),
+                 version_calculo),
+            )
+
+            if not resultados:
+                logger.info(f" No se encontraron OPs para marca={marca}, tipo_prenda={tipo_prenda}")
+                return []
+
+            # Procesar resultados para crear lista de OPs con datos unitarios
+            ops_detalladas = []
+            for row in resultados:
+                prendas = float(row['prendas_requeridas']) or 1
+
+                op_detalle = {
+                    "cod_ordpro": row['cod_ordpro'],
+                    "textil_unitario": float(row['costo_textil_total']) / prendas,
+                    "manufactura_unitario": float(row['costo_manufactura_total']) / prendas,
+                    "materia_prima_unitario": float(row['costo_materia_prima_total']) / prendas,
+                    "avios_unitario": float(row['costo_avios_total']) / prendas,
+                    "indirecto_fijo_unitario": float(row['costo_indirecto_fijo_total']),
+                    "administracion_unitario": float(row['gasto_administracion_total']),
+                    "ventas_unitario": float(row['gasto_ventas_total']),
+                    "prendas_requeridas": int(prendas),
+                    "fecha_facturacion": row['fecha_facturacion'].isoformat() if row['fecha_facturacion'] else None,
+                    "esfuerzo_total": int(row['esfuerzo_total']) or 6,
+                    "cliente": row['cliente'],
+                    "seleccionado": True,
+                }
+
+                # Calcular categoría de lote
+                categoria_lote, _ = factores.categorizar_lote(int(prendas))
+                op_detalle["categoria_lote"] = categoria_lote
+
+                ops_detalladas.append(op_detalle)
+
+            logger.info(f" Obtenidas {len(ops_detalladas)} OPs detalladas por marca/tipo: {marca}/{tipo_prenda}")
+            return ops_detalladas
+
+        except Exception as e:
+            logger.error(f" Error obteniendo OPs por marca={marca}, tipo_prenda={tipo_prenda}: {e}")
+            return []
+
     async def obtener_costos_por_ops_especificas(
         self,
         cod_ordpros: List[str],

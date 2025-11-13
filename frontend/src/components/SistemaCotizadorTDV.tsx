@@ -61,8 +61,10 @@ const PureInputCodigoEstilo = React.memo<{ value: string; onChange: (valor: stri
     );
   },
   (prevProps, nextProps) => {
-    // Retornar true = no re-renderizar (props son iguales)
-    return prevProps.value === nextProps.value && prevProps.onChange === nextProps.onChange;
+    // Retornar true = no re-renderizar (solo comparar value)
+    // El onChange siempre es handleCodigoEstiloChange (callback memoizado)
+    // así que no necesita ser comparado
+    return prevProps.value === nextProps.value;
   }
 );
 

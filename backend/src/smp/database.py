@@ -1041,48 +1041,96 @@ class TDVQueries:
         """
         Obtiene lista detallada de OPs sin aplicar factor de seguridad.
         Retorna datos unitarios para cada OP para mostrar en tabla interactiva.
-        """
 
-        query = f"""
-        SELECT
-          cod_ordpro,
-          prendas_requeridas,
-          COALESCE(costo_textil, 0) as costo_textil_total,
-          COALESCE(costo_manufactura, 0) as costo_manufactura_total,
-          COALESCE(costo_avios, 0) as costo_avios_total,
-          COALESCE(costo_materia_prima, 0) as costo_materia_prima_total,
-          COALESCE(costo_indirecto_fijo, 0) as costo_indirecto_fijo_total,
-          COALESCE(gasto_administracion, 0) as gasto_administracion_total,
-          COALESCE(gasto_ventas, 0) as gasto_ventas_total,
-          COALESCE(esfuerzo_total, 6) as esfuerzo_total,
-          fecha_facturacion,
-          cliente
-        FROM {settings.db_schema}.costo_op_detalle c
-        WHERE c.codigo_estilo = %s
-          AND c.version_calculo = %s
-          AND c.fecha_corrida = (
-            SELECT MAX(fecha_corrida)
-            FROM {settings.db_schema}.costo_op_detalle
-            WHERE version_calculo = %s)
-          AND c.prendas_requeridas >= 200
-          AND c.fecha_facturacion >= (
-            SELECT (MAX(fecha_facturacion) - (%s || ' months')::INTERVAL)
-            FROM {settings.db_schema}.costo_op_detalle
-            WHERE version_calculo = %s
-          )
-        ORDER BY c.fecha_facturacion DESC
+        BÚSQUEDA PROGRESIVA:
+        1. Intenta primero con prendas >= 200 (filtro estricto)
+        2. Si no encuentra, intenta sin ese filtro (fallback flexible)
         """
 
         try:
+            # PASO 1: Intento CON filtro estricto (prendas >= 200)
+            query_strict = f"""
+            SELECT
+              cod_ordpro,
+              prendas_requeridas,
+              COALESCE(costo_textil, 0) as costo_textil_total,
+              COALESCE(costo_manufactura, 0) as costo_manufactura_total,
+              COALESCE(costo_avios, 0) as costo_avios_total,
+              COALESCE(costo_materia_prima, 0) as costo_materia_prima_total,
+              COALESCE(costo_indirecto_fijo, 0) as costo_indirecto_fijo_total,
+              COALESCE(gasto_administracion, 0) as gasto_administracion_total,
+              COALESCE(gasto_ventas, 0) as gasto_ventas_total,
+              COALESCE(esfuerzo_total, 6) as esfuerzo_total,
+              fecha_facturacion,
+              cliente
+            FROM {settings.db_schema}.costo_op_detalle c
+            WHERE c.estilo_propio::text = %s
+              AND c.version_calculo = %s
+              AND c.fecha_corrida = (
+                SELECT MAX(fecha_corrida)
+                FROM {settings.db_schema}.costo_op_detalle
+                WHERE version_calculo = %s)
+              AND c.prendas_requeridas >= 200
+              AND c.fecha_facturacion >= (
+                SELECT (MAX(fecha_facturacion) - (%s || ' months')::INTERVAL)
+                FROM {settings.db_schema}.costo_op_detalle
+                WHERE version_calculo = %s
+              )
+            ORDER BY c.fecha_facturacion DESC
+            """
+
             resultados = await self.db.query(
-                query,
+                query_strict,
                 (codigo_estilo, version_calculo,
                  version_calculo, str(meses),
                  version_calculo),
             )
 
+            # PASO 2: Si no encuentra con filtro estricto, intenta SIN filtro de prendas
             if not resultados:
-                logger.info(f" No se encontraron OPs para estilo {codigo_estilo}")
+                logger.info(f" [PROGRESIVO] No encontró OPs para estilo {codigo_estilo} con prendas>=200, intentando sin filtro...")
+
+                query_flexible = f"""
+                SELECT
+                  cod_ordpro,
+                  prendas_requeridas,
+                  COALESCE(costo_textil, 0) as costo_textil_total,
+                  COALESCE(costo_manufactura, 0) as costo_manufactura_total,
+                  COALESCE(costo_avios, 0) as costo_avios_total,
+                  COALESCE(costo_materia_prima, 0) as costo_materia_prima_total,
+                  COALESCE(costo_indirecto_fijo, 0) as costo_indirecto_fijo_total,
+                  COALESCE(gasto_administracion, 0) as gasto_administracion_total,
+                  COALESCE(gasto_ventas, 0) as gasto_ventas_total,
+                  COALESCE(esfuerzo_total, 6) as esfuerzo_total,
+                  fecha_facturacion,
+                  cliente
+                FROM {settings.db_schema}.costo_op_detalle c
+                WHERE c.estilo_propio::text = %s
+                  AND c.version_calculo = %s
+                  AND c.fecha_corrida = (
+                    SELECT MAX(fecha_corrida)
+                    FROM {settings.db_schema}.costo_op_detalle
+                    WHERE version_calculo = %s)
+                  AND c.fecha_facturacion >= (
+                    SELECT (MAX(fecha_facturacion) - (%s || ' months')::INTERVAL)
+                    FROM {settings.db_schema}.costo_op_detalle
+                    WHERE version_calculo = %s
+                  )
+                ORDER BY c.fecha_facturacion DESC
+                """
+
+                resultados = await self.db.query(
+                    query_flexible,
+                    (codigo_estilo, version_calculo,
+                     version_calculo, str(meses),
+                     version_calculo),
+                )
+
+                if resultados:
+                    logger.info(f" [PROGRESIVO] ✅ Encontradas {len(resultados)} OPs sin filtro de prendas para estilo {codigo_estilo}")
+
+            if not resultados:
+                logger.info(f" [PROGRESIVO] No se encontraron OPs para estilo {codigo_estilo} (ni con filtro estricto ni flexible)")
                 return []
 
             # Procesar resultados para crear lista de OPs con datos unitarios
@@ -1112,7 +1160,7 @@ class TDVQueries:
 
                 ops_detalladas.append(op_detalle)
 
-            logger.info(f" Obtenidas {len(ops_detalladas)} OPs detalladas para {codigo_estilo}")
+            logger.info(f" ✅ Obtenidas {len(ops_detalladas)} OPs detalladas para estilo {codigo_estilo}")
             return ops_detalladas
 
         except Exception as e:
@@ -1128,52 +1176,100 @@ class TDVQueries:
     ) -> List[Dict[str, Any]]:
         """
         Obtiene lista detallada de OPs por marca + tipo_prenda para estilos nuevos (fallback).
-        IDÉNTICO a obtener_ops_detalladas_para_tabla pero busca por cliente+tipo_prenda en lugar de estilo_propio.
-        """
+        Busca por cliente+tipo_prenda en lugar de estilo_propio.
 
-        query = f"""
-        SELECT
-          cod_ordpro,
-          prendas_requeridas,
-          COALESCE(costo_textil, 0) as costo_textil_total,
-          COALESCE(costo_manufactura, 0) as costo_manufactura_total,
-          COALESCE(costo_avios, 0) as costo_avios_total,
-          COALESCE(costo_materia_prima, 0) as costo_materia_prima_total,
-          COALESCE(costo_indirecto_fijo, 0) as costo_indirecto_fijo_total,
-          COALESCE(gasto_administracion, 0) as gasto_administracion_total,
-          COALESCE(gasto_ventas, 0) as gasto_ventas_total,
-          COALESCE(esfuerzo_total, 6) as esfuerzo_total,
-          fecha_facturacion,
-          cliente
-        FROM {settings.db_schema}.costo_op_detalle c
-        WHERE c.cliente ILIKE %s
-          AND c.tipo_de_producto ILIKE %s
-          AND c.version_calculo = %s
-          AND c.fecha_corrida = (
-            SELECT MAX(fecha_corrida)
-            FROM {settings.db_schema}.costo_op_detalle
-            WHERE version_calculo = %s)
-          AND c.prendas_requeridas >= 200
-          AND c.fecha_facturacion >= (
-            SELECT (MAX(fecha_facturacion) - (%s || ' months')::INTERVAL)
-            FROM {settings.db_schema}.costo_op_detalle
-            WHERE version_calculo = %s
-          )
-        ORDER BY c.fecha_facturacion DESC
+        BÚSQUEDA PROGRESIVA:
+        1. Intenta primero con prendas >= 200 (filtro estricto)
+        2. Si no encuentra, intenta sin ese filtro (fallback flexible)
         """
 
         try:
+            # PASO 1: Intento CON filtro estricto (prendas >= 200)
+            query_strict = f"""
+            SELECT
+              cod_ordpro,
+              prendas_requeridas,
+              COALESCE(costo_textil, 0) as costo_textil_total,
+              COALESCE(costo_manufactura, 0) as costo_manufactura_total,
+              COALESCE(costo_avios, 0) as costo_avios_total,
+              COALESCE(costo_materia_prima, 0) as costo_materia_prima_total,
+              COALESCE(costo_indirecto_fijo, 0) as costo_indirecto_fijo_total,
+              COALESCE(gasto_administracion, 0) as gasto_administracion_total,
+              COALESCE(gasto_ventas, 0) as gasto_ventas_total,
+              COALESCE(esfuerzo_total, 6) as esfuerzo_total,
+              fecha_facturacion,
+              cliente
+            FROM {settings.db_schema}.costo_op_detalle c
+            WHERE c.cliente ILIKE %s
+              AND c.tipo_de_producto ILIKE %s
+              AND c.version_calculo = %s
+              AND c.fecha_corrida = (
+                SELECT MAX(fecha_corrida)
+                FROM {settings.db_schema}.costo_op_detalle
+                WHERE version_calculo = %s)
+              AND c.prendas_requeridas >= 200
+              AND c.fecha_facturacion >= (
+                SELECT (MAX(fecha_facturacion) - (%s || ' months')::INTERVAL)
+                FROM {settings.db_schema}.costo_op_detalle
+                WHERE version_calculo = %s
+              )
+            ORDER BY c.fecha_facturacion DESC
+            """
+
             resultados = await self.db.query(
-                query,
+                query_strict,
                 (f"%{marca.strip()}%", f"%{tipo_prenda.strip()}%", version_calculo,
                  version_calculo, str(meses), version_calculo),
             )
 
+            # PASO 2: Si no encuentra con filtro estricto, intenta SIN filtro de prendas
             if not resultados:
-                logger.info(f" No se encontraron OPs para marca={marca}, tipo_prenda={tipo_prenda}")
+                logger.info(f" [PROGRESIVO] No encontró OPs para marca={marca}, tipo_prenda={tipo_prenda} con prendas>=200, intentando sin filtro...")
+
+                query_flexible = f"""
+                SELECT
+                  cod_ordpro,
+                  prendas_requeridas,
+                  COALESCE(costo_textil, 0) as costo_textil_total,
+                  COALESCE(costo_manufactura, 0) as costo_manufactura_total,
+                  COALESCE(costo_avios, 0) as costo_avios_total,
+                  COALESCE(costo_materia_prima, 0) as costo_materia_prima_total,
+                  COALESCE(costo_indirecto_fijo, 0) as costo_indirecto_fijo_total,
+                  COALESCE(gasto_administracion, 0) as gasto_administracion_total,
+                  COALESCE(gasto_ventas, 0) as gasto_ventas_total,
+                  COALESCE(esfuerzo_total, 6) as esfuerzo_total,
+                  fecha_facturacion,
+                  cliente
+                FROM {settings.db_schema}.costo_op_detalle c
+                WHERE c.cliente ILIKE %s
+                  AND c.tipo_de_producto ILIKE %s
+                  AND c.version_calculo = %s
+                  AND c.fecha_corrida = (
+                    SELECT MAX(fecha_corrida)
+                    FROM {settings.db_schema}.costo_op_detalle
+                    WHERE version_calculo = %s)
+                  AND c.fecha_facturacion >= (
+                    SELECT (MAX(fecha_facturacion) - (%s || ' months')::INTERVAL)
+                    FROM {settings.db_schema}.costo_op_detalle
+                    WHERE version_calculo = %s
+                  )
+                ORDER BY c.fecha_facturacion DESC
+                """
+
+                resultados = await self.db.query(
+                    query_flexible,
+                    (f"%{marca.strip()}%", f"%{tipo_prenda.strip()}%", version_calculo,
+                     version_calculo, str(meses), version_calculo),
+                )
+
+                if resultados:
+                    logger.info(f" [PROGRESIVO] ✅ Encontradas {len(resultados)} OPs sin filtro de prendas para marca={marca}, tipo={tipo_prenda}")
+
+            if not resultados:
+                logger.info(f" [PROGRESIVO] No se encontraron OPs para marca={marca}, tipo_prenda={tipo_prenda} (ni con filtro estricto ni flexible)")
                 return []
 
-            # Procesar resultados para crear lista de OPs con datos unitarios (IDÉNTICO al otro método)
+            # Procesar resultados para crear lista de OPs con datos unitarios
             ops_detalladas = []
             for row in resultados:
                 prendas = float(row['prendas_requeridas']) or 1
@@ -1200,7 +1296,7 @@ class TDVQueries:
 
                 ops_detalladas.append(op_detalle)
 
-            logger.info(f" Obtenidas {len(ops_detalladas)} OPs para estilo nuevo (marca={marca}, tipo={tipo_prenda})")
+            logger.info(f" ✅ Obtenidas {len(ops_detalladas)} OPs para estilo nuevo (marca={marca}, tipo={tipo_prenda})")
             return ops_detalladas
 
         except Exception as e:

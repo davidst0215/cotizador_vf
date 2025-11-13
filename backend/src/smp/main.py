@@ -771,6 +771,48 @@ async def obtener_ops_detalladas(
         )
 
 
+@app.get("/debug-estilo/{estilo}", tags=["Debug"])
+async def debug_estilo(estilo: str):
+    """Debug: Verificar qué valores de estilo_propio existen para un estilo"""
+    try:
+        # Buscar exactamente
+        query_exacto = f"""
+        SELECT COUNT(*) as total, COUNT(DISTINCT cod_ordpro) as ops_dist
+        FROM {settings.db_schema}.costo_op_detalle
+        WHERE estilo_propio::text = '{estilo}'
+        AND version_calculo = 'FLUIDA'
+        """
+        result_exact = await tdv_queries.db.query(query_exacto)
+
+        # Ver similares
+        query_similares = f"""
+        SELECT DISTINCT estilo_propio, COUNT(*) as cantidad
+        FROM {settings.db_schema}.costo_op_detalle
+        WHERE estilo_propio::text LIKE '%{estilo}%'
+        AND version_calculo = 'FLUIDA'
+        GROUP BY estilo_propio
+        ORDER BY cantidad DESC
+        LIMIT 10
+        """
+        result_sim = await tdv_queries.db.query(query_similares)
+
+        return {
+            "estilo_buscado": estilo,
+            "busqueda_exacta": {
+                "total_registros": result_exact[0]['total'] if result_exact else 0,
+                "ops_distintas": result_exact[0]['ops_dist'] if result_exact else 0
+            },
+            "similares_encontrados": [
+                {
+                    "estilo_propio": row['estilo_propio'],
+                    "cantidad": row['cantidad']
+                } for row in result_sim
+            ]
+        }
+    except Exception as e:
+        logger.error(f"Error en debug_estilo: {e}")
+        return {"error": str(e)}
+
 @app.get("/debug-montaigne", tags=["Debug"])
 async def debug_montaigne():
     """Debug: Mostrar todos los OPs de MONTAIGNE en la BD"""

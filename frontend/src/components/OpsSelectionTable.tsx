@@ -50,7 +50,7 @@ type SortField = "cod_ordpro" | "textil_unitario" | "manufactura_unitario" | "pr
 type SortDirection = "asc" | "desc";
 
 export const OpsSelectionTable = forwardRef<OpsSelectionTableRef, OpsSelectionTableProps>(
-  ({ codigoEstilo, versionCalculo, onOpsSelected, onError, opsSeleccionadasPrevia, marca, tipoPrenda }, ref) => {
+  ({ codigoEstilo, versionCalculo, onOpsSelected, onError, opsSeleccionadasPrevia }, ref) => {
     const [opsData, setOpsData] = useState<OP[]>([]);
     const [cargando, setCargando] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -81,10 +81,10 @@ export const OpsSelectionTable = forwardRef<OpsSelectionTableRef, OpsSelectionTa
         // Determinar URL según tipo de búsqueda
         if (busquedaPorMarca && busquedaPorMarca.marca && busquedaPorMarca.tipoPrenda) {
           // Búsqueda alternativa por marca + tipo_prenda
-          url = `http://localhost:8001/obtener-ops-por-marca/${encodeURIComponent(busquedaPorMarca.marca)}/${encodeURIComponent(busquedaPorMarca.tipoPrenda)}?version_calculo=${versionCalculo}`;
+          url = `http://localhost:8000/obtener-ops-por-marca/${encodeURIComponent(busquedaPorMarca.marca)}/${encodeURIComponent(busquedaPorMarca.tipoPrenda)}?version_calculo=${versionCalculo}`;
         } else {
           // Búsqueda por código_estilo (default)
-          url = `http://localhost:8001/obtener-ops-detalladas/${codigoEstilo}?version_calculo=${versionCalculo}`;
+          url = `http://localhost:8000/obtener-ops-detalladas/${codigoEstilo}?version_calculo=${versionCalculo}`;
         }
 
         const response = await fetch(url);
@@ -123,7 +123,7 @@ export const OpsSelectionTable = forwardRef<OpsSelectionTableRef, OpsSelectionTa
         cargarOpsDetalladas();
         setDebeCargar(false); // Resetear para próxima búsqueda
       }
-    }, [debeCargar]);
+    }, [debeCargar, cargarOpsDetalladas]);
 
     // Restaurar selección anterior cuando opsSeleccionadasPrevia cambia
     React.useEffect(() => {

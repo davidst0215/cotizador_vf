@@ -34,28 +34,37 @@ const CATEGORIAS_LOTE = {
 
 // NOTA: InputCodigoEstiloProps removido - no se usa más
 
-// ✨ INPUT HTML PURO - SIN MEMO PARA EVITAR PÉRDIDA DE FOCO
-const PureInputCodigoEstilo: React.FC<{ value: string; onChange: (valor: string) => void }> = ({
-  value,
-  onChange,
-}) => {
-  // ⚡ Handler interno que NO transforma el valor - mantiene el input controlado sin transformaciones
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    onChange(e.target.value.toUpperCase());
-  };
+// ✨ INPUT HTML PURO - MEMOIZADO PARA PRESERVAR FOCO
+const PureInputCodigoEstilo = React.memo<{ value: string; onChange: (valor: string) => void }>(
+  ({ value, onChange }) => {
+    // 🔍 LOGGING: Detectar si el componente se re-renderiza
+    useEffect(() => {
+      console.log(`📍 [PureInputCodigoEstilo] RE-RENDERIZADO | value="${value}"`);
+    }, [value]);
 
-  return (
-    <input
-      type="text"
-      value={value}
-      onChange={handleChange}
-      className="w-full p-4 border-2 border-gray-200 rounded-xl focus:border-red-500 focus:border-opacity-50 transition-colors"
-      placeholder="ej: LAC001-V25, GRY2024-P01"
-      autoComplete="off"
-      spellCheck={false}
-    />
-  );
-};
+    // ⚡ Handler interno que NO transforma el valor - mantiene el input controlado sin transformaciones
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      console.log(`⌨️ [PureInputCodigoEstilo.handleChange] keystroke | nuevo valor="${e.target.value}"`);
+      onChange(e.target.value.toUpperCase());
+    };
+
+    return (
+      <input
+        type="text"
+        value={value}
+        onChange={handleChange}
+        className="w-full p-4 border-2 border-gray-200 rounded-xl focus:border-red-500 focus:border-opacity-50 transition-colors"
+        placeholder="ej: LAC001-V25, GRY2024-P01"
+        autoComplete="off"
+        spellCheck={false}
+      />
+    );
+  },
+  (prevProps, nextProps) => {
+    // Retornar true = no re-renderizar (props son iguales)
+    return prevProps.value === nextProps.value && prevProps.onChange === nextProps.onChange;
+  }
+);
 
 // Botón de búsqueda - SIN MEMO
 const BuscarEstiloButton: React.FC<{
@@ -196,39 +205,45 @@ const CampoCodigoEstiloComponent = React.memo<CampoCodigoEstiloProps>(
     onChange,
     onBuscar,
     onSelectStyle,
-  }) => (
-    <div className="space-y-2">
-      <label className="block text-sm font-semibold text-red-900">Código de estilo propio</label>
+  }) => {
+    // 🔍 LOGGING: Detectar si el componente se re-renderiza
+    useEffect(() => {
+      console.log(`🎪 [CampoCodigoEstiloComponent] RE-RENDERIZADO | value="${value}" buscandoEstilo=${buscandoEstilo}`);
+    }, [value, buscandoEstilo]);
 
-      {/* Input puro - SIN MEMO */}
-      <PureInputCodigoEstilo value={value} onChange={onChange} />
+    return (
+      <div className="space-y-2">
+        <label className="block text-sm font-semibold text-red-900">Código de estilo propio</label>
 
-      {/* Botón de búsqueda - SIN MEMO */}
-      <BuscarEstiloButton value={value} buscandoEstilo={buscandoEstilo} onBuscar={onBuscar} />
+        {/* Input puro - SIN MEMO */}
+        <PureInputCodigoEstilo value={value} onChange={onChange} />
 
-      {/* Información - componentes memoizados separados */}
-      <InfoAutocompletadoComponent infoAutoCompletado={infoAutoCompletado} />
-      <EstadoEstiloComponent
-        esEstiloNuevo={esEstiloNuevo}
-        buscandoEstilo={buscandoEstilo}
-        value={value}
-        infoAutoCompletado={infoAutoCompletado}
-      />
-      <EstilosSimilaresComponent
-        estilosEncontrados={estilosEncontrados}
-        onSelectStyle={onSelectStyle}
-      />
-    </div>
-  ),
+        {/* Botón de búsqueda - SIN MEMO */}
+        <BuscarEstiloButton value={value} buscandoEstilo={buscandoEstilo} onBuscar={onBuscar} />
+
+        {/* Información - componentes memoizados separados */}
+        <InfoAutocompletadoComponent infoAutoCompletado={infoAutoCompletado} />
+        <EstadoEstiloComponent
+          esEstiloNuevo={esEstiloNuevo}
+          buscandoEstilo={buscandoEstilo}
+          value={value}
+          infoAutoCompletado={infoAutoCompletado}
+        />
+        <EstilosSimilaresComponent
+          estilosEncontrados={estilosEncontrados}
+          onSelectStyle={onSelectStyle}
+        />
+      </div>
+    );
+  },
   // Función de comparación personalizada: solo re-renderizar si cambió algo relevante
-  (prevProps, nextProps) => {
+  (prevProps: CampoCodigoEstiloProps, nextProps: CampoCodigoEstiloProps) => {
     return (
       prevProps.value === nextProps.value &&
       prevProps.buscandoEstilo === nextProps.buscandoEstilo &&
       prevProps.estilosEncontrados === nextProps.estilosEncontrados &&
       prevProps.esEstiloNuevo === nextProps.esEstiloNuevo &&
       prevProps.infoAutoCompletado === nextProps.infoAutoCompletado
-      // onChange, onBuscar, onSelectStyle son callbacks memoizados - no cambian
     );
   }
 );
@@ -486,6 +501,11 @@ interface AutoCompletadoInfo {
 }
 
 const SistemaCotizadorTDV = () => {
+  // 🔍 LOGGING: Detectar re-renders del componente principal
+  useEffect(() => {
+    console.log(`🏢 [SistemaCotizadorTDV] COMPONENTE RE-RENDERIZADO`);
+  });
+
   // Estados principales
   const [pestanaActiva, setPestanaActiva] = useState<
     "formulario" | "resultados"
@@ -535,6 +555,11 @@ const SistemaCotizadorTDV = () => {
   // Esto evita re-renders del padre en cada keystroke
   const [codigoEstiloLocal, setCodigoEstiloLocal] = useState<string>("");
 
+  // 🔍 LOGGING: Detectar cambios en codigoEstiloLocal
+  useEffect(() => {
+    console.log(`📝 [codigoEstiloLocal] ESTADO CAMBIÓ | nuevo valor="${codigoEstiloLocal}"`);
+  }, [codigoEstiloLocal]);
+
   // ⚡ Estado para controlar si el input ha sido sincronizado (evita loops)
   const inputSyncedRef = useRef<boolean>(false);
 
@@ -559,6 +584,7 @@ const SistemaCotizadorTDV = () => {
 
   // Memoized validation
   const erroresFormulario = useMemo(() => {
+    console.log(`✅ [erroresFormulario] RECALCULADO | codigoEstiloLocal="${codigoEstiloLocal}"`);
     const errores = [];
 
     if (!formData.cliente_marca) errores.push("Cliente/Marca es requerido");
@@ -592,6 +618,7 @@ const SistemaCotizadorTDV = () => {
   // Esto evita re-renders del padre en cada keystroke
   const handleCodigoEstiloChange = useCallback(
     (valor: string) => {
+      console.log(`🎯 [handleCodigoEstiloChange] EJECUTADO | valor="${valor}"`);
       setCodigoEstiloLocal(valor);  // Solo actualiza estado local
       inputSyncedRef.current = false; // Marcar como no sincronizado
     },
@@ -892,7 +919,9 @@ const SistemaCotizadorTDV = () => {
 
   // ⚡ Handler para buscar estilo manualmente - SINCRONIZA estado local con formData
   const onBuscarEstilo = useCallback(() => {
+    console.log(`🔍 [onBuscarEstilo] RECREADO | codigoEstiloLocal="${codigoEstiloLocal}"`);
     if (codigoEstiloLocal && codigoEstiloLocal.length >= 3) {
+      console.log(`🚀 [onBuscarEstilo] EJECUTADO | buscando="${codigoEstiloLocal}"`);
       // Marcar como sincronizado para evitar efectos secundarios
       inputSyncedRef.current = true;
 

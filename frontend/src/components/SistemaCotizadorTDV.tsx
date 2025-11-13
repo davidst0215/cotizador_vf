@@ -10,7 +10,6 @@ import React, {
 import type { OpsSelectionTableRef } from "./OpsSelectionTable";
 import { get, post } from "@/libs/api";
 import {
-  Settings,
   DollarSign,
   Package,
   AlertTriangle,
@@ -33,52 +32,53 @@ const CATEGORIAS_LOTE = {
   "Lote Masivo": { rango: "4001+" },
 };
 
-// Componente puro para el input de código de estilo - evita re-renders innecesarios
-interface InputCodigoEstiloProps {
+// NOTA: InputCodigoEstiloProps removido - no se usa más
+
+// ✨ INPUT HTML PURO - SIN MEMO PARA EVITAR PÉRDIDA DE FOCO
+const PureInputCodigoEstilo: React.FC<{ value: string; onChange: (valor: string) => void }> = ({
+  value,
+  onChange,
+}) => {
+  // ⚡ Handler interno que NO transforma el valor - mantiene el input controlado sin transformaciones
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    onChange(e.target.value.toUpperCase());
+  };
+
+  return (
+    <input
+      type="text"
+      value={value}
+      onChange={handleChange}
+      className="w-full p-4 border-2 border-gray-200 rounded-xl focus:border-red-500 focus:border-opacity-50 transition-colors"
+      placeholder="ej: LAC001-V25, GRY2024-P01"
+      autoComplete="off"
+      spellCheck={false}
+    />
+  );
+};
+
+// Botón de búsqueda - SIN MEMO
+const BuscarEstiloButton: React.FC<{
   value: string;
   buscandoEstilo: boolean;
-  onChange: (valor: string) => void;
   onBuscar: () => void;
-}
-
-const InputCodigoEstilo = React.memo(
-  ({ value, buscandoEstilo, onChange, onBuscar }: InputCodigoEstiloProps) => (
-    <div className="relative">
-      <input
-        type="text"
-        value={value}
-        onChange={(e) => onChange(e.target.value.toUpperCase().trim())}
-        className="w-full p-4 pr-12 border-2 border-gray-200 rounded-xl focus:border-red-500 focus:border-opacity-50 transition-colors"
-        placeholder="ej: LAC001-V25, GRY2024-P01"
-        autoComplete="off"
-        spellCheck={false}
-      />
-      <button
-        type="button"
-        onClick={onBuscar}
-        disabled={buscandoEstilo || value.length < 3}
-        className="absolute right-2 top-3 p-1 rounded-lg hover:bg-red-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        title={value.length < 3 ? "Ingresa al menos 3 caracteres" : "Buscar estilo"}
-      >
-        {buscandoEstilo ? (
-          <RefreshCw className="h-5 w-5 text-red-500 animate-spin" />
-        ) : (
-          <svg className="h-5 w-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
-        )}
-      </button>
-    </div>
-  ),
-  // Comparación personalizada: solo re-renderizar si cambia el VALUE
-  // Ignora cambios en buscandoEstilo y onBuscar para mantener el foco
-  (prevProps, nextProps) => {
-    return (
-      prevProps.value === nextProps.value &&
-      prevProps.onChange === nextProps.onChange &&
-      prevProps.onBuscar === nextProps.onBuscar
-    );
-  }
+}> = ({ value, buscandoEstilo, onBuscar }) => (
+  <button
+    type="button"
+    onClick={onBuscar}
+    disabled={buscandoEstilo || value.length < 3}
+    className="mt-2 w-full py-2 px-4 bg-red-700 hover:bg-red-800 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-lg font-semibold transition-colors"
+    title={value.length < 3 ? "Ingresa al menos 3 caracteres" : "Buscar estilo"}
+  >
+    {buscandoEstilo ? (
+      <div className="flex items-center justify-center gap-2">
+        <RefreshCw className="h-4 w-4 animate-spin" />
+        Buscando...
+      </div>
+    ) : (
+      "Buscar Estilo"
+    )}
+  </button>
 );
 
 // Componente CampoCodigoEstilo completo como React.memo - evita que se remonte en cada keystroke
@@ -93,7 +93,100 @@ interface CampoCodigoEstiloProps {
   onSelectStyle: (estilo: any) => void;
 }
 
-const CampoCodigoEstiloComponent = React.memo(
+// Información de auto-completado - Componente separado para no afectar el input
+interface InfoAutocompletadoComponentProps {
+  infoAutoCompletado: AutoCompletadoInfo | null;
+}
+
+const InfoAutocompletadoComponent = React.memo(
+  ({ infoAutoCompletado }: InfoAutocompletadoComponentProps) => {
+    if (!infoAutoCompletado?.autocompletado_disponible) return null;
+
+    return (
+      <div className="mt-2 p-3 rounded-xl border-2 bg-green-100 border-green-400">
+        <div className="text-sm font-semibold mb-2 text-green-700">
+          ✅ Auto-completado:
+        </div>
+        <div className="text-xs text-green-700">
+          📁 {infoAutoCompletado.campos_sugeridos?.familia_producto} | 🏷️{" "}
+          {infoAutoCompletado.campos_sugeridos?.tipo_prenda}
+        </div>
+      </div>
+    );
+  }
+);
+InfoAutocompletadoComponent.displayName = "InfoAutocompletadoComponent";
+
+// Estado del estilo - Componente separado
+interface EstadoEstiloComponentProps {
+  esEstiloNuevo: boolean | null;
+  buscandoEstilo: boolean;
+  value: string;
+  infoAutoCompletado: AutoCompletadoInfo | null;
+}
+
+const EstadoEstiloComponent = React.memo(
+  ({ esEstiloNuevo, buscandoEstilo, value, infoAutoCompletado }: EstadoEstiloComponentProps) => {
+    if (!value || buscandoEstilo || esEstiloNuevo === null) return null;
+
+    return (
+      <div className="flex items-center gap-2 mt-2">
+        <div
+          className={`text-xs px-2 py-1 rounded-full inline-block text-white ${
+            esEstiloNuevo ? "bg-red-500" : "bg-green-600"
+          }`}
+        >
+          {esEstiloNuevo ? "🆕 Nuevo" : "✅ Recurrente"}
+        </div>
+
+        {infoAutoCompletado?.info_estilo?.volumen_total && (
+          <div className="text-xs text-gray-600">
+            📦 {infoAutoCompletado.info_estilo.volumen_total.toLocaleString()} prendas
+          </div>
+        )}
+      </div>
+    );
+  }
+);
+EstadoEstiloComponent.displayName = "EstadoEstiloComponent";
+
+// Estilos similares - Componente separado
+interface EstilosSimilaresComponentProps {
+  estilosEncontrados: EstiloSimilar[];
+  onSelectStyle: (estilo: EstiloSimilar) => void;
+}
+
+const EstilosSimilaresComponent = React.memo(
+  ({ estilosEncontrados, onSelectStyle }: EstilosSimilaresComponentProps) => {
+    if (estilosEncontrados.length === 0) return null;
+
+    return (
+      <div className="mt-2 p-3 rounded-xl border-2 bg-orange-50 border-orange-400">
+        <div className="text-sm font-semibold mb-2 text-red-900">
+          Estilos similares:
+        </div>
+        {estilosEncontrados.slice(0, 3).map((estilo, idx) => (
+          <button
+            key={idx}
+            onClick={() => onSelectStyle(estilo)}
+            className="w-full text-left p-2 rounded-lg hover:shadow-md transition-all mb-2 bg-orange-200"
+          >
+            <div className="font-semibold text-sm text-red-900">
+              {estilo.codigo}
+            </div>
+            <div className="text-xs text-red-500">
+              {estilo.tipo_prenda} | {estilo.ops_encontradas} OPs
+            </div>
+          </button>
+        ))}
+      </div>
+    );
+  }
+);
+EstilosSimilaresComponent.displayName = "EstilosSimilaresComponent";
+
+// ⚡ COMPONENTE MEMOIZADO con comparación personalizada para evitar re-renders innecesarios
+const CampoCodigoEstiloComponent = React.memo<CampoCodigoEstiloProps>(
   ({
     value,
     buscandoEstilo,
@@ -103,96 +196,43 @@ const CampoCodigoEstiloComponent = React.memo(
     onChange,
     onBuscar,
     onSelectStyle,
-  }: CampoCodigoEstiloProps) => (
+  }) => (
     <div className="space-y-2">
-      <label className="block text-sm font-semibold text-red-900">
-        Código de estilo propio
-      </label>
-      <InputCodigoEstilo
-        value={value}
+      <label className="block text-sm font-semibold text-red-900">Código de estilo propio</label>
+
+      {/* Input puro - SIN MEMO */}
+      <PureInputCodigoEstilo value={value} onChange={onChange} />
+
+      {/* Botón de búsqueda - SIN MEMO */}
+      <BuscarEstiloButton value={value} buscandoEstilo={buscandoEstilo} onBuscar={onBuscar} />
+
+      {/* Información - componentes memoizados separados */}
+      <InfoAutocompletadoComponent infoAutoCompletado={infoAutoCompletado} />
+      <EstadoEstiloComponent
+        esEstiloNuevo={esEstiloNuevo}
         buscandoEstilo={buscandoEstilo}
-        onChange={onChange}
-        onBuscar={onBuscar}
+        value={value}
+        infoAutoCompletado={infoAutoCompletado}
       />
-
-      {/* Información de auto-completado */}
-      {infoAutoCompletado?.autocompletado_disponible && (
-        <div className="mt-2 p-3 rounded-xl border-2 bg-green-100 border-green-400">
-          <div className="text-sm font-semibold mb-2 text-green-700">
-            ✅ Auto-completado aplicado:
-          </div>
-          <div className="text-xs text-green-700">
-            📁 Familia:{" "}
-            <strong>
-              {infoAutoCompletado.campos_sugeridos?.familia_producto}
-            </strong>{" "}
-            | 🏷️ Tipo:{" "}
-            <strong>{infoAutoCompletado.campos_sugeridos?.tipo_prenda}</strong> | 📊
-            Categoría: <strong>{infoAutoCompletado.info_estilo?.categoria}</strong>
-          </div>
-        </div>
-      )}
-
-      {/* Estilos similares */}
-      {estilosEncontrados.length > 0 && (
-        <div className="mt-2 p-3 rounded-xl border-2 bg-orange-50 border-orange-400">
-          <div className="text-sm font-semibold mb-2 text-red-900">
-            Estilos similares encontrados:
-          </div>
-          {estilosEncontrados.map((estilo, idx) => (
-            <button
-              key={idx}
-              onClick={() => onSelectStyle(estilo)}
-              className="w-full text-left p-2 rounded-lg hover:shadow-md transition-all mb-2 bg-orange-200"
-            >
-              <div className="font-semibold text-sm text-red-900">
-                {estilo.codigo}
-              </div>
-              <div className="text-xs text-red-500">
-                {estilo.familia_producto} - {estilo.tipo_prenda} |{" "}
-                {estilo.ops_encontradas} OPs | ${estilo.costo_promedio.toFixed(2)}
-              </div>
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* Indicador de estado del estilo - Solo muestra después de hacer clic en la lupa */}
-      {value && !buscandoEstilo && esEstiloNuevo !== null && (
-        <div className="flex items-center gap-2">
-          <div
-            className={`text-xs px-2 py-1 rounded-full inline-block text-white ${
-              esEstiloNuevo ? "bg-red-500" : "bg-green-600"
-            }`}
-          >
-            {esEstiloNuevo ? "🆕 Estilo Nuevo" : "✅ Estilo Recurrente"}
-          </div>
-
-          {infoAutoCompletado?.info_estilo?.volumen_total && (
-            <div className="text-xs text-gray-600">
-              📦 Volumen histórico:{" "}
-              {infoAutoCompletado.info_estilo.volumen_total.toLocaleString()}{" "}
-              prendas
-            </div>
-          )}
-        </div>
-      )}
+      <EstilosSimilaresComponent
+        estilosEncontrados={estilosEncontrados}
+        onSelectStyle={onSelectStyle}
+      />
     </div>
   ),
-  // Comparación personalizada: solo re-renderizar si cambios críticos
-  // Ignora cambios en estilosEncontrados e infoAutoCompletado mientras se escribe
+  // Función de comparación personalizada: solo re-renderizar si cambió algo relevante
   (prevProps, nextProps) => {
     return (
       prevProps.value === nextProps.value &&
       prevProps.buscandoEstilo === nextProps.buscandoEstilo &&
-      prevProps.onChange === nextProps.onChange &&
-      prevProps.onBuscar === nextProps.onBuscar &&
-      prevProps.onSelectStyle === nextProps.onSelectStyle
-      // NO comparar estilosEncontrados ni infoAutoCompletado
-      // para mantener el foco mientras el usuario escribe
+      prevProps.estilosEncontrados === nextProps.estilosEncontrados &&
+      prevProps.esEstiloNuevo === nextProps.esEstiloNuevo &&
+      prevProps.infoAutoCompletado === nextProps.infoAutoCompletado
+      // onChange, onBuscar, onSelectStyle son callbacks memoizados - no cambian
     );
   }
 );
+
 CampoCodigoEstiloComponent.displayName = "CampoCodigoEstiloComponent";
 
 // ========================================
@@ -300,13 +340,7 @@ const TipoPrendaSelect = React.memo(
 TipoPrendaSelect.displayName = "TipoPrendaSelect";
 
 // Interfaces TypeScript
-interface WipDisponible {
-  wip_id: string;
-  nombre: string;
-  costo_actual: number;
-  disponible: boolean;
-  grupo: string;
-}
+// NOTA: WipDisponible removido - no se usa más
 
 interface WipSeleccionada {
   wip_id: string;
@@ -456,10 +490,6 @@ const SistemaCotizadorTDV = () => {
   const [pestanaActiva, setPestanaActiva] = useState<
     "formulario" | "resultados"
   >("formulario");
-  const [wipsDisponibles, setWipsDisponibles] = useState<{
-    wips_textiles: WipDisponible[];
-    wips_manufactura: WipDisponible[];
-  }>({ wips_textiles: [], wips_manufactura: [] });
   const [cotizacionActual, setCotizacionActual] =
     useState<ResultadoCotizacion | null>(null);
   const [cargando, setCargando] = useState(false);
@@ -467,7 +497,6 @@ const SistemaCotizadorTDV = () => {
   // Estados de datos maestros dinámicos
   const [clientesDisponibles, setClientesDisponibles] = useState<string[]>([]);
     const [tiposDisponibles, setTiposDisponibles] = useState<string[]>([]);
-  const [cargandoFamilias, setCargandoFamilias] = useState(false);
   const [cargandoTipos, setCargandoTipos] = useState(false);
 
   // Estados para OPs reales
@@ -502,6 +531,13 @@ const SistemaCotizadorTDV = () => {
   // Estado debounced para los efectos - evita que se disparen en cada keystroke
   const [debouncedFormData, setDebouncedFormData] = useState<FormData>(formData);
 
+  // ⚡ ESTADO LOCAL DEL INPUT - Completamente INDEPENDIENTE del formData
+  // Esto evita re-renders del padre en cada keystroke
+  const [codigoEstiloLocal, setCodigoEstiloLocal] = useState<string>("");
+
+  // ⚡ Estado para controlar si el input ha sido sincronizado (evita loops)
+  const inputSyncedRef = useRef<boolean>(false);
+
   // Estados para búsqueda de estilos
   const [estilosEncontrados, setEstilosEncontrados] = useState<EstiloSimilar[]>(
     [],
@@ -513,13 +549,10 @@ const SistemaCotizadorTDV = () => {
     useState<AutoCompletadoInfo | null>(null);
 
   // Estados para WIPs seleccionadas
-  const [wipsTextiles, setWipsTextiles] = useState<WipSeleccionada[]>([]);
-  const [wipsManufactura, setWipsManufactura] = useState<WipSeleccionada[]>([]);
+  const [wipsTextiles] = useState<WipSeleccionada[]>([]);
+  const [wipsManufactura] = useState<WipSeleccionada[]>([]);
 
   // Referencias para evitar re-renders y debouncing
-  const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const familiaDebounceRef = useRef<NodeJS.Timeout | null>(null);
-  const tipoDebounceRef = useRef<NodeJS.Timeout | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const opsSelectionTableRef = useRef<OpsSelectionTableRef>(null); // Ref para dispara búsqueda de OPs
   const formDataRef = useRef<FormData>(formData); // Mantiene formData actualizado sin affecting dependencies
@@ -531,12 +564,13 @@ const SistemaCotizadorTDV = () => {
     if (!formData.cliente_marca) errores.push("Cliente/Marca es requerido");
     // NOTA: temporada y familia_producto ya no son requeridas
     if (!formData.tipo_prenda) errores.push("Tipo de Prenda es requerido");
-    if (!formData.codigo_estilo) errores.push("Código de estilo propio es requerido");
+    // ⚡ Usar codigoEstiloLocal en lugar de formData.codigo_estilo
+    if (!codigoEstiloLocal && !formData.codigo_estilo) errores.push("Código de estilo propio es requerido");
 
     // NOTA: Se removió validación de WIPs requeridas - ahora es opcional
 
     return errores;
-  }, [formData]);
+  }, [formData.cliente_marca, formData.tipo_prenda, formData.codigo_estilo, codigoEstiloLocal]);
 
   // Manejador de cambio de formulario con actualización inmediata
   const manejarCambioFormulario = useCallback(
@@ -554,10 +588,34 @@ const SistemaCotizadorTDV = () => {
     [],
   );
 
-  // Handler memoizado específicamente para el código de estilo
+  // ⚡ Handler para código de estilo - SOLO ESTADO LOCAL, sin tocar formData
+  // Esto evita re-renders del padre en cada keystroke
   const handleCodigoEstiloChange = useCallback(
     (valor: string) => {
-      manejarCambioFormulario("codigo_estilo", valor);
+      setCodigoEstiloLocal(valor);  // Solo actualiza estado local
+      inputSyncedRef.current = false; // Marcar como no sincronizado
+    },
+    [],  // Sin dependencias - nunca cambia
+  );
+
+  // Handlers memoizados para otros campos
+  const handleCategoriaLoteChange = useCallback(
+    (valor: string) => {
+      manejarCambioFormulario("categoria_lote", valor);
+    },
+    [manejarCambioFormulario],
+  );
+
+  const handleTipoPrendaChange = useCallback(
+    (valor: string) => {
+      manejarCambioFormulario("tipo_prenda", valor);
+    },
+    [manejarCambioFormulario],
+  );
+
+  const handleClienteChange = useCallback(
+    (valor: string) => {
+      manejarCambioFormulario("cliente_marca", valor);
     },
     [manejarCambioFormulario],
   );
@@ -582,24 +640,17 @@ const SistemaCotizadorTDV = () => {
     []
   );
 
-  // Efecto 3: Cargar WIPs cuando cambia tipo (usando debouncedFormData, solo para estilos nuevos)
-  useEffect(() => {
-    if (debouncedFormData.tipo_prenda && esEstiloNuevo) {
-      cargarWipsPorTipoPrenda(debouncedFormData.tipo_prenda, debouncedFormData.version_calculo);
-    }
-  }, [debouncedFormData.tipo_prenda, debouncedFormData.version_calculo, esEstiloNuevo]);
+  // NOTA: Efecto 3 (cargar WIPs cuando cambia tipo) fue eliminado - cargarWipsPorTipoPrenda removido
 
-  // Efecto 4 (removido): Búsqueda debounced de estilos - Ahora se busca con botón manual
-  // Limpieza de búsqueda cuando el código se vacía o es muy corto
-  // Solo muestra estado (nuevo/recurrente) después de hacer click en la lupa
-  // Usa debouncedFormData para evitar re-renders en cada keystroke
-  useEffect(() => {
-    if (!debouncedFormData.codigo_estilo || debouncedFormData.codigo_estilo.length < 3) {
-      setEstilosEncontrados([]);
-      setEsEstiloNuevo(null); // null = no verificado aún
-      setInfoAutoCompletado(null);
-    }
-  }, [debouncedFormData.codigo_estilo]);
+  // ⚡ DESHABILITADO - Este efecto causaba re-renders en cada keystroke
+  // La limpieza se maneja solo cuando se busca explícitamente o cuando formData cambia
+  // useEffect(() => {
+  //   if (!codigoEstiloLocal || codigoEstiloLocal.length < 3) {
+  //     setEstilosEncontrados([]);
+  //     setEsEstiloNuevo(null);
+  //     setInfoAutoCompletado(null);
+  //   }
+  // }, [codigoEstiloLocal]);
 
   // Cargar datos iniciales - OPTIMIZADO: Un único request en lugar de 3
   useEffect(() => {
@@ -617,16 +668,16 @@ const SistemaCotizadorTDV = () => {
         // Desempaquetar todos los datos en los estados correspondientes
         setClientesDisponibles(data.clientes || []);
         setTiposDisponibles(data.tipos || []);
-        setWipsDisponibles(data.wips || {});
+
 
         // console.log(
         //   `✅ Datos iniciales cargados: ${data.total_clientes} clientes, ${data.total_tipos} tipos, ${data.total_wips} WIPs`
         // );
-      } catch (error) {
+      } catch {
         // console.error("Error cargando datos iniciales:", error);
         setClientesDisponibles([]);
         setTiposDisponibles([]);
-        setWipsDisponibles({});
+
       }
     };
     cargarDatosIniciales();
@@ -635,9 +686,6 @@ const SistemaCotizadorTDV = () => {
   // Limpiar al desmontar
   useEffect(() => {
     return () => {
-      if (debounceTimeoutRef.current) {
-        clearTimeout(debounceTimeoutRef.current);
-      }
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
@@ -649,73 +697,22 @@ const SistemaCotizadorTDV = () => {
     formDataRef.current = formData;
   }, [formData]);
 
-  // Debounce formData para evitar pérdida de foco - actualiza debouncedFormData después de 3 segundos sin cambios
-  // Monitorea solo codigo_estilo para reiniciar el timer en cada keystroke sin re-montar el input
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedFormData(formDataRef.current);
-    }, 3000); // 3 segundos de espera sin escribir
-
-    return () => {
-      clearTimeout(timer);
-    };
-  }, [formData.codigo_estilo]); // Reinicia timer solo con cambios en codigo_estilo
+  // ⚡ DESHABILITADO - Este efecto causaba pérdida de foco al crear/limpiar timers constantemente
+  // El debounce ahora se maneja solo cuando se hace click en "Buscar Estilo"
+  // useEffect(() => {
+  //   const timer = setTimeout(() => {
+  //     setDebouncedFormData(formDataRef.current);
+  //   }, 3000);
+  //   return () => {
+  //     clearTimeout(timer);
+  //   };
+  // }, [formData.codigo_estilo]);
 
   // ========================================
   // 🔧 FUNCIONES DE CARGA CORREGIDAS
   // ========================================
 
-  const cargarWipsDisponibles = useCallback(
-    async (versionCalculo: string = "FLUIDO") => {
-      try {
-        const data = await get<{
-          wips_textiles: any[];
-          wips_manufactura: any[];
-        }>(
-          `wips-disponibles?version_calculo=${encodeURIComponent(versionCalculo)}`,
-        );
-        setWipsDisponibles(data);
-        // console.log(
-        //   `✅ WIPs cargadas para ${versionCalculo}: ${
-        //     data.wips_textiles.length + data.wips_manufactura.length
-        //   }`,
-        // );
-      } catch (error) {
-        console.error("Error cargando WIPs o conectando con backend:", error);
-        setWipsDisponibles({ wips_textiles: [], wips_manufactura: [] });
-      }
-    },
-    [],
-  );
-
-  const cargarWipsPorTipoPrenda = useCallback(
-    async (tipoPrenda: string, versionCalculo: string) => {
-      if (!tipoPrenda) {
-        setWipsDisponibles({ wips_textiles: [], wips_manufactura: [] });
-        return;
-      }
-
-      try {
-        const data = await get<{
-          wips_textiles: any[];
-          wips_manufactura: any[];
-        }>(
-          `wips-disponibles?tipo_prenda=${encodeURIComponent(tipoPrenda)}&version_calculo=${encodeURIComponent(
-            versionCalculo,
-          )}`,
-        );
-        setWipsDisponibles(data);
-        setWipsTextiles([]);
-        setWipsManufactura([]);
-        // console.log(
-        //   `✅ WIPs específicas cargadas para ${tipoPrenda} (${versionCalculo})`,
-        // );
-      } catch (error) {
-        console.error("Error cargando WIPs específicas:", error);
-      }
-    },
-    [],
-  );
+  // NOTA: cargarWipsPorTipoPrenda removido - no se usa más en el flujo actual
 
   const cargarClientesDisponibles = useCallback(
     async (versionCalculo: string = "FLUIDO") => {
@@ -735,53 +732,7 @@ const SistemaCotizadorTDV = () => {
     [],
   );
 
-  const cargarFamiliasProductos = useCallback(
-    async (versionCalculo: string = "FLUIDO") => {
-      setCargandoTipos(true);
-      try {
-        const data = await get<{ tipos: any[] }>(
-          `tipos-prenda?version_calculo=${encodeURIComponent(versionCalculo)}`,
-        );
-
-        setTiposDisponibles(data.tipos || []);
-        // console.log(
-        //   `✅ Tipos de producto cargados para ${versionCalculo}: ${data.tipos?.length}`,
-        // );
-      } /*catch (error) {
-        // console.error("Error cargando tipos:", error);
-        setTiposDisponibles([]);
-      }*/ finally {
-        setCargandoTipos(false);
-      }
-    },
-    [],
-  );
-
-  const cargarTiposPrenda = useCallback(
-    async (familia: string, versionCalculo: string = "FLUIDO") => {
-      if (!familia) {
-        setTiposDisponibles([]);
-        return;
-      }
-
-      setCargandoTipos(true);
-      try {
-        const data = await get<{ tipos: any[] }>(
-          `tipos-prenda/${encodeURIComponent(familia)}?version_calculo=${encodeURIComponent(versionCalculo)}`,
-        );
-        setTiposDisponibles(data.tipos);
-        // console.log(
-        //   `✅ Tipos cargados para ${familia} (${versionCalculo}): ${data.tipos.length}`,
-        // );
-      } catch /*(error)*/ {
-        // console.error("Error cargando tipos:", error);
-        setTiposDisponibles([]);
-      } finally {
-        setCargandoTipos(false);
-      }
-    },
-    [],
-  );
+  // NOTA: cargarFamiliasProductos y cargarTiposPrenda removidos - no se usan más
 
   // Cargar TODOS los tipos de prenda (sin filtrar por familia)
   const cargarTodosTipos = useCallback(
@@ -825,25 +776,16 @@ const SistemaCotizadorTDV = () => {
       try {
         // Cargar datos principales
         await Promise.all([
-          cargarWipsDisponibles(debouncedFormData.version_calculo),
           cargarClientesDisponibles(debouncedFormData.version_calculo),
           cargarTodosTipos(debouncedFormData.version_calculo), // ✅ Cargar TODOS los tipos
         ]);
-
-        // Recargar WIPs si hay tipo y es nuevo
-        if (debouncedFormData.tipo_prenda && esEstiloNuevo) {
-          await cargarWipsPorTipoPrenda(
-            debouncedFormData.tipo_prenda,
-            debouncedFormData.version_calculo,
-          );
-        }
-      } catch (error) {
-        console.error(`❌ Error recargando datos:`, error);
+      } catch {
+        // Silenciar errores de carga
       }
     };
 
     recargarDatosVersion();
-  }, [debouncedFormData.version_calculo, cargarTodosTipos, esEstiloNuevo, debouncedFormData.tipo_prenda]); // Usa debouncedFormData para evitar actualizaciones frecuentes
+  }, [debouncedFormData.version_calculo, cargarTodosTipos, cargarClientesDisponibles]); // Usa debouncedFormData para evitar actualizaciones frecuentes
 
   // NOTA: Efecto 2 (cargar tipos cuando cambia familia) fue eliminado
   // Ahora se cargan TODOS los tipos al iniciar (cargarTodosTipos) para que estilos nuevos puedan seleccionar tipo_prenda
@@ -945,19 +887,34 @@ const SistemaCotizadorTDV = () => {
         }
       }
     },
-    [cargarTiposPrenda],
+    [],
   );
 
-  // Handler para buscar estilo manualmente (sin debounce)
+  // ⚡ Handler para buscar estilo manualmente - SINCRONIZA estado local con formData
   const onBuscarEstilo = useCallback(() => {
-    if (formData.codigo_estilo && formData.codigo_estilo.length >= 3) {
+    if (codigoEstiloLocal && codigoEstiloLocal.length >= 3) {
+      // Marcar como sincronizado para evitar efectos secundarios
+      inputSyncedRef.current = true;
+
+      // Sincronizar estado local a formData
+      setFormData(prev => ({
+        ...prev,
+        codigo_estilo: codigoEstiloLocal
+      }));
+
+      // Limpiar resultados previos antes de buscar
+      setEstilosEncontrados([]);
+      setEsEstiloNuevo(null);
+      setInfoAutoCompletado(null);
+
+      // Buscar estilo
       verificarYBuscarEstilo(
-        formData.codigo_estilo,
+        codigoEstiloLocal,
         formData.cliente_marca,
         formData.version_calculo,
       );
     }
-  }, [formData.codigo_estilo, formData.cliente_marca, formData.version_calculo, verificarYBuscarEstilo]);
+  }, [codigoEstiloLocal, formData.cliente_marca, formData.version_calculo, verificarYBuscarEstilo]);
 
   // cargarOpsReales (POST)
   const cargarOpsReales = useCallback(
@@ -1017,68 +974,29 @@ const SistemaCotizadorTDV = () => {
     [],
   );
 
-  const toggleWipTextil = useCallback((wip: WipDisponible) => {
-    setWipsTextiles((prev) => {
-      const existe = prev.find((w) => w.wip_id === wip.wip_id);
-      if (existe) {
-        return prev.filter((w) => w.wip_id !== wip.wip_id);
-      } else {
-        return [
-          ...prev,
-          {
-            wip_id: wip.wip_id,
-            factor_ajuste: 1.0,
-            costo_base: wip.costo_actual,
-          },
-        ];
-      }
-    });
-  }, []);
-
-  const toggleWipManufactura = useCallback((wip: WipDisponible) => {
-    setWipsManufactura((prev) => {
-      const existe = prev.find((w) => w.wip_id === wip.wip_id);
-      if (existe) {
-        return prev.filter((w) => w.wip_id !== wip.wip_id);
-      } else {
-        return [
-          ...prev,
-          {
-            wip_id: wip.wip_id,
-            factor_ajuste: 1.0,
-            costo_base: wip.costo_actual,
-          },
-        ];
-      }
-    });
-  }, []);
-
-  const actualizarFactorWip = useCallback(
-    (
-      setWips: React.Dispatch<React.SetStateAction<WipSeleccionada[]>>,
-      wipId: string,
-      nuevoFactor: string,
-    ) => {
-      const factor = parseFloat(nuevoFactor) || 1.0;
-      setWips((prev) =>
-        prev.map((w) =>
-          w.wip_id === wipId ? { ...w, factor_ajuste: factor } : w,
-        ),
-      );
-    },
-    [],
-  );
+  // NOTA: toggleWipTextil, toggleWipManufactura, actualizarFactorWip removidos - no se usan más
 
   const procesarCotizacion = useCallback(async () => {
     setCargando(true);
     try {
+      // ⚡ Sincronizar codigoEstiloLocal a formData antes de procesar (si no está sincronizado)
+      const codigoFinal = codigoEstiloLocal || formData.codigo_estilo;
+
+      if (!inputSyncedRef.current && codigoEstiloLocal) {
+        setFormData(prev => ({
+          ...prev,
+          codigo_estilo: codigoEstiloLocal
+        }));
+        inputSyncedRef.current = true;
+      }
+
       const payload = {
         cliente_marca: formData.cliente_marca,
         temporada: formData.temporada,
         categoria_lote: formData.categoria_lote,
         familia_producto: formData.familia_producto,
         tipo_prenda: formData.tipo_prenda,
-        codigo_estilo: formData.codigo_estilo,
+        codigo_estilo: codigoFinal,
         usuario: formData.usuario,
         version_calculo: formData.version_calculo,
         wips_textiles: esEstiloNuevo ? wipsTextiles : null,
@@ -1131,7 +1049,7 @@ const SistemaCotizadorTDV = () => {
                 Selecciona el tipo de cálculo para la cotización
               </p>
               <div className="text-xs text-gray-500 mt-1">
-                {cargandoFamilias || cargandoTipos
+                {cargandoTipos
                   ? "🔄 Recargando datos..."
                   : "✅ Datos actualizados"}
               </div>
@@ -1607,13 +1525,11 @@ const SistemaCotizadorTDV = () => {
             <ClienteSelect
               value={formData.cliente_marca}
               clientesDisponibles={clientesDisponibles}
-              onChange={(valor) =>
-                manejarCambioFormulario("cliente_marca", valor)
-              }
+              onChange={handleClienteChange}
             />
 
             <CampoCodigoEstiloComponent
-              value={formData.codigo_estilo}
+              value={codigoEstiloLocal}
               buscandoEstilo={buscandoEstilo}
               estilosEncontrados={estilosEncontrados}
               esEstiloNuevo={esEstiloNuevo}
@@ -1625,18 +1541,14 @@ const SistemaCotizadorTDV = () => {
 
             <CategoriaLoteSelect
               value={formData.categoria_lote}
-              onChange={(valor) =>
-                manejarCambioFormulario("categoria_lote", valor)
-              }
+              onChange={handleCategoriaLoteChange}
             />
 
             <TipoPrendaSelect
               value={formData.tipo_prenda}
               tiposDisponibles={tiposDisponibles}
               cargandoTipos={cargandoTipos}
-              onChange={(valor) =>
-                manejarCambioFormulario("tipo_prenda", valor)
-              }
+              onChange={handleTipoPrendaChange}
             />
           </div>
         </div>

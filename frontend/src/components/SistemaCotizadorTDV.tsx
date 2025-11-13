@@ -533,6 +533,11 @@ const SistemaCotizadorTDV = () => {
   // Estado para OPs seleccionadas en la tabla interactiva
   const [selectedOpsCode, setSelectedOpsCode] = useState<string[]>([]);
 
+  // ✨ CONGELACIÓN DE DATOS: Una vez que se seleccionan OPs y se genera cotización, TODO se congela
+  const [dataFrozen, setDataFrozen] = useState(false);
+  const frozenOpsRef = useRef<string[]>([]);
+  const formDataRef = useRef<FormData | null>(null); // ✨ Mantiene formData actual sin affecting dependencies
+
   // Estados para costos calculados del WIP (para sobrescribir backend values)
   const [costosWipCalculados, setCostosWipCalculados] = useState<{
     textil_por_prenda: number | null;
@@ -584,7 +589,20 @@ const SistemaCotizadorTDV = () => {
   // Referencias para evitar re-renders y debouncing
   const abortControllerRef = useRef<AbortController | null>(null);
   const opsSelectionTableRef = useRef<OpsSelectionTableRef>(null); // Ref para dispara búsqueda de OPs
-  const formDataRef = useRef<FormData>(formData); // Mantiene formData actualizado sin affecting dependencies
+
+  // ⚡ SOLUCIÓN: Dispara iniciarBusqueda() cuando OpsSelectionTable se monta
+  React.useEffect(() => {
+    if (cotizacionActual && opsSelectionTableRef.current) {
+      console.log("🚀 OpsSelectionTable está montado, disparando iniciarBusqueda...");
+      opsSelectionTableRef.current.iniciarBusqueda();
+    }
+  }, [cotizacionActual?.id_cotizacion]); // Depende del ID de cotización, no del objeto completo
+
+  // ✨ SINCRONIZAR formDataRef con formData para que handleOpsSelected tenga acceso a valores actuales
+  React.useEffect(() => {
+    formDataRef.current = formData;
+    console.log("📝 [formDataRef] Sincronizado con formData actual:", formData);
+  }, [formData]);
 
   // Memoized validation
   const erroresFormulario = useMemo(() => {
@@ -674,6 +692,70 @@ const SistemaCotizadorTDV = () => {
       setErrorOps(error);
     },
     []
+  );
+
+  // ✨ Callback MEMOIZADO para OpsSelected - SIN DEPENDENCIAS (evita re-renders infinitos)
+  const handleOpsSelected = useCallback(
+    async (opsSeleccionadas: any[]) => {
+      try {
+        // ✨ VALIDAR CAMPOS REQUERIDOS ANTES DE PROCESAR
+        // Usar formDataRef.current para acceder a los valores actuales sin affecting dependencies
+        if (!formDataRef.current?.tipo_prenda || formDataRef.current.tipo_prenda.trim() === "") {
+          throw new Error("Por favor selecciona un Tipo de Prenda");
+        }
+        if (!formDataRef.current?.codigo_estilo || formDataRef.current.codigo_estilo.trim() === "") {
+          throw new Error("Por favor ingresa un Código de Estilo");
+        }
+        if (!formDataRef.current?.cliente_marca || formDataRef.current.cliente_marca.trim() === "") {
+          throw new Error("Por favor selecciona un Cliente/Marca");
+        }
+
+        // Guardar los códigos de OP seleccionadas
+        const codOrdpros = opsSeleccionadas.map((op) => op.cod_ordpro);
+
+        // ✨ CONGELAR LOS OPS SELECCIONADOS
+        frozenOpsRef.current = [...codOrdpros];
+        setSelectedOpsCode(codOrdpros);
+
+        setFormData(prev => ({
+          ...prev,
+          cod_ordpros: codOrdpros
+        }));
+
+        // Procesar la cotización completa
+        setCargando(true);
+        const payload = {
+          cliente_marca: formDataRef.current.cliente_marca,
+          temporada: formDataRef.current.temporada,
+          categoria_lote: formDataRef.current.categoria_lote,
+          familia_producto: formDataRef.current.familia_producto,
+          tipo_prenda: formDataRef.current.tipo_prenda,
+          codigo_estilo: formDataRef.current.codigo_estilo,
+          usuario: formDataRef.current.usuario,
+          version_calculo: formDataRef.current.version_calculo,
+          wips_textiles: esEstiloNuevo ? wipsTextiles : null,
+          wips_manufactura: esEstiloNuevo ? wipsManufactura : null,
+          cod_ordpros: codOrdpros,
+        };
+
+        console.log("📤 PAYLOAD ENVIADO AL BACKEND:", JSON.stringify(payload, null, 2));
+        const resultado = await post<any>("/cotizar", payload);
+        console.log("🔍 BACKEND RESPONSE - costo_textil:", resultado.costo_textil, "costo_manufactura:", resultado.costo_manufactura);
+        console.log("📊 OPs seleccionadas siendo procesadas:", codOrdpros);
+        console.log("📋 Full resultado from backend:", resultado);
+
+        // ✨ CONGELAR DATOS - Ya no se permite ningún cambio automático
+        setDataFrozen(true);
+        setCotizacionActual(resultado);
+        console.log("🔒 DATOS CONGELADOS - No se permiten más cambios automáticos");
+      } catch (error) {
+        console.error("Error generando cotización:", error);
+        alert("Error al generar cotización: " + (error instanceof Error ? error.message : "Error desconocido"));
+      } finally {
+        setCargando(false);
+      }
+    },
+    [] // ✨ Sin dependencias - formDataRef proporciona acceso a valores actuales
   );
 
   // NOTA: Efecto 3 (cargar WIPs cuando cambia tipo) fue eliminado - cargarWipsPorTipoPrenda removido
@@ -1048,12 +1130,6 @@ const SistemaCotizadorTDV = () => {
       console.log("📊 selectedOpsCode being used:", selectedOpsCode);
       console.log("📋 Full resultado from backend:", resultado);
       setCotizacionActual(resultado);
-
-      // Dispara la búsqueda de OPs en OpsSelectionTable (sin búsqueda automática)
-      opsSelectionTableRef.current?.iniciarBusqueda();
-
-      await cargarOpsReales(resultado);
-
       setPestanaActiva("resultados");
       // console.log(`✅ Cotización exitosa: ${resultado.id_cotizacion}`);
     } catch (error: any) {
@@ -1423,56 +1499,17 @@ const SistemaCotizadorTDV = () => {
             <>
               <OpsSelectionTable
                 ref={opsSelectionTableRef}
-                codigoEstilo={cotizacionActual.inputs.codigo_estilo}
+                codigoEstilo={cotizacionActual.inputs.codigo_estilo || ""}
                 versionCalculo={cotizacionActual.inputs.version_calculo}
+                marca={cotizacionActual.inputs.cliente_marca}
+                tipoPrenda={cotizacionActual.inputs.tipo_prenda}
                 opsSeleccionadasPrevia={selectedOpsCode}
-                onOpsSelected={async (opsSeleccionadas) => {
-                  try {
-                    // Guardar los códigos de OP seleccionadas
-                    const codOrdpros = opsSeleccionadas.map((op) => op.cod_ordpro);
-                    setSelectedOpsCode(codOrdpros);
-
-                    setFormData(prev => ({
-                      ...prev,
-                      cod_ordpros: codOrdpros
-                    }));
-
-                    // Procesar la cotización completa
-                    setCargando(true);
-                    const payload = {
-                      cliente_marca: formData.cliente_marca,
-                      temporada: formData.temporada,
-                      categoria_lote: formData.categoria_lote,
-                      familia_producto: formData.familia_producto,
-                      tipo_prenda: formData.tipo_prenda,
-                      codigo_estilo: formData.codigo_estilo,
-                      usuario: formData.usuario,
-                      version_calculo: formData.version_calculo,
-                      wips_textiles: esEstiloNuevo ? wipsTextiles : null,
-                      wips_manufactura: esEstiloNuevo ? wipsManufactura : null,
-                      cod_ordpros: codOrdpros,
-                    };
-
-                    console.log("📤 PAYLOAD ENVIADO AL BACKEND:", JSON.stringify(payload, null, 2));
-                    const resultado = await post<any>("/cotizar", payload);
-                    console.log("🔍 BACKEND RESPONSE - costo_textil:", resultado.costo_textil, "costo_manufactura:", resultado.costo_manufactura);
-                    console.log("📊 OPs seleccionadas siendo procesadas:", codOrdpros);
-                    console.log("📋 Full resultado from backend:", resultado);
-                    setCotizacionActual(resultado);
-
-                    await cargarOpsReales(resultado);
-                  } catch (error) {
-                    console.error("Error generando cotización:", error);
-                    alert("Error al generar cotización: " + (error instanceof Error ? error.message : "Error desconocido"));
-                  } finally {
-                    setCargando(false);
-                  }
-                }}
+                onOpsSelected={handleOpsSelected}
                 onError={handleOpsSelectionError}
               />
 
               {/* Mostrar desglose WIP cuando hay OPs seleccionadas */}
-              {selectedOpsCode.length > 0 && (
+              {selectedOpsCode.length > 0 && cotizacionActual && (
                 <div className="mt-8">
                   <h3 className="text-lg font-bold text-red-900 mb-4">
                     Análisis de Costos por WIP
@@ -1481,6 +1518,7 @@ const SistemaCotizadorTDV = () => {
                     codigoEstilo={cotizacionActual.inputs.codigo_estilo}
                     versionCalculo={cotizacionActual.inputs.version_calculo}
                     codOrdpros={selectedOpsCode}
+                    dataFrozen={dataFrozen}
                     onCostosCalculados={handleCostosWipCalculados}
                   />
                 </div>

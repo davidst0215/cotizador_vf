@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback, useMemo } from "react";
+import React, { useState, useCallback, useMemo, useRef } from "react";
 import { AlertCircle, TrendingUp } from "lucide-react";
 
 // Interfaces para los datos de desglose WIP
@@ -25,65 +25,115 @@ interface WipDesgloseTableProps {
   codigoEstilo: string;
   versionCalculo: string;
   codOrdpros: string[]; // OPs seleccionadas de OpsSelectionTable
+  dataFrozen?: boolean; // ✨ Si es true, no hace más fetches
   onError?: (error: string) => void;
   onCostosCalculados?: (textilPorPrenda: number, manufacturaPorPrenda: number) => void;
 }
 
 export const WipDesgloseTable = React.memo(
-  ({ codigoEstilo, versionCalculo, codOrdpros, onError, onCostosCalculados }: WipDesgloseTableProps) => {
+  ({ codigoEstilo, versionCalculo, codOrdpros, dataFrozen = false, onError, onCostosCalculados }: WipDesgloseTableProps) => {
     const [desgloseData, setDesgloseData] = useState<WipDesgloseResponse | null>(null);
     const [cargando, setCargando] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const prevCodOrdprosRef = useRef<string>("");
+    const fetchAbortRef = useRef<AbortController | null>(null);
+
+    // Si dataFrozen es true, no hacer más fetches
+    if (dataFrozen && desgloseData) {
+      console.log("🔒 [WipDesgloseTable] DATOS CONGELADOS - No se hacen más fetches");
+    }
 
     // Cargar desglose WIP cuando las OPs seleccionadas cambian
     const cargarDesgloseWip = useCallback(async () => {
+      // ✨ SI DATOS CONGELADOS, NO HACER NADA
+      if (dataFrozen) {
+        console.log("🔒 [WipDesgloseTable] DATOS CONGELADOS - No hacer fetch");
+        return;
+      }
+
+      console.log("📊 [WipDesgloseTable] cargarDesgloseWip iniciado");
+      console.log("📊 [WipDesgloseTable] codOrdpros:", codOrdpros);
+      console.log("📊 [WipDesgloseTable] versionCalculo:", versionCalculo);
+
       if (!codOrdpros || codOrdpros.length === 0) {
+        console.warn("📊 [WipDesgloseTable] ⚠️ No hay OPs seleccionadas");
         setError("No hay OPs seleccionadas para analizar");
         setDesgloseData(null);
         return;
       }
 
+      // Cancelar fetch anterior si existe
+      if (fetchAbortRef.current) {
+        fetchAbortRef.current.abort();
+      }
+
+      fetchAbortRef.current = new AbortController();
+
       setCargando(true);
       setError(null);
 
       try {
-        const response = await fetch("http://localhost:8001/desglose-wip-ops", {
+        const payload = {
+          cod_ordpros: codOrdpros,
+          version_calculo: versionCalculo,
+        };
+
+        console.log("📊 [WipDesgloseTable] 📤 Enviando payload:", JSON.stringify(payload, null, 2));
+
+        const response = await fetch("http://localhost:8000/desglose-wip-ops", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            cod_ordpros: codOrdpros,
-            version_calculo: versionCalculo,
-          }),
+          body: JSON.stringify(payload),
+          signal: fetchAbortRef.current.signal,
         });
+
+        console.log("📊 [WipDesgloseTable] Response status:", response.status);
 
         if (!response.ok) {
           throw new Error(`Error ${response.status}: No se pudo obtener el desglose WIP`);
         }
 
         const data: WipDesgloseResponse = await response.json();
+        console.log("📊 [WipDesgloseTable] ✅ Datos recibidos:", JSON.stringify(data, null, 2));
+
         setDesgloseData(data);
 
-        if (data.desgloses_total.length === 0) {
+        if (data.desgloses_total && data.desgloses_total.length === 0) {
+          console.warn("📊 [WipDesgloseTable] ⚠️ No hay WIPs en la respuesta");
           setError("No hay datos WIP disponibles para las OPs seleccionadas");
+        } else if (data.desgloses_total) {
+          console.log(`📊 [WipDesgloseTable] ✅ ${data.desgloses_total.length} WIPs encontrados`);
         }
       } catch (err) {
+        if (err instanceof Error && err.name === "AbortError") {
+          console.log("📊 [WipDesgloseTable] Request cancelado");
+          return;
+        }
         const errorMsg = err instanceof Error ? err.message : "Error desconocido";
+        console.error("📊 [WipDesgloseTable] ❌ Error:", errorMsg);
         setError(errorMsg);
         if (onError) onError(errorMsg);
       } finally {
         setCargando(false);
       }
-    }, [versionCalculo, onError]); // Dependencies: versionCalculo and onError for error handling
+    }, [codOrdpros, versionCalculo]); // NO incluir dataFrozen para evitar redefiniciones
 
-    // Cargar desglose cuando las OPs cambian (usando string de OPs para evitar ciclos)
-    // ✨ MEMOIZADO: Asegurar que codOrdprosString sea estable entre renders
-    const codOrdprosString = useMemo(() => JSON.stringify(codOrdpros), [codOrdpros]);
+    // Usar useMemo para comparar OPs por valor y disparar fetch solo cuando realmente cambian
+    const opsJson = useMemo(() => JSON.stringify(codOrdpros), [codOrdpros]);
 
     React.useEffect(() => {
-      if (codOrdpros.length > 0) {
+      // ✨ SI DATOS ESTÁN CONGELADOS, NO HACER NADA
+      if (dataFrozen) {
+        console.log("🔒 [WipDesgloseTable] DATOS CONGELADOS - Saltando fetch");
+        return;
+      }
+
+      if (codOrdpros.length > 0 && opsJson !== prevCodOrdprosRef.current) {
+        console.log("📊 [WipDesgloseTable] OPs cambiaron, cargando desglose");
+        prevCodOrdprosRef.current = opsJson;
         cargarDesgloseWip();
       }
-    }, [codOrdprosString, versionCalculo]);
+    }, [opsJson, cargarDesgloseWip, dataFrozen]); // ✨ INCLUIR dataFrozen para que se verifique cada vez
 
     // Calcular totales por grupo
     const totalesPorGrupo = useMemo(() => {

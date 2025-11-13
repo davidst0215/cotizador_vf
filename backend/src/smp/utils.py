@@ -19,6 +19,7 @@ from .models import (
     CotizacionInput,
     CotizacionResponse,
     ComponenteCosto,
+    FuenteCosto,
     TipoEstilo,
     WipConfiguracion,
     InfoComercial,
@@ -239,8 +240,19 @@ class CotizadorTDV:
         if input_data.codigo_estilo:
             try:
                 #  USAR NUEVA FUNCIN DE INFORMACIN DETALLADA
+                # Convertir enum a string y normalizar (FLUIDO → FLUIDA)
+                from .database import normalize_version_calculo
+                version_str = (
+                    input_data.version_calculo.value
+                    if hasattr(input_data.version_calculo, 'value')
+                    else str(input_data.version_calculo)
+                )
+                version_normalizada = normalize_version_calculo(version_str)
+
+                logger.info(f" [UTILS] Version input: {input_data.version_calculo} → string: {version_str} → normalizada: {version_normalizada}")
+
                 info_detallada = await tdv_queries.obtener_info_detallada_estilo(
-                    input_data.codigo_estilo, input_data.version_calculo
+                    input_data.codigo_estilo, version_normalizada
                 )
 
                 if info_detallada.get("encontrado", False):
@@ -433,10 +445,22 @@ class CotizadorTDV:
             logger.info(
                 f" INICIANDO obtener_gastos_por_estilo_recurrente para estilo recurrente: {input_data.codigo_estilo}"
             )
+
+            # Convertir enum version_calculo a string normalizado
+            from .database import normalize_version_calculo
+            version_str_para_gastos = (
+                input_data.version_calculo.value
+                if hasattr(input_data.version_calculo, 'value')
+                else str(input_data.version_calculo)
+            )
+            version_normalizada_para_gastos = normalize_version_calculo(version_str_para_gastos)
+            logger.info(f" [DEBUG-GASTOS] Antes de llamar obtener_gastos: version_str={version_str_para_gastos}, normalizada={version_normalizada_para_gastos}")
+
             gastos_indirectos, ops_excluidas = await tdv_queries.obtener_gastos_por_estilo_recurrente(
                 codigo_estilo=input_data.codigo_estilo,
-                version_calculo=input_data.version_calculo,
+                version_calculo=version_normalizada_para_gastos,
             )
+            logger.info(f" [DEBUG-GASTOS] Después de llamar obtener_gastos: resultado={gastos_indirectos}")
             metodo_usado_indirectos = "promedio_recurrente"
             logger.info(
                 f" RESULTADO Gastos indirectos obtenidos: {gastos_indirectos}"
@@ -1118,24 +1142,35 @@ class CotizadorTDV:
             )
 
             if not costos_ops:
-                raise ValueError(f"No se encontraron datos para las OPs: {input_data.cod_ordpros}")
+                # ⚠️ FALLBACK: Si no se encuentran OPs específicas, usar cotización estándar
+                logger.warning(
+                    f"[COTIZACION RAPIDA] No se encontraron datos para OPs: {input_data.cod_ordpros}. "
+                    f"Usando método de cotización estándar como fallback."
+                )
+                return await self.procesar_cotizacion(input_data)
 
             logger.info(f"[COTIZACION RAPIDA] Obtenidas {len(costos_ops)} OPs en < 1s")
 
-            # ✨ CÁLCULOS EN MEMORIA (instantáneo) - TODOS LOS 7 COMPONENTES
-            costos_textil = [float(op.get('costo_textil', 0)) for op in costos_ops]
-            costos_manufactura = [float(op.get('costo_manufactura', 0)) for op in costos_ops]
-            costos_avios = [float(op.get('costo_avios', 0)) for op in costos_ops]  # ✨ AGREGADO
-            costos_materia_prima = [float(op.get('costo_materia_prima', 0)) for op in costos_ops]  # ✨ AGREGADO
+            # ✨ NUEVO CÁLCULO: SUMA TOTAL / TOTAL PRENDAS
+            # Sumar TODOS los costos totales (no unitarios)
+            total_prendas = sum(float(op.get('prendas_requeridas', 1)) for op in costos_ops)
+
+            costo_textil_total = sum(float(op.get('costo_textil_total', 0)) for op in costos_ops)
+            costo_manufactura_total = sum(float(op.get('costo_manufactura_total', 0)) for op in costos_ops)
+            costo_avios_total = sum(float(op.get('costo_avios_total', 0)) for op in costos_ops)
+            costo_materia_prima_total = sum(float(op.get('costo_materia_prima_total', 0)) for op in costos_ops)
+
+            # ✨ Dividir TOTAL por TOTAL PRENDAS (no por cantidad de OPs)
+            costo_textil_promedio = costo_textil_total / total_prendas if total_prendas > 0 else 0
+            costo_manufactura_promedio = costo_manufactura_total / total_prendas if total_prendas > 0 else 0
+            costo_avios_promedio = costo_avios_total / total_prendas if total_prendas > 0 else 0
+            costo_materia_prima_promedio = costo_materia_prima_total / total_prendas if total_prendas > 0 else 0
+
+            # ✨ Indirectos y gastos YA SON UNITARIOS - promedio normal
             costos_indirectos_fijo = [float(op.get('costo_indirecto_fijo', 0)) for op in costos_ops]
             gastos_admin = [float(op.get('gasto_administracion', 0)) for op in costos_ops]
             gastos_ventas = [float(op.get('gasto_ventas', 0)) for op in costos_ops]
 
-            # ✨ Promedios de los 7 componentes
-            costo_textil_promedio = sum(costos_textil) / len(costos_textil) if costos_textil else 0
-            costo_manufactura_promedio = sum(costos_manufactura) / len(costos_manufactura) if costos_manufactura else 0
-            costo_avios_promedio = sum(costos_avios) / len(costos_avios) if costos_avios else 0  # ✨ AGREGADO
-            costo_materia_prima_promedio = sum(costos_materia_prima) / len(costos_materia_prima) if costos_materia_prima else 0  # ✨ AGREGADO
             costo_indirecto_promedio = sum(costos_indirectos_fijo) / len(costos_indirectos_fijo) if costos_indirectos_fijo else 0
             gasto_admin_promedio = sum(gastos_admin) / len(gastos_admin) if gastos_admin else 0
             gasto_ventas_promedio = sum(gastos_ventas) / len(gastos_ventas) if gastos_ventas else 0
@@ -1201,45 +1236,45 @@ class CotizadorTDV:
             componentes = [
                 ComponenteCosto(
                     nombre="Costo Textil",
-                    valor=costo_textil_promedio,
-                    porcentaje=(costo_textil_promedio / costo_base * 100) if costo_base > 0 else 0,
-                    fuente="promedio_ops_seleccionadas"
+                    costo_unitario=costo_textil_promedio,
+                    fuente=FuenteCosto.PROMEDIO_RANGO,
+                    detalles={"porcentaje": (costo_textil_promedio / costo_base * 100) if costo_base > 0 else 0}
                 ),
                 ComponenteCosto(
                     nombre="Costo Manufactura",
-                    valor=costo_manufactura_promedio,
-                    porcentaje=(costo_manufactura_promedio / costo_base * 100) if costo_base > 0 else 0,
-                    fuente="promedio_ops_seleccionadas"
+                    costo_unitario=costo_manufactura_promedio,
+                    fuente=FuenteCosto.PROMEDIO_RANGO,
+                    detalles={"porcentaje": (costo_manufactura_promedio / costo_base * 100) if costo_base > 0 else 0}
                 ),
                 ComponenteCosto(
                     nombre="Costo Avíos",
-                    valor=costo_avios_promedio,
-                    porcentaje=(costo_avios_promedio / costo_base * 100) if costo_base > 0 else 0,
-                    fuente="promedio_ops_seleccionadas"
+                    costo_unitario=costo_avios_promedio,
+                    fuente=FuenteCosto.PROMEDIO_RANGO,
+                    detalles={"porcentaje": (costo_avios_promedio / costo_base * 100) if costo_base > 0 else 0}
                 ),
                 ComponenteCosto(
                     nombre="Costo Materia Prima",
-                    valor=costo_materia_prima_promedio,
-                    porcentaje=(costo_materia_prima_promedio / costo_base * 100) if costo_base > 0 else 0,
-                    fuente="promedio_ops_seleccionadas"
+                    costo_unitario=costo_materia_prima_promedio,
+                    fuente=FuenteCosto.PROMEDIO_RANGO,
+                    detalles={"porcentaje": (costo_materia_prima_promedio / costo_base * 100) if costo_base > 0 else 0}
                 ),
                 ComponenteCosto(
                     nombre="Costo Indirecto Fijo",
-                    valor=costo_indirecto_promedio,
-                    porcentaje=(costo_indirecto_promedio / costo_base * 100) if costo_base > 0 else 0,
-                    fuente="promedio_ops_seleccionadas"
+                    costo_unitario=costo_indirecto_promedio,
+                    fuente=FuenteCosto.PROMEDIO_RANGO,
+                    detalles={"porcentaje": (costo_indirecto_promedio / costo_base * 100) if costo_base > 0 else 0}
                 ),
                 ComponenteCosto(
                     nombre="Gasto Administración",
-                    valor=gasto_admin_promedio,
-                    porcentaje=(gasto_admin_promedio / costo_base * 100) if costo_base > 0 else 0,
-                    fuente="promedio_ops_seleccionadas"
+                    costo_unitario=gasto_admin_promedio,
+                    fuente=FuenteCosto.PROMEDIO_RANGO,
+                    detalles={"porcentaje": (gasto_admin_promedio / costo_base * 100) if costo_base > 0 else 0}
                 ),
                 ComponenteCosto(
                     nombre="Gasto Ventas",
-                    valor=gasto_ventas_promedio,
-                    porcentaje=(gasto_ventas_promedio / costo_base * 100) if costo_base > 0 else 0,
-                    fuente="promedio_ops_seleccionadas"
+                    costo_unitario=gasto_ventas_promedio,
+                    fuente=FuenteCosto.PROMEDIO_RANGO,
+                    detalles={"porcentaje": (gasto_ventas_promedio / costo_base * 100) if costo_base > 0 else 0}
                 ),
             ]
 
@@ -1282,6 +1317,24 @@ class CotizadorTDV:
                     f"Tiempo de procesamiento: {tiempo_total:.2f}s",
                 ],
                 info_comercial=InfoComercial(
+                    ops_utilizadas=len(costos_ops),
+                    historico_volumen={
+                        "cantidad_ops": len(costos_ops),
+                        "prendas_totales": sum(float(op.get('prendas_requeridas', 0)) for op in costos_ops) if costos_ops else 0,
+                        "fecha_ultima_op": datetime.now().isoformat(),
+                    },
+                    tendencias_costos=[
+                        {
+                            "componente": "Textil",
+                            "valor_promedio": costo_textil_promedio,
+                            "variacion_porcentaje": 0,
+                        },
+                        {
+                            "componente": "Manufactura",
+                            "valor_promedio": costo_manufactura_promedio,
+                            "variacion_porcentaje": 0,
+                        },
+                    ],
                     margen_adicional_usuario=input_data.margen_adicional or 0,
                     precio_referencia=precio_final,
                     descuento_cliente=0,

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback, useMemo, forwardRef } from "react";
+import React, { useState, useCallback, useMemo, forwardRef, useRef } from "react";
 import { useImperativeHandle } from "react";
 import { ChevronDown, ChevronUp, CheckSquare, Square } from "lucide-react";
 
@@ -60,7 +60,14 @@ export const OpsSelectionTable = forwardRef<OpsSelectionTableRef, OpsSelectionTa
     const [filtrosCategoriaLote, setFiltrosCategoriaLote] = useState<Set<string>>(new Set()); // Filtros post-búsqueda
 
     // Cargar OPs detalladas - el endpoint maneja fallback automáticamente
-    const cargarOpsDetalladas = useCallback(async () => {
+    // ⚠️ IMPORTANTE: Solo carga si opsData está vacío para evitar recargar después de cotizar
+    const cargarOpsDetalladas = useCallback(async (forceReload: boolean = false) => {
+      // ✨ LÓGICA SIMPLE: Si ya hay OPs cargadas, NUNCA resetear
+      if (opsData.length > 0 && !forceReload) {
+        console.log("✅ OPs ya cargadas - conservando estado actual");
+        return;
+      }
+
       console.log("📋 cargarOpsDetalladas iniciada");
       console.log("  - codigoEstilo:", codigoEstilo);
       console.log("  - marca:", marca);
@@ -254,7 +261,7 @@ export const OpsSelectionTable = forwardRef<OpsSelectionTableRef, OpsSelectionTa
         <div className="p-6 bg-red-50 border-2 border-red-200 rounded-xl">
           <p className="text-red-800 font-semibold mb-3">⚠️ {error}</p>
           <button
-            onClick={cargarOpsDetalladas}
+            onClick={() => cargarOpsDetalladas(true)}
             className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
           >
             Reintentar
@@ -439,7 +446,7 @@ export const OpsSelectionTable = forwardRef<OpsSelectionTableRef, OpsSelectionTa
             disabled={selectedOps.size === 0}
             className="px-6 py-3 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
           >
-            Generar Cotización
+            Generar Cotizaciónsada
           </button>
         </div>
       </div>

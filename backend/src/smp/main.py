@@ -848,8 +848,8 @@ async def debug_ops_marcas_tipos(version_calculo: Optional[str] = None):
 
         query = f"""
         SELECT DISTINCT
-          TRIM(cliente) as cliente,
-          TRIM(tipo_de_producto) as tipo_prenda,
+          (cliente) as cliente,
+          (tipo_de_producto) as tipo_prenda,
           COUNT(*) as cantidad_ops
         FROM {settings.db_schema}.costo_op_detalle c
         WHERE c.version_calculo = %s
@@ -857,9 +857,9 @@ async def debug_ops_marcas_tipos(version_calculo: Optional[str] = None):
             SELECT MAX(fecha_corrida)
             FROM {settings.db_schema}.costo_op_detalle
             WHERE version_calculo = %s)
-        GROUP BY TRIM(cliente), TRIM(tipo_de_producto)
+        GROUP BY (cliente), (tipo_de_producto)
         ORDER BY cliente, tipo_prenda
-        LIMIT 100
+        
         """
 
         resultados = await tdv_queries.db.query(query, (version_normalizada, version_normalizada))

@@ -425,7 +425,7 @@ class TDVQueries:
             if existe_en_historial:
                 existe = True
                 motivo = "registrado_en_historial_formal"
-            elif total_ops >= 2:
+            elif total_ops >= 1:
                 existe = True
                 motivo = "multiples_ops_producidas"
             else:
@@ -562,10 +562,16 @@ class TDVQueries:
                 (codigo_estilo, version_calculo, version_calculo, version_calculo),
             )
 
+            logger.info(f"[FALLBACK] Query fallback retornó: {resultado_fallback}")
+
             if resultado_fallback:
                 info = resultado_fallback[0]
+                logger.info(f"[FALLBACK] Info keys disponibles: {info.keys() if hasattr(info, 'keys') else 'N/A'}")
+                logger.info(f"[FALLBACK] Info values: {info}")
+
                 volumen_total = int(info["volumen_total"])
                 total_ops = int(info["total_ops"])
+                logger.info(f"[FALLBACK] volumen_total={volumen_total}, total_ops={total_ops}")
 
                 #  Solo considerar vlido si tiene al menos 1 OP
                 if total_ops >= 1:
@@ -1331,32 +1337,47 @@ class TDVQueries:
             logger.warning(f" [COSTOS-OPS-ESPECIFICAS] No se proporcionaron cod_ordpros")
             return []
 
-        version_norm = version_calculo
+        # ✨ Normalizar version_calculo: convertir "FLUIDO" a "FLUIDA"
+        version_norm = normalize_version_calculo(version_calculo)
 
         # Crear lista de placeholders para los códigos de OP
         placeholders = ','.join(['%s'] * len(cod_ordpros))
 
+        # ✨ QUERY MEJORADA: Usar MAX(fecha_corrida) para cada OP + version_calculo
         query = f"""
+        WITH ultima_fecha_por_op AS (
+          SELECT
+            cod_ordpro,
+            MAX(fecha_corrida) as max_fecha
+          FROM {settings.db_schema}.costo_op_detalle
+          WHERE cod_ordpro IN ({placeholders})
+            AND version_calculo = %s
+            AND prendas_requeridas > 0
+          GROUP BY cod_ordpro
+        )
         SELECT
-          cod_ordpro,
-          prendas_requeridas,
-          COALESCE(costo_textil, 0) as costo_textil_total,
-          COALESCE(costo_manufactura, 0) as costo_manufactura_total,
-          COALESCE(costo_avios, 0) as costo_avios_total,
-          COALESCE(costo_materia_prima, 0) as costo_materia_prima_total,
-          COALESCE(costo_indirecto_fijo, 0) as costo_indirecto_fijo_total,
-          COALESCE(gasto_administracion, 0) as gasto_administracion_total,
-          COALESCE(gasto_ventas, 0) as gasto_ventas_total
-        FROM {settings.db_schema}.costo_op_detalle
-        WHERE cod_ordpro IN ({placeholders})
-          AND version_calculo = %s
-          AND prendas_requeridas > 0
-        ORDER BY cod_ordpro DESC
+          c.cod_ordpro,
+          c.prendas_requeridas,
+          COALESCE(c.costo_textil, 0) as costo_textil_total,
+          COALESCE(c.costo_manufactura, 0) as costo_manufactura_total,
+          COALESCE(c.costo_avios, 0) as costo_avios_total,
+          COALESCE(c.costo_materia_prima, 0) as costo_materia_prima_total,
+          COALESCE(c.costo_indirecto_fijo, 0) as costo_indirecto_fijo_total,
+          COALESCE(c.gasto_administracion, 0) as gasto_administracion_total,
+          COALESCE(c.gasto_ventas, 0) as gasto_ventas_total,
+          c.fecha_corrida
+        FROM {settings.db_schema}.costo_op_detalle c
+        INNER JOIN ultima_fecha_por_op u
+          ON c.cod_ordpro = u.cod_ordpro
+          AND c.fecha_corrida = u.max_fecha
+          AND c.version_calculo = %s
+        WHERE c.prendas_requeridas > 0
+        ORDER BY c.cod_ordpro DESC
         """
 
         try:
-            # Los parámetros son: los códigos de OP + la versión de cálculo
-            params = list(cod_ordpros) + [version_norm]
+            # Los parámetros son: los códigos de OP + la versión (2 veces en la query)
+            params = list(cod_ordpros) + [version_norm, version_norm]
             resultados = await self.db.query(query, tuple(params))
 
             if not resultados:
@@ -1365,19 +1386,21 @@ class TDVQueries:
                 )
                 return []
 
-            # Procesar resultados para retornar costos unitarios
+            # Procesar resultados para retornar TOTALES (no dividir aquí)
+            # utils.py se encargará de hacer la división por prendas totales
             costos_ops = []
             for row in resultados:
                 prendas = float(row['prendas_requeridas']) or 1
 
                 costo_op = {
                     "cod_ordpro": row['cod_ordpro'],
-                    # Costos que se dividen por cantidad de prendas
-                    "costo_textil": float(row['costo_textil_total']) / prendas,
-                    "costo_manufactura": float(row['costo_manufactura_total']) / prendas,
-                    "costo_avios": float(row['costo_avios_total']) / prendas,
-                    "costo_materia_prima": float(row['costo_materia_prima_total']) / prendas,
-                    # Costos que ya son unitarios en BD
+                    "prendas_requeridas": prendas,
+                    # Retornar TOTALES sin dividir - utils.py hará la división total
+                    "costo_textil_total": float(row['costo_textil_total']),
+                    "costo_manufactura_total": float(row['costo_manufactura_total']),
+                    "costo_avios_total": float(row['costo_avios_total']),
+                    "costo_materia_prima_total": float(row['costo_materia_prima_total']),
+                    # Estos sí se promedian (ya son unitarios en BD)
                     "costo_indirecto_fijo": float(row['costo_indirecto_fijo_total']),
                     "gasto_administracion": float(row['gasto_administracion_total']),
                     "gasto_ventas": float(row['gasto_ventas_total']),
@@ -1405,101 +1428,97 @@ class TDVQueries:
     ) -> List[Dict[str, Any]]:
         """
         Obtiene desglose de costos por WIP para OPs seleccionadas.
-        Calcula costos textil y manufactura por prenda.
-        Retorna datos pivotados: WIPs en columnas, costos en filas.
+        Lógica: Para cada OP en cod_ordpros, busca sus WIPs en costo_wip_op,
+        agrupa por WIP y calcula costo_textil/manufactura dividido por prendas_requeridas de esa OP.
         """
 
         if not cod_ordpros:
             logger.warning(" [WIP-DESGLOSE] No se proporcionaron cod_ordpros")
             return []
 
-        version_norm = version_calculo
+        # ✨ Normalizar version_calculo
+        version_norm = normalize_version_calculo(version_calculo)
+
+        logger.info(f" [WIP-DESGLOSE] ===== INICIANDO DESGLOSE WIP =====")
+        logger.info(f" [WIP-DESGLOSE] OPs: {cod_ordpros}, Version: {version_norm}")
 
         try:
-            logger.info(f" [WIP-DESGLOSE] Iniciando con {len(cod_ordpros)} OPs: {cod_ordpros}")
+            placeholders = ",".join(["%s"] * len(cod_ordpros))
 
-            # Query compleja con CTEs para calcular costos por prenda
-            placeholders_cod = ",".join(["%s"] * len(cod_ordpros))
-
+            # ✨ QUERY OPTIMIZADA Y SIMPLE
             query = f"""
-            WITH ultimas_fechas AS (
-                SELECT
-                    MAX(fecha_corrida) as fecha_max
-                FROM silver.costo_wip_op
-                WHERE version_calculo = %s
-            ),
-            datos_separados AS (
-                SELECT
-                    cwo.wip_id,
-                    cwo.pr_id,
-                    MAX(bf.prendas_requeridas) as prendas_op,
-                    SUM(cwo.costo_textil) as costo_textil_op,
-                    SUM(cwo.costo_manufactura) as costo_manufactura_op,
-                    CASE
-                        WHEN cwo.wip_id IN ('16', '14', '19a', '19c', '24', '10c') THEN 'textil'
-                        WHEN cwo.wip_id IN ('34', '36', '40', '44', '37', '45', '49', '43', '50') THEN 'manufactura'
-                        ELSE 'otro'
-                    END as grupo_wip
-                FROM silver.costo_wip_op cwo
-                INNER JOIN ultimas_fechas uf
-                    ON cwo.fecha_corrida = uf.fecha_max
-                LEFT JOIN silver.bd_finanzas bf
-                    ON cwo.pr_id::text = bf.cod_ordpro::text
-                    AND bf.activo IS true
-                WHERE cwo.pr_id::text IN ({placeholders_cod})
-                  AND COALESCE(bf.prendas_requeridas, 0) >= 200
-                GROUP BY
-                    cwo.wip_id, cwo.pr_id
-            )
             SELECT
-                wip_id,
-                grupo_wip,
-                SUM(prendas_op) as total_prendas,
-                ROUND(SUM(costo_textil_op)::NUMERIC, 2) as total_textil,
-                ROUND(SUM(costo_manufactura_op)::NUMERIC, 2) as total_manufactura,
-                CASE WHEN SUM(prendas_op) > 0
-                     THEN ROUND((SUM(costo_textil_op) / SUM(prendas_op))::NUMERIC, 4)
-                     ELSE 0 END as textil_por_prenda,
-                CASE WHEN SUM(prendas_op) > 0
-                     THEN ROUND((SUM(costo_manufactura_op) / SUM(prendas_op))::NUMERIC, 4)
-                     ELSE 0 END as manufactura_por_prenda
-            FROM datos_separados
-            GROUP BY wip_id, grupo_wip
-            HAVING SUM(costo_textil_op + costo_manufactura_op) > 0
-            ORDER BY grupo_wip, wip_id
+                cwo.wip_id,
+                CASE
+                    WHEN cwo.wip_id IN ('16', '14', '19a', '19c', '24', '10c') THEN 'textil'
+                    WHEN cwo.wip_id IN ('34', '36', '40', '44', '37', '45', '49', '43', '50') THEN 'manufactura'
+                    ELSE 'otro'
+                END as grupo_wip,
+                cwo.pr_id,
+                cod.prendas_requeridas,
+                SUM(cwo.costo_textil) as total_textil,
+                SUM(cwo.costo_manufactura) as total_manufactura
+            FROM {settings.db_schema}.costo_wip_op cwo
+            INNER JOIN {settings.db_schema}.costo_op_detalle cod
+                ON cwo.pr_id::TEXT = cod.cod_ordpro
+            WHERE cwo.pr_id::TEXT IN ({placeholders})
+              AND cwo.version_calculo = %s
+              AND cod.version_calculo = %s
+            GROUP BY cwo.wip_id, cwo.pr_id, cod.prendas_requeridas
+            ORDER BY cwo.wip_id
             """
 
-            logger.debug(f" [WIP-DESGLOSE] Query: {query[:200]}...")
+            params = list(cod_ordpros) + [version_norm, version_norm]
 
-            # Parmetros: version_calculo + cod_ordpros (aparece 1 vez en la query)
-            params = [version_norm] + cod_ordpros
-            logger.debug(f" [WIP-DESGLOSE] Params: version={version_norm}, ops={cod_ordpros}")
-
+            logger.info(f" [WIP-DESGLOSE] Ejecutando query con {len(cod_ordpros)} OPs...")
             resultados = await self.db.query(query, params)
 
-            logger.info(f" [WIP-DESGLOSE] Query retorn {len(resultados)} WIPs")
+            logger.info(f" [WIP-DESGLOSE] ✅ Query completada: {len(resultados)} filas")
 
-            desgloses = []
+            # Agrupar por WIP
+            wips_dict = {}
             for row in resultados:
+                wip_id = row['wip_id']
+                if wip_id not in wips_dict:
+                    wips_dict[wip_id] = {
+                        "wip_id": wip_id,
+                        "grupo_wip": row['grupo_wip'],
+                        "total_textil": 0.0,
+                        "total_manufactura": 0.0,
+                        "total_prendas": 0,
+                        "ops_count": 0
+                    }
+
+                prendas = float(row['prendas_requeridas']) if row['prendas_requeridas'] else 1
+                wips_dict[wip_id]["total_textil"] += float(row['total_textil']) if row['total_textil'] else 0.0
+                wips_dict[wip_id]["total_manufactura"] += float(row['total_manufactura']) if row['total_manufactura'] else 0.0
+                wips_dict[wip_id]["total_prendas"] += prendas
+                wips_dict[wip_id]["ops_count"] += 1
+
+            # Calcular costos por prenda
+            desgloses = []
+            for wip_id, wip_data in wips_dict.items():
+                prendas = wip_data["total_prendas"] if wip_data["total_prendas"] > 0 else 1
+
                 desglose = {
-                    "wip_id": row['wip_id'],
-                    "grupo_wip": row['grupo_wip'],
-                    "total_prendas": int(row['total_prendas']) if row['total_prendas'] else 0,
-                    "total_textil": float(row['total_textil']) if row['total_textil'] else 0.0,
-                    "total_manufactura": float(row['total_manufactura']) if row['total_manufactura'] else 0.0,
-                    "textil_por_prenda": float(row['textil_por_prenda']) if row['textil_por_prenda'] else 0.0,
-                    "manufactura_por_prenda": float(row['manufactura_por_prenda']) if row['manufactura_por_prenda'] else 0.0,
+                    "wip_id": wip_id,
+                    "grupo_wip": wip_data["grupo_wip"],
+                    "total_prendas": int(wip_data["total_prendas"]),
+                    "total_textil": round(wip_data["total_textil"], 2),
+                    "total_manufactura": round(wip_data["total_manufactura"], 2),
+                    "textil_por_prenda": round(wip_data["total_textil"] / prendas, 4),
+                    "manufactura_por_prenda": round(wip_data["total_manufactura"] / prendas, 4),
                 }
                 desgloses.append(desglose)
-                logger.debug(f" [WIP-DESGLOSE] WIP encontrado: {desglose['wip_id']} - textil/prenda: {desglose['textil_por_prenda']}, manufactura/prenda: {desglose['manufactura_por_prenda']}")
+                logger.info(f" [WIP-DESGLOSE] WIP {wip_id}: {desglose['textil_por_prenda']:.4f} textil/prenda, {desglose['manufactura_por_prenda']:.4f} manufactura/prenda")
 
-            logger.info(f" [WIP-DESGLOSE] Procesadas {len(desgloses)} WIPs para {len(cod_ordpros)} OPs")
+            logger.info(f" [WIP-DESGLOSE] ✅ {len(desgloses)} WIPs procesados")
             return desgloses
 
         except Exception as e:
-            logger.error(f" [WIP-DESGLOSE] Error obteniendo desglose WIP: {e}")
+            logger.error(f" [WIP-DESGLOSE] ❌ Error: {e}")
             import traceback
-            logger.error(f" [WIP-DESGLOSE] Traceback: {traceback.format_exc()}")
+            logger.error(traceback.format_exc())
             return []
 
     async def calcular_costos_ponderados_por_ops(
@@ -2137,15 +2156,16 @@ class TDVQueries:
         try:
             version_norm = version_calculo
 
-            # OPTIMIZACION: Obtener fechas límite primero (dos queries rápidas)
+            # OPTIMIZACION: Obtener fechas límite primero - DEL ESTILO ESPECÍFICO
             query_fechas = f"""
             SELECT
                 MAX(fecha_corrida) as max_fecha_corrida,
                 MAX(fecha_facturacion) - INTERVAL '24 months' as min_fecha_fact
             FROM {settings.db_schema}.costo_op_detalle
-            WHERE version_calculo = %s
+            WHERE estilo_propio = %s
+                AND version_calculo = %s
             """
-            fechas_result = await self.db.query(query_fechas, (version_norm,), timeout=10)
+            fechas_result = await self.db.query(query_fechas, (codigo_estilo, version_norm), timeout=10)
 
             if not fechas_result or not fechas_result[0].get('max_fecha_corrida'):
                 logger.warning(f" No se encontraron OPs para estilo recurrente: {codigo_estilo}")
@@ -2158,7 +2178,7 @@ class TDVQueries:
             max_fecha_corrida = fechas_result[0]['max_fecha_corrida']
             min_fecha_fact = fechas_result[0]['min_fecha_fact']
 
-            # QUERY OPTIMIZADA: Sin subqueries en WHERE
+            # QUERY OPTIMIZADA: Sin subqueries en WHERE - SIN filtros restrictivos de costos/prendas
             query = f"""
             SELECT
                 costo_indirecto_fijo,
@@ -2174,10 +2194,6 @@ class TDVQueries:
                 AND version_calculo = %s
                 AND fecha_corrida = %s
                 AND fecha_facturacion >= %s
-                AND prendas_requeridas >= 200
-                AND costo_indirecto_fijo > 0
-                AND gasto_administracion > 0
-                AND gasto_ventas > 0
             ORDER BY fecha_facturacion DESC
             """
 
@@ -2191,6 +2207,7 @@ class TDVQueries:
 
             if not resultado:
                 logger.warning(f" No se encontraron OPs para estilo recurrente: {codigo_estilo}")
+                logger.info(f" [DEBUG] Búsqueda con estilo_propio='{codigo_estilo}', version={version_norm}, fecha_corrida={max_fecha_corrida}")
                 return {
                     "costo_indirecto_fijo": 0,
                     "gasto_administracion": 0,

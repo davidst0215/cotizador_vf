@@ -1129,10 +1129,21 @@ class TDVQueries:
         """
         Obtiene lista detallada de OPs por marca y tipo de prenda (búsqueda alternativa/fallback).
         Utilizado cuando no hay OPs por código_estilo para estilos nuevos o sin OPs filtradas.
+
+        DIFERENCIA CON obtener_ops_detalladas_para_tabla:
+        - NO filtra por prendas_requeridas >= 200 (para permitir lotes medianos/pequeños)
+        - Retorna todos los OPs de esa marca+tipo_prenda sin restricción de cantidad
+
+        INTENTA VARIAS BÚSQUEDAS:
+        1. Búsqueda exacta por cliente + tipo_de_producto
+        2. Si no encuentra, búsqueda solo por cliente (ignorar tipo_prenda)
+        3. Si tampoco, retorna vacío
+
         Retorna datos unitarios para cada OP para mostrar en tabla interactiva.
         """
 
-        query = f"""
+        # Búsqueda fallback: por cliente + tipo_prenda (SIN filtro fecha_corrida que es muy restrictivo)
+        query_cliente_tipo = f"""
         SELECT
           cod_ordpro,
           prendas_requeridas,
@@ -1148,12 +1159,8 @@ class TDVQueries:
           cliente
         FROM {settings.db_schema}.costo_op_detalle c
         WHERE c.cliente ILIKE %s
-          AND c.tipo_de_producto = %s
+          AND c.tipo_de_producto ILIKE %s
           AND c.version_calculo = %s
-          AND c.fecha_corrida = (
-            SELECT MAX(fecha_corrida)
-            FROM {settings.db_schema}.costo_op_detalle
-            WHERE version_calculo = %s)
           AND c.prendas_requeridas >= 200
           AND c.fecha_facturacion >= (
             SELECT (MAX(fecha_facturacion) - (%s || ' months')::INTERVAL)
@@ -1163,16 +1170,66 @@ class TDVQueries:
         ORDER BY c.fecha_facturacion DESC
         """
 
+        # Búsqueda fallback por cliente solamente (sin restricción de prendas)
+        # Más permisivo - solo requiere cliente + version + fecha reciente
+        query_solo_cliente = f"""
+        SELECT
+          cod_ordpro,
+          prendas_requeridas,
+          COALESCE(costo_textil, 0) as costo_textil_total,
+          COALESCE(costo_manufactura, 0) as costo_manufactura_total,
+          COALESCE(costo_avios, 0) as costo_avios_total,
+          COALESCE(costo_materia_prima, 0) as costo_materia_prima_total,
+          COALESCE(costo_indirecto_fijo, 0) as costo_indirecto_fijo_total,
+          COALESCE(gasto_administracion, 0) as gasto_administracion_total,
+          COALESCE(gasto_ventas, 0) as gasto_ventas_total,
+          COALESCE(esfuerzo_total, 6) as esfuerzo_total,
+          fecha_facturacion,
+          cliente
+        FROM {settings.db_schema}.costo_op_detalle c
+        WHERE c.cliente ILIKE %s
+          AND c.version_calculo = %s
+          AND c.fecha_corrida = (
+            SELECT MAX(fecha_corrida)
+            FROM {settings.db_schema}.costo_op_detalle
+            WHERE version_calculo = %s)
+          AND c.fecha_facturacion >= (
+            SELECT (MAX(fecha_facturacion) - (%s || ' months')::INTERVAL)
+            FROM {settings.db_schema}.costo_op_detalle
+            WHERE version_calculo = %s
+          )
+        ORDER BY c.fecha_facturacion DESC
+        """
+
         try:
+            # Log de debugging
+            params_1 = (f"%{marca.strip()}%", f"%{tipo_prenda.strip()}%", version_calculo,
+                 str(meses), version_calculo)
+            logger.info(f" [FALLBACK DEBUG] Intento 1: Buscando cliente ILIKE '{marca}' + tipo_prenda='{tipo_prenda}'")
+            logger.info(f" [FALLBACK DEBUG] Parámetros query 1: {params_1}")
+
+            # Intentar búsqueda exacta cliente + tipo_prenda
             resultados = await self.db.query(
-                query,
-                (f"%{marca}%", tipo_prenda, version_calculo,
-                 version_calculo, str(meses),
-                 version_calculo),
+                query_cliente_tipo,
+                params_1,
             )
+
+            logger.info(f" [FALLBACK DEBUG] Intento 1: Encontrados {len(resultados) if resultados else 0} registros")
+
+            # Si no encuentra, intentar solo por cliente
+            if not resultados:
+                logger.info(f" [FALLBACK DEBUG] Intento 2: Buscando solo por cliente='{marca}' (ignorando tipo_prenda)")
+                resultados = await self.db.query(
+                    query_solo_cliente,
+                    (f"%{marca.strip()}%", version_calculo,
+                     version_calculo, str(meses), version_calculo),
+                )
+                logger.info(f" [FALLBACK DEBUG] Intento 2: Encontrados {len(resultados) if resultados else 0} registros")
 
             if not resultados:
                 logger.info(f" No se encontraron OPs para marca={marca}, tipo_prenda={tipo_prenda}")
+                logger.info(f" [DEBUG] Query 1 ejecutada sin resultados. Parámetros: marca='{marca.strip()}', tipo_prenda='{tipo_prenda.strip()}'")
+                logger.info(f" [DEBUG] Query 2 ejecutada sin resultados. Parámetro: '%{marca.strip()}%'")
                 return []
 
             # Procesar resultados para crear lista de OPs con datos unitarios

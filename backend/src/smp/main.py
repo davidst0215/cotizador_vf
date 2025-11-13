@@ -731,6 +731,7 @@ async def obtener_ops_detalladas(
     2. Si no encuentra OPs y marca + tipo_prenda están disponibles, intenta buscar por esos
     3. Si tampoco encuentra, retorna es_estilo_nuevo = true
     """
+    logger.info(f" [LLAMADA] obtener_ops_detalladas - estilo={codigo_estilo}, marca={marca}, tipo_prenda={tipo_prenda}, version={version_calculo}")
     try:
         # Normalizar version_calculo (acepta FLUIDO, FLUIDA, truncado, etc)
         version_normalizada = normalize_version_calculo(version_calculo)
@@ -742,10 +743,12 @@ async def obtener_ops_detalladas(
 
         # Paso 2: Si no hay OPs y tenemos marca+tipo_prenda, intentar búsqueda alternativa
         if len(ops_detalladas) == 0 and marca and tipo_prenda:
-            logger.info(f" No hay OPs por codigo_estilo {codigo_estilo}, intentando por marca+tipo_prenda...")
+            logger.info(f" [ENDPOINT] No hay OPs por codigo_estilo {codigo_estilo}, intentando por marca+tipo_prenda...")
+            logger.info(f" [ENDPOINT] marca='{marca}', tipo_prenda='{tipo_prenda}', version='{version_normalizada}'")
             ops_detalladas = await tdv_queries.obtener_ops_por_marca_tipo(
                 marca, tipo_prenda, meses, version_normalizada
             )
+            logger.info(f" [ENDPOINT] Fallback retornó {len(ops_detalladas)} OPs")
 
         es_estilo_nuevo = len(ops_detalladas) == 0
 
@@ -766,6 +769,75 @@ async def obtener_ops_detalladas(
         raise HTTPException(
             status_code=500, detail=f"Error obteniendo OPs: {str(e)}"
         )
+
+
+@app.get("/debug-montaigne", tags=["Debug"])
+async def debug_montaigne():
+    """Debug: Mostrar todos los OPs de MONTAIGNE en la BD"""
+    try:
+        result = await tdv_queries.db.query(f"""
+        SELECT DISTINCT
+            cliente,
+            tipo_de_producto,
+            COUNT(*) as cantidad
+        FROM {settings.db_schema}.costo_op_detalle
+        WHERE cliente ILIKE '%MONTAIGNE%'
+        GROUP BY cliente, tipo_de_producto
+        ORDER BY cliente, tipo_de_producto
+        """)
+
+        return {
+            "total_grupos": len(result),
+            "grupos": result
+        }
+    except Exception as e:
+        logger.error(f"Error en debug_montaigne: {e}")
+        return {"error": str(e)}
+
+
+@app.get("/listar-clientes-tipos", tags=["Debug"])
+async def debug_ops_marcas_tipos(version_calculo: Optional[str] = None):
+    """
+    SOLO PARA DEBUG: Retorna todas las combinaciones únicas de marca + tipo_prenda
+    que existen en la BD para que el usuario vea exactamente qué buscar.
+    """
+    try:
+        version_normalizada = normalize_version_calculo(version_calculo)
+
+        query = f"""
+        SELECT DISTINCT
+          TRIM(cliente) as cliente,
+          TRIM(tipo_de_producto) as tipo_prenda,
+          COUNT(*) as cantidad_ops
+        FROM {settings.db_schema}.costo_op_detalle c
+        WHERE c.version_calculo = %s
+          AND c.fecha_corrida = (
+            SELECT MAX(fecha_corrida)
+            FROM {settings.db_schema}.costo_op_detalle
+            WHERE version_calculo = %s)
+        GROUP BY TRIM(cliente), TRIM(tipo_de_producto)
+        ORDER BY cliente, tipo_prenda
+        LIMIT 100
+        """
+
+        resultados = await tdv_queries.db.query(query, (version_normalizada, version_normalizada))
+
+        return {
+            "version_calculo": version_normalizada,
+            "total_combinaciones": len(resultados),
+            "combinaciones": [
+                {
+                    "cliente": row["cliente"],
+                    "tipo_prenda": row["tipo_prenda"],
+                    "cantidad_ops": row["cantidad_ops"]
+                }
+                for row in resultados
+            ]
+        }
+
+    except Exception as e:
+        logger.error(f"Error en debug_ops_marcas_tipos: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/calcular-promedios-ops-seleccionadas", tags=["Bsqueda"])

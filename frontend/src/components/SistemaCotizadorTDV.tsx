@@ -559,14 +559,12 @@ const SistemaCotizadorTDV = () => {
   // Estado debounced para los efectos - evita que se disparen en cada keystroke
   const [debouncedFormData, setDebouncedFormData] = useState<FormData>(formData);
 
-  // ⚡ ESTADO LOCAL DEL INPUT - Completamente INDEPENDIENTE del formData
-  // Esto evita re-renders del padre en cada keystroke
-  const [codigoEstiloLocal, setCodigoEstiloLocal] = useState<string>("");
+  // ⚡ REF LOCAL DEL INPUT (NO useState) - Esto evita re-renders del padre en cada keystroke
+  // El input se mantiene controlado pero los cambios NO disparan renders
+  const codigoEstiloLocalRef = useRef<string>("");
 
-  // 🔍 LOGGING: Detectar cambios en codigoEstiloLocal
-  useEffect(() => {
-    console.log(`📝 [codigoEstiloLocal] ESTADO CAMBIÓ | nuevo valor="${codigoEstiloLocal}"`);
-  }, [codigoEstiloLocal]);
+  // Estado para forzar un render SOLO cuando es necesario (búsqueda, validación, etc)
+  const [codigoEstiloForceRender, setCodigoEstiloForceRender] = useState<string>("");
 
   // ⚡ Estado para controlar si el input ha sido sincronizado (evita loops)
   const inputSyncedRef = useRef<boolean>(false);
@@ -592,19 +590,19 @@ const SistemaCotizadorTDV = () => {
 
   // Memoized validation
   const erroresFormulario = useMemo(() => {
-    console.log(`✅ [erroresFormulario] RECALCULADO | codigoEstiloLocal="${codigoEstiloLocal}"`);
+    console.log(`✅ [erroresFormulario] RECALCULADO | codigoEstiloLocal="${codigoEstiloLocalRef.current}"`);
     const errores = [];
 
     if (!formData.cliente_marca) errores.push("Cliente/Marca es requerido");
     // NOTA: temporada y familia_producto ya no son requeridas
     if (!formData.tipo_prenda) errores.push("Tipo de Prenda es requerido");
     // ⚡ Usar codigoEstiloLocal en lugar de formData.codigo_estilo
-    if (!codigoEstiloLocal && !formData.codigo_estilo) errores.push("Código de estilo propio es requerido");
+    if (!codigoEstiloLocalRef.current && !formData.codigo_estilo) errores.push("Código de estilo propio es requerido");
 
     // NOTA: Se removió validación de WIPs requeridas - ahora es opcional
 
     return errores;
-  }, [formData.cliente_marca, formData.tipo_prenda, formData.codigo_estilo, codigoEstiloLocal]);
+  }, [formData.cliente_marca, formData.tipo_prenda, formData.codigo_estilo]);
 
   // Manejador de cambio de formulario con actualización inmediata
   const manejarCambioFormulario = useCallback(
@@ -627,8 +625,10 @@ const SistemaCotizadorTDV = () => {
   const handleCodigoEstiloChange = useCallback(
     (valor: string) => {
       console.log(`🎯 [handleCodigoEstiloChange] EJECUTADO | valor="${valor}"`);
-      setCodigoEstiloLocal(valor);  // Solo actualiza estado local
+      // ⚡ USAR REF EN LUGAR DE ESTADO - Esto evita re-renders del padre
+      codigoEstiloLocalRef.current = valor;
       inputSyncedRef.current = false; // Marcar como no sincronizado
+      // No llamar a setCodigoEstiloLocal() para evitar re-render del padre
     },
     [],  // Sin dependencias - nunca cambia
   );
@@ -925,18 +925,19 @@ const SistemaCotizadorTDV = () => {
     [],
   );
 
-  // ⚡ Handler para buscar estilo manualmente - SINCRONIZA estado local con formData
+  // ⚡ Handler para buscar estilo manualmente - SINCRONIZA ref local con formData
   const onBuscarEstilo = useCallback(() => {
-    console.log(`🔍 [onBuscarEstilo] RECREADO | codigoEstiloLocal="${codigoEstiloLocal}"`);
-    if (codigoEstiloLocal && codigoEstiloLocal.length >= 3) {
-      console.log(`🚀 [onBuscarEstilo] EJECUTADO | buscando="${codigoEstiloLocal}"`);
+    const codigoActual = codigoEstiloLocalRef.current;
+    console.log(`🔍 [onBuscarEstilo] EJECUTADO | codigoEstiloLocal="${codigoActual}"`);
+    if (codigoActual && codigoActual.length >= 3) {
+      console.log(`🚀 [onBuscarEstilo] Buscando | buscando="${codigoActual}"`);
       // Marcar como sincronizado para evitar efectos secundarios
       inputSyncedRef.current = true;
 
-      // Sincronizar estado local a formData
+      // Sincronizar ref local a formData
       setFormData(prev => ({
         ...prev,
-        codigo_estilo: codigoEstiloLocal
+        codigo_estilo: codigoActual
       }));
 
       // Limpiar resultados previos antes de buscar
@@ -946,12 +947,12 @@ const SistemaCotizadorTDV = () => {
 
       // Buscar estilo
       verificarYBuscarEstilo(
-        codigoEstiloLocal,
+        codigoActual,
         formData.cliente_marca,
         formData.version_calculo,
       );
     }
-  }, [codigoEstiloLocal, formData.cliente_marca, formData.version_calculo, verificarYBuscarEstilo]);
+  }, [formData.cliente_marca, formData.version_calculo, verificarYBuscarEstilo]);
 
   // cargarOpsReales (POST)
   const cargarOpsReales = useCallback(
@@ -1016,13 +1017,13 @@ const SistemaCotizadorTDV = () => {
   const procesarCotizacion = useCallback(async () => {
     setCargando(true);
     try {
-      // ⚡ Sincronizar codigoEstiloLocal a formData antes de procesar (si no está sincronizado)
-      const codigoFinal = codigoEstiloLocal || formData.codigo_estilo;
+      // ⚡ Sincronizar codigoEstiloLocal ref a formData antes de procesar (si no está sincronizado)
+      const codigoFinal = codigoEstiloLocalRef.current || formData.codigo_estilo;
 
-      if (!inputSyncedRef.current && codigoEstiloLocal) {
+      if (!inputSyncedRef.current && codigoEstiloLocalRef.current) {
         setFormData(prev => ({
           ...prev,
-          codigo_estilo: codigoEstiloLocal
+          codigo_estilo: codigoEstiloLocalRef.current
         }));
         inputSyncedRef.current = true;
       }
@@ -1566,7 +1567,7 @@ const SistemaCotizadorTDV = () => {
             />
 
             <CampoCodigoEstiloComponent
-              value={codigoEstiloLocal}
+              value={codigoEstiloLocalRef.current}
               buscandoEstilo={buscandoEstilo}
               estilosEncontrados={estilosEncontrados}
               esEstiloNuevo={esEstiloNuevo}

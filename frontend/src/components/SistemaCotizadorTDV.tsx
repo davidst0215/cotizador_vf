@@ -62,9 +62,9 @@ const PureInputCodigoEstilo = React.memo<{ value: string; onChange: (valor: stri
   },
   (prevProps, nextProps) => {
     // Retornar true = no re-renderizar (solo comparar value)
-    // El onChange siempre es handleCodigoEstiloChange (callback memoizado)
-    // así que no necesita ser comparado
-    return prevProps.value === nextProps.value;
+    const sameValue = prevProps.value === nextProps.value;
+    console.log(`🔍 [PureInputCodigoEstilo MEMO] Comparador evaluado | prev="${prevProps.value}" next="${nextProps.value}" → ${sameValue ? 'NO RENDERIZAR' : 'RENDERIZAR'}`);
+    return sameValue;
   }
 );
 
@@ -240,13 +240,19 @@ const CampoCodigoEstiloComponent = React.memo<CampoCodigoEstiloProps>(
   },
   // Función de comparación personalizada: solo re-renderizar si cambió algo relevante
   (prevProps: CampoCodigoEstiloProps, nextProps: CampoCodigoEstiloProps) => {
-    return (
-      prevProps.value === nextProps.value &&
-      prevProps.buscandoEstilo === nextProps.buscandoEstilo &&
-      prevProps.estilosEncontrados === nextProps.estilosEncontrados &&
-      prevProps.esEstiloNuevo === nextProps.esEstiloNuevo &&
-      prevProps.infoAutoCompletado === nextProps.infoAutoCompletado
-    );
+    const sameValue = prevProps.value === nextProps.value;
+    const sameBuscando = prevProps.buscandoEstilo === nextProps.buscandoEstilo;
+    const sameEstilos = prevProps.estilosEncontrados === nextProps.estilosEncontrados;
+    const sameNuevo = prevProps.esEstiloNuevo === nextProps.esEstiloNuevo;
+    const sameInfo = prevProps.infoAutoCompletado === nextProps.infoAutoCompletado;
+
+    const result = sameValue && sameBuscando && sameEstilos && sameNuevo && sameInfo;
+
+    if (!result) {
+      console.log(`🔍 [CampoCodigoEstilo MEMO] RENDERIZAR | value=${!sameValue} buscandoEstilo=${!sameBuscando} estilos=${!sameEstilos} nuevo=${!sameNuevo} info=${!sameInfo}`);
+    }
+
+    return result;
   }
 );
 

@@ -489,18 +489,13 @@ class TDVQueries:
                 SELECT MAX(fecha_corrida)
                 FROM {settings.db_schema}.historial_estilos)
               AND c.prendas_requeridas > 0
-              AND c.fecha_facturacion >= (
-                SELECT (MAX(fecha_facturacion) - INTERVAL '36 months')
-                FROM {settings.db_schema}.costo_op_detalle
-                WHERE version_calculo = ?
-              )
             ORDER BY c.fecha_facturacion DESC
             LIMIT 1
             """
 
             resultado = await self.db.query(
                 query,
-                (codigo_estilo, version_calculo, version_calculo, version_calculo),
+                (codigo_estilo, version_calculo, version_calculo),
             )
 
             if resultado:
@@ -548,18 +543,13 @@ class TDVQueries:
                 FROM {settings.db_schema}.costo_op_detalle
                 WHERE version_calculo = ?)
               AND c.prendas_requeridas > 0
-              AND c.fecha_facturacion >= (
-                SELECT (MAX(fecha_facturacion) - INTERVAL '36 months')
-                FROM {settings.db_schema}.costo_op_detalle
-                WHERE version_calculo = ?
-              )
             ORDER BY c.fecha_facturacion DESC
             LIMIT 1
             """
 
             resultado_fallback = await self.db.query(
                 query_fallback,
-                (codigo_estilo, version_calculo, version_calculo, version_calculo),
+                (codigo_estilo, version_calculo, version_calculo),
             )
 
             logger.info(f"[FALLBACK] Query fallback retornó: {resultado_fallback}")
@@ -1079,19 +1069,13 @@ class TDVQueries:
                 WHERE version_calculo = %s
                 AND estilo_propio::text = %s)
               AND c.prendas_requeridas >= 200
-              AND c.fecha_facturacion >= (
-                SELECT (MAX(fecha_facturacion) - (%s || ' months')::INTERVAL)
-                FROM {settings.db_schema}.costo_op_detalle
-                WHERE version_calculo = %s
-              )
             ORDER BY c.fecha_facturacion DESC
             """
 
             resultados = await self.db.query(
                 query_strict,
                 (codigo_estilo, version_calculo,
-                 version_calculo, codigo_estilo, str(meses),
-                 version_calculo),
+                 version_calculo, codigo_estilo),
             )
 
             # PASO 2: Si no encuentra con filtro estricto, intenta SIN filtro de prendas
@@ -1120,19 +1104,13 @@ class TDVQueries:
                     FROM {settings.db_schema}.costo_op_detalle
                     WHERE version_calculo = %s
                     AND estilo_propio::text = %s)
-                  AND c.fecha_facturacion >= (
-                    SELECT (MAX(fecha_facturacion) - (%s || ' months')::INTERVAL)
-                    FROM {settings.db_schema}.costo_op_detalle
-                    WHERE version_calculo = %s
-                  )
                 ORDER BY c.fecha_facturacion DESC
                 """
 
                 resultados = await self.db.query(
                     query_flexible,
                     (codigo_estilo, version_calculo,
-                     version_calculo, codigo_estilo, str(meses),
-                     version_calculo),
+                     version_calculo, codigo_estilo),
                 )
 
                 if resultados:
@@ -1210,25 +1188,20 @@ class TDVQueries:
               cliente
             FROM {settings.db_schema}.costo_op_detalle c
             WHERE c.cliente ILIKE %s
-              AND c.tipo_de_producto ILIKE %s
+              AND c.tipo_de_producto = %s
               AND c.version_calculo = %s
               AND c.fecha_corrida = (
                 SELECT MAX(fecha_corrida)
                 FROM {settings.db_schema}.costo_op_detalle
                 WHERE version_calculo = %s)
               AND c.prendas_requeridas >= 200
-              AND c.fecha_facturacion >= (
-                SELECT (MAX(fecha_facturacion) - (%s || ' months')::INTERVAL)
-                FROM {settings.db_schema}.costo_op_detalle
-                WHERE version_calculo = %s
-              )
             ORDER BY c.fecha_facturacion DESC
             """
 
             resultados = await self.db.query(
                 query_strict,
-                (f"%{marca.strip()}%", f"%{tipo_prenda.strip()}%", version_calculo,
-                 version_calculo, str(meses), version_calculo),
+                (f"%{marca.strip()}%", f"{tipo_prenda.strip()}", version_calculo,
+                 version_calculo),
             )
 
             # PASO 2: Si no encuentra con filtro estricto, intenta SIN filtro de prendas
@@ -1251,24 +1224,19 @@ class TDVQueries:
                   cliente
                 FROM {settings.db_schema}.costo_op_detalle c
                 WHERE c.cliente ILIKE %s
-                  AND c.tipo_de_producto ILIKE %s
+                  AND c.tipo_de_producto = %s
                   AND c.version_calculo = %s
                   AND c.fecha_corrida = (
                     SELECT MAX(fecha_corrida)
                     FROM {settings.db_schema}.costo_op_detalle
                     WHERE version_calculo = %s)
-                  AND c.fecha_facturacion >= (
-                    SELECT (MAX(fecha_facturacion) - (%s || ' months')::INTERVAL)
-                    FROM {settings.db_schema}.costo_op_detalle
-                    WHERE version_calculo = %s
-                  )
                 ORDER BY c.fecha_facturacion DESC
                 """
 
                 resultados = await self.db.query(
                     query_flexible,
-                    (f"%{marca.strip()}%", f"%{tipo_prenda.strip()}%", version_calculo,
-                     version_calculo, str(meses), version_calculo),
+                    (f"%{marca.strip()}%", f"{tipo_prenda.strip()}", version_calculo,
+                     version_calculo),
                 )
 
                 if resultados:

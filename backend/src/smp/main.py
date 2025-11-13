@@ -745,7 +745,7 @@ async def obtener_ops_detalladas(
         if len(ops_detalladas) == 0 and marca and tipo_prenda:
             logger.info(f" [ENDPOINT] No hay OPs por codigo_estilo {codigo_estilo}, intentando por marca+tipo_prenda...")
             logger.info(f" [ENDPOINT] marca='{marca}', tipo_prenda='{tipo_prenda}', version='{version_normalizada}'")
-            ops_detalladas = await tdv_queries.obtener_ops_por_marca_tipo(
+            ops_detalladas = await tdv_queries.obtener_ops_estilo_nuevo(
                 marca, tipo_prenda, meses, version_normalizada
             )
             logger.info(f" [ENDPOINT] Fallback retornó {len(ops_detalladas)} OPs")

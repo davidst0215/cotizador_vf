@@ -294,10 +294,10 @@ export const OpsSelectionTable = forwardRef<OpsSelectionTableRef, OpsSelectionTa
             <h4 className="font-semibold text-sm text-gray-700 mb-3">Filtrar por Categoría de Lote:</h4>
             <div className="flex flex-wrap gap-3">
               {categoriasUnicas.map((categoria) => (
-                <label key={categoria} className="flex items-center gap-2 cursor-pointer">
+                <label key={categoria} className="flex items-center gap-2 cursor-pointer hover:bg-white hover:px-2 hover:py-1 hover:rounded transition-colors">
                   <input
                     type="checkbox"
-                    checked={filtrosCategoriaLote.size === 0 || filtrosCategoriaLote.has(categoria)}
+                    checked={filtrosCategoriaLote.has(categoria)}
                     onChange={(e) => {
                       setFiltrosCategoriaLote((prev) => {
                         const newSet = new Set(prev);
@@ -309,7 +309,7 @@ export const OpsSelectionTable = forwardRef<OpsSelectionTableRef, OpsSelectionTa
                         return newSet;
                       });
                     }}
-                    className="rounded"
+                    className="rounded cursor-pointer w-4 h-4"
                   />
                   <span className="text-sm text-gray-700">{categoria}</span>
                 </label>
@@ -319,7 +319,7 @@ export const OpsSelectionTable = forwardRef<OpsSelectionTableRef, OpsSelectionTa
         )}
 
         {/* Tabla */}
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto overflow-y-auto max-h-96 border-b border-gray-200">
           <table className="w-full">
             <thead>
               <tr className="bg-gray-100 border-b border-gray-200">

@@ -34,39 +34,42 @@ const CATEGORIAS_LOTE = {
 
 // NOTA: InputCodigoEstiloProps removido - no se usa más
 
-// ✨ INPUT HTML PURO - MEMOIZADO PARA PRESERVAR FOCO
-const PureInputCodigoEstilo = React.memo<{ value: string; onChange: (valor: string) => void }>(
-  ({ value, onChange }) => {
-    // 🔍 LOGGING: Detectar si el componente se re-renderiza
-    useEffect(() => {
-      console.log(`📍 [PureInputCodigoEstilo] RE-RENDERIZADO | value="${value}"`);
-    }, [value]);
+// ✨ INPUT HTML PURO - ESTADO LOCAL para evitar pérdida de foco
+const PureInputCodigoEstilo: React.FC<{ value: string; onChange: (valor: string) => void }> = ({
+  value: externalValue,
+  onChange,
+}) => {
+  // Estado local del input - Se actualiza INMEDIATAMENTE sin depender de re-renders del padre
+  const [localValue, setLocalValue] = useState<string>(externalValue);
 
-    // ⚡ Handler interno - Sin transformación en keystroke
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-      console.log(`⌨️ [PureInputCodigoEstilo.handleChange] keystroke | nuevo valor="${e.target.value}"`);
-      onChange(e.target.value);  // ✅ Sin .toUpperCase() - evita re-renders por transformación
-    };
+  // Sincronizar valor externo (ej: después de búsqueda) con estado local
+  useEffect(() => {
+    console.log(`📍 [PureInputCodigoEstilo] SINCRONIZAR | externalValue="${externalValue}"`);
+    setLocalValue(externalValue);
+  }, [externalValue]);
 
-    return (
-      <input
-        type="text"
-        value={value}
-        onChange={handleChange}
-        className="w-full p-4 border-2 border-gray-200 rounded-xl focus:border-red-500 focus:border-opacity-50 transition-colors"
-        placeholder="ej: LAC001-V25, GRY2024-P01"
-        autoComplete="off"
-        spellCheck={false}
-      />
-    );
-  },
-  (prevProps, nextProps) => {
-    // Retornar true = no re-renderizar (solo comparar value)
-    const sameValue = prevProps.value === nextProps.value;
-    console.log(`🔍 [PureInputCodigoEstilo MEMO] Comparador evaluado | prev="${prevProps.value}" next="${nextProps.value}" → ${sameValue ? 'NO RENDERIZAR' : 'RENDERIZAR'}`);
-    return sameValue;
-  }
-);
+  // ⚡ Handler interno - Sin transformación en keystroke
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newValue = e.target.value;
+    console.log(`⌨️ [PureInputCodigoEstilo.handleChange] keystroke | nuevo valor="${newValue}"`);
+    // 1. Actualizar estado local INMEDIATAMENTE (el input lo verá al instante)
+    setLocalValue(newValue);
+    // 2. Reportar al padre (sin transformación)
+    onChange(newValue);
+  };
+
+  return (
+    <input
+      type="text"
+      value={localValue}  // ✅ Usa estado LOCAL, no prop del padre
+      onChange={handleChange}
+      className="w-full p-4 border-2 border-gray-200 rounded-xl focus:border-red-500 focus:border-opacity-50 transition-colors"
+      placeholder="ej: LAC001-V25, GRY2024-P01"
+      autoComplete="off"
+      spellCheck={false}
+    />
+  );
+};
 
 // Botón de búsqueda - SIN MEMO
 const BuscarEstiloButton: React.FC<{

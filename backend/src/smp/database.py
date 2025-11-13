@@ -1058,7 +1058,7 @@ class TDVQueries:
           fecha_facturacion,
           cliente
         FROM {settings.db_schema}.costo_op_detalle c
-        WHERE c.estilo_propio = %s
+        WHERE c.codigo_estilo = %s
           AND c.version_calculo = %s
           AND c.fecha_corrida = (
             SELECT MAX(fecha_corrida)

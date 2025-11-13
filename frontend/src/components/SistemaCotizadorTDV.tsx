@@ -42,10 +42,10 @@ const PureInputCodigoEstilo = React.memo<{ value: string; onChange: (valor: stri
       console.log(`📍 [PureInputCodigoEstilo] RE-RENDERIZADO | value="${value}"`);
     }, [value]);
 
-    // ⚡ Handler interno que NO transforma el valor - mantiene el input controlado sin transformaciones
+    // ⚡ Handler interno - Sin transformación en keystroke
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
       console.log(`⌨️ [PureInputCodigoEstilo.handleChange] keystroke | nuevo valor="${e.target.value}"`);
-      onChange(e.target.value.toUpperCase());
+      onChange(e.target.value);  // ✅ Sin .toUpperCase() - evita re-renders por transformación
     };
 
     return (
@@ -596,8 +596,8 @@ const SistemaCotizadorTDV = () => {
     if (!formData.cliente_marca) errores.push("Cliente/Marca es requerido");
     // NOTA: temporada y familia_producto ya no son requeridas
     if (!formData.tipo_prenda) errores.push("Tipo de Prenda es requerido");
-    // ⚡ Usar codigoEstiloLocal en lugar de formData.codigo_estilo
-    if (!codigoEstiloLocalRef.current && !formData.codigo_estilo) errores.push("Código de estilo propio es requerido");
+    // ⚡ Usar codigoEstiloLocal en lugar de formData.codigo_estilo (comparar con trim para ignorar espacios)
+    if (!codigoEstiloLocalRef.current.trim() && !formData.codigo_estilo) errores.push("Código de estilo propio es requerido");
 
     // NOTA: Se removió validación de WIPs requeridas - ahora es opcional
 
@@ -927,7 +927,7 @@ const SistemaCotizadorTDV = () => {
 
   // ⚡ Handler para buscar estilo manualmente - SINCRONIZA ref local con formData
   const onBuscarEstilo = useCallback(() => {
-    const codigoActual = codigoEstiloLocalRef.current;
+    const codigoActual = codigoEstiloLocalRef.current.toUpperCase();  // ✅ Transformar aquí
     console.log(`🔍 [onBuscarEstilo] EJECUTADO | codigoEstiloLocal="${codigoActual}"`);
     if (codigoActual && codigoActual.length >= 3) {
       console.log(`🚀 [onBuscarEstilo] Buscando | buscando="${codigoActual}"`);
@@ -1018,12 +1018,12 @@ const SistemaCotizadorTDV = () => {
     setCargando(true);
     try {
       // ⚡ Sincronizar codigoEstiloLocal ref a formData antes de procesar (si no está sincronizado)
-      const codigoFinal = codigoEstiloLocalRef.current || formData.codigo_estilo;
+      const codigoFinal = codigoEstiloLocalRef.current.toUpperCase() || formData.codigo_estilo;  // ✅ Transformar aquí
 
       if (!inputSyncedRef.current && codigoEstiloLocalRef.current) {
         setFormData(prev => ({
           ...prev,
-          codigo_estilo: codigoEstiloLocalRef.current
+          codigo_estilo: codigoFinal
         }));
         inputSyncedRef.current = true;
       }

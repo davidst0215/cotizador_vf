@@ -954,30 +954,16 @@ async def desglose_wip_ops(data: Dict[str, Any] = Body(...)):
 
         # DEBUG: Obtener desglose de WIPs
         logger.info(f" [ENDPOINT-DESGLOSE-WIP] Llamando a obtener_desglose_wip_por_ops con {len(cod_ordpros)} OPs")
-        desgloses = await tdv_queries.obtener_desglose_wip_por_ops(
+        resultado_desglose = await tdv_queries.obtener_desglose_wip_por_ops(
             cod_ordpros, version_calculo
         )
-        logger.info(f" [ENDPOINT-DESGLOSE-WIP] Resultado: {len(desgloses)} WIPs encontrados")
 
-        # Separar por grupo
-        desgloses_textil = [d for d in desgloses if d["grupo_wip"] == "textil"]
-        desgloses_manufactura = [d for d in desgloses if d["grupo_wip"] == "manufactura"]
+        # La función ahora retorna un diccionario con estructura completa
+        logger.info(f" [ENDPOINT-DESGLOSE-WIP] Resultado: {len(resultado_desglose['desgloses_total'])} WIPs encontrados")
+        logger.info(f" [ENDPOINT-DESGLOSE-WIP] Desglose WIP: {len(resultado_desglose['desgloses_textil'])} WIPs textil, {len(resultado_desglose['desgloses_manufactura'])} WIPs manufactura")
 
-        logger.info(
-            f" [ENDPOINT-DESGLOSE-WIP] Desglose WIP: {len(desgloses_textil)} WIPs textil, {len(desgloses_manufactura)} WIPs manufactura"
-        )
-
-        return {
-            "ops_analizadas": len(cod_ordpros),
-            "desgloses_textil": desgloses_textil,
-            "desgloses_manufactura": desgloses_manufactura,
-            "desgloses_total": desgloses,
-            "_debug": {
-                "cod_ordpros_input": cod_ordpros,
-                "version_input": version_calculo,
-                "desgloses_count": len(desgloses)
-            }
-        }
+        # Retornar la estructura completa del resultado
+        return resultado_desglose
 
     except Exception as e:
         logger.error(f" [ENDPOINT-DESGLOSE-WIP] Error obteniendo desglose WIP: {e}")

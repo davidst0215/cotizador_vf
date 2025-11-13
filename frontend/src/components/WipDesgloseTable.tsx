@@ -19,6 +19,7 @@ interface WipDesgloseResponse {
   desgloses_textil: DesgloseWip[];
   desgloses_manufactura: DesgloseWip[];
   desgloses_total: DesgloseWip[];
+  fecha_corrida?: string;
 }
 
 export interface WipDesgloseTableProps {
@@ -240,8 +241,13 @@ const WipDesgloseTableComponent: React.FC<WipDesgloseTableProps> = ({
 
         {/* Tabla de desglose detallado */}
         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-          <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
+          <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
             <h4 className="text-sm font-semibold text-gray-700">Desglose por WIP</h4>
+            {desgloseData.fecha_corrida && (
+              <span className="text-xs text-gray-500">
+                Datos: {new Date(desgloseData.fecha_corrida).toLocaleDateString('es-ES', { year: 'numeric', month: 'short', day: 'numeric' })}
+              </span>
+            )}
           </div>
 
           <div className="overflow-x-auto">

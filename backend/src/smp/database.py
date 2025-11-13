@@ -1413,7 +1413,7 @@ class TDVQueries:
         try:
             placeholders = ",".join(["%s"] * len(cod_ordpros))
 
-            # ✨ QUERY OPTIMIZADA Y SIMPLE
+            # ✨ QUERY OPTIMIZADA CON FILTRO DE FECHA_CORRIDA
             query = f"""
             SELECT
                 cwo.wip_id,
@@ -1424,6 +1424,7 @@ class TDVQueries:
                 END as grupo_wip,
                 cwo.pr_id,
                 cod.prendas_requeridas,
+                cod.fecha_corrida,
                 SUM(cwo.costo_textil) as total_textil,
                 SUM(cwo.costo_manufactura) as total_manufactura
             FROM {settings.db_schema}.costo_wip_op cwo
@@ -1432,16 +1433,25 @@ class TDVQueries:
             WHERE cwo.pr_id::TEXT IN ({placeholders})
               AND cwo.version_calculo = %s
               AND cod.version_calculo = %s
-            GROUP BY cwo.wip_id, cwo.pr_id, cod.prendas_requeridas
+              AND cod.fecha_corrida = (
+                SELECT MAX(fecha_corrida)
+                FROM {settings.db_schema}.costo_op_detalle
+                WHERE version_calculo = %s)
+            GROUP BY cwo.wip_id, cwo.pr_id, cod.prendas_requeridas, cod.fecha_corrida
             ORDER BY cwo.wip_id
             """
 
-            params = list(cod_ordpros) + [version_norm, version_norm]
+            params = list(cod_ordpros) + [version_norm, version_norm, version_norm]
 
             logger.info(f" [WIP-DESGLOSE] Ejecutando query con {len(cod_ordpros)} OPs...")
             resultados = await self.db.query(query, params)
 
             logger.info(f" [WIP-DESGLOSE] ✅ Query completada: {len(resultados)} filas")
+
+            # Capturar fecha_corrida (todos los registros tienen la misma fecha)
+            fecha_corrida = None
+            if resultados:
+                fecha_corrida = resultados[0].get('fecha_corrida')
 
             # Agrupar por WIP
             wips_dict = {}
@@ -1480,8 +1490,16 @@ class TDVQueries:
                 desgloses.append(desglose)
                 logger.info(f" [WIP-DESGLOSE] WIP {wip_id}: {desglose['textil_por_prenda']:.4f} textil/prenda, {desglose['manufactura_por_prenda']:.4f} manufactura/prenda")
 
-            logger.info(f" [WIP-DESGLOSE] ✅ {len(desgloses)} WIPs procesados")
-            return desgloses
+            logger.info(f" [WIP-DESGLOSE] ✅ {len(desgloses)} WIPs procesados (fecha_corrida: {fecha_corrida})")
+
+            # ✨ Retornar desgloses con metadatos incluyendo la fecha
+            return {
+                "desgloses_total": desgloses,
+                "desgloses_textil": [d for d in desgloses if d["grupo_wip"] == "textil"],
+                "desgloses_manufactura": [d for d in desgloses if d["grupo_wip"] == "manufactura"],
+                "ops_analizadas": len(set(row['pr_id'] for row in resultados)),
+                "fecha_corrida": fecha_corrida
+            }
 
         except Exception as e:
             logger.error(f" [WIP-DESGLOSE] ❌ Error: {e}")

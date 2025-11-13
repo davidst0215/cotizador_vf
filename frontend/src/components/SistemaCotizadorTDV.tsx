@@ -41,41 +41,52 @@ interface InputCodigoEstiloProps {
   onBuscar: () => void;
 }
 
-const InputCodigoEstilo = React.memo(({ value, buscandoEstilo, onChange, onBuscar }: InputCodigoEstiloProps) => (
-  <div className="relative">
-    <input
-      type="text"
-      value={value}
-      onChange={(e) => onChange(e.target.value.toUpperCase().trim())}
-      className="w-full p-4 pr-12 border-2 border-gray-200 rounded-xl focus:border-red-500 focus:border-opacity-50 transition-colors"
-      placeholder="ej: LAC001-V25, GRY2024-P01"
-      autoComplete="off"
-      spellCheck={false}
-    />
-    <button
-      type="button"
-      onClick={onBuscar}
-      disabled={buscandoEstilo || value.length < 3}
-      className="absolute right-2 top-3 p-1 rounded-lg hover:bg-red-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-      title={value.length < 3 ? "Ingresa al menos 3 caracteres" : "Buscar estilo"}
-    >
-      {buscandoEstilo ? (
-        <RefreshCw className="h-5 w-5 text-red-500 animate-spin" />
-      ) : (
-        <svg className="h-5 w-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-        </svg>
-      )}
-    </button>
-  </div>
-));
+const InputCodigoEstilo = React.memo(
+  ({ value, buscandoEstilo, onChange, onBuscar }: InputCodigoEstiloProps) => (
+    <div className="relative">
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value.toUpperCase().trim())}
+        className="w-full p-4 pr-12 border-2 border-gray-200 rounded-xl focus:border-red-500 focus:border-opacity-50 transition-colors"
+        placeholder="ej: LAC001-V25, GRY2024-P01"
+        autoComplete="off"
+        spellCheck={false}
+      />
+      <button
+        type="button"
+        onClick={onBuscar}
+        disabled={buscandoEstilo || value.length < 3}
+        className="absolute right-2 top-3 p-1 rounded-lg hover:bg-red-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        title={value.length < 3 ? "Ingresa al menos 3 caracteres" : "Buscar estilo"}
+      >
+        {buscandoEstilo ? (
+          <RefreshCw className="h-5 w-5 text-red-500 animate-spin" />
+        ) : (
+          <svg className="h-5 w-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+        )}
+      </button>
+    </div>
+  ),
+  // Comparación personalizada: solo re-renderizar si cambia el VALUE
+  // Ignora cambios en buscandoEstilo y onBuscar para mantener el foco
+  (prevProps, nextProps) => {
+    return (
+      prevProps.value === nextProps.value &&
+      prevProps.onChange === nextProps.onChange &&
+      prevProps.onBuscar === nextProps.onBuscar
+    );
+  }
+);
 
 // Componente CampoCodigoEstilo completo como React.memo - evita que se remonte en cada keystroke
 interface CampoCodigoEstiloProps {
   value: string;
   buscandoEstilo: boolean;
   estilosEncontrados: any[];
-  esEstiloNuevo: boolean;
+  esEstiloNuevo: boolean | null;
   infoAutoCompletado: any;
   onChange: (valor: string) => void;
   onBuscar: () => void;
@@ -146,15 +157,15 @@ const CampoCodigoEstiloComponent = React.memo(
         </div>
       )}
 
-      {/* Indicador de estado del estilo */}
-      {value && !buscandoEstilo && (
+      {/* Indicador de estado del estilo - Solo muestra después de hacer clic en la lupa */}
+      {value && !buscandoEstilo && esEstiloNuevo !== null && (
         <div className="flex items-center gap-2">
           <div
             className={`text-xs px-2 py-1 rounded-full inline-block text-white ${
-              esEstiloNuevo ? "bg-red-500" : "bg-red-600"
+              esEstiloNuevo ? "bg-red-500" : "bg-green-600"
             }`}
           >
-            {esEstiloNuevo ? "🆕 Estilo Nuevo" : "🔄 Estilo Recurrente"}
+            {esEstiloNuevo ? "🆕 Estilo Nuevo" : "✅ Estilo Recurrente"}
           </div>
 
           {infoAutoCompletado?.info_estilo?.volumen_total && (
@@ -167,7 +178,20 @@ const CampoCodigoEstiloComponent = React.memo(
         </div>
       )}
     </div>
-  )
+  ),
+  // Comparación personalizada: solo re-renderizar si cambios críticos
+  // Ignora cambios en estilosEncontrados e infoAutoCompletado mientras se escribe
+  (prevProps, nextProps) => {
+    return (
+      prevProps.value === nextProps.value &&
+      prevProps.buscandoEstilo === nextProps.buscandoEstilo &&
+      prevProps.onChange === nextProps.onChange &&
+      prevProps.onBuscar === nextProps.onBuscar &&
+      prevProps.onSelectStyle === nextProps.onSelectStyle
+      // NO comparar estilosEncontrados ni infoAutoCompletado
+      // para mantener el foco mientras el usuario escribe
+    );
+  }
 );
 CampoCodigoEstiloComponent.displayName = "CampoCodigoEstiloComponent";
 
@@ -483,7 +507,7 @@ const SistemaCotizadorTDV = () => {
     [],
   );
   const [buscandoEstilo, setBuscandoEstilo] = useState(false);
-  const [esEstiloNuevo, setEsEstiloNuevo] = useState(false);
+  const [esEstiloNuevo, setEsEstiloNuevo] = useState<boolean | null>(null);
 
   const [infoAutoCompletado, setInfoAutoCompletado] =
     useState<AutoCompletadoInfo | null>(null);
@@ -498,6 +522,7 @@ const SistemaCotizadorTDV = () => {
   const tipoDebounceRef = useRef<NodeJS.Timeout | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const opsSelectionTableRef = useRef<OpsSelectionTableRef>(null); // Ref para dispara búsqueda de OPs
+  const formDataRef = useRef<FormData>(formData); // Mantiene formData actualizado sin affecting dependencies
 
   // Memoized validation
   const erroresFormulario = useMemo(() => {
@@ -565,23 +590,44 @@ const SistemaCotizadorTDV = () => {
   }, [debouncedFormData.tipo_prenda, debouncedFormData.version_calculo, esEstiloNuevo]);
 
   // Efecto 4 (removido): Búsqueda debounced de estilos - Ahora se busca con botón manual
-  // Limpieza de búsqueda cuando el código se vacía
+  // Limpieza de búsqueda cuando el código se vacía o es muy corto
+  // Solo muestra estado (nuevo/recurrente) después de hacer click en la lupa
+  // Usa debouncedFormData para evitar re-renders en cada keystroke
   useEffect(() => {
-    if (!formData.codigo_estilo || formData.codigo_estilo.length < 3) {
+    if (!debouncedFormData.codigo_estilo || debouncedFormData.codigo_estilo.length < 3) {
       setEstilosEncontrados([]);
-      setEsEstiloNuevo(true);
+      setEsEstiloNuevo(null); // null = no verificado aún
       setInfoAutoCompletado(null);
     }
-  }, [formData.codigo_estilo]);
+  }, [debouncedFormData.codigo_estilo]);
 
-  // Cargar datos iniciales
+  // Cargar datos iniciales - OPTIMIZADO: Un único request en lugar de 3
   useEffect(() => {
     const cargarDatosIniciales = async () => {
-      await Promise.all([
-        cargarWipsDisponibles(formData.version_calculo),
-        cargarClientesDisponibles(formData.version_calculo),
-        cargarFamiliasProductos(formData.version_calculo),
-      ]);
+      try {
+        const data = await get<{
+          clientes: string[];
+          tipos: string[];
+          wips: Record<string, any>;
+          total_clientes: number;
+          total_tipos: number;
+          total_wips: number;
+        }>("inicializar?version_calculo=FLUIDO");
+
+        // Desempaquetar todos los datos en los estados correspondientes
+        setClientesDisponibles(data.clientes || []);
+        setTiposDisponibles(data.tipos || []);
+        setWipsDisponibles(data.wips || {});
+
+        // console.log(
+        //   `✅ Datos iniciales cargados: ${data.total_clientes} clientes, ${data.total_tipos} tipos, ${data.total_wips} WIPs`
+        // );
+      } catch (error) {
+        // console.error("Error cargando datos iniciales:", error);
+        setClientesDisponibles([]);
+        setTiposDisponibles([]);
+        setWipsDisponibles({});
+      }
     };
     cargarDatosIniciales();
   }, []); // Solo una vez al montar
@@ -598,16 +644,22 @@ const SistemaCotizadorTDV = () => {
     };
   }, []);
 
+  // Actualizar formDataRef cuando cambia formData (sin afectar otros effects)
+  useEffect(() => {
+    formDataRef.current = formData;
+  }, [formData]);
+
   // Debounce formData para evitar pérdida de foco - actualiza debouncedFormData después de 3 segundos sin cambios
+  // Monitorea solo codigo_estilo para reiniciar el timer en cada keystroke sin re-montar el input
   useEffect(() => {
     const timer = setTimeout(() => {
-      setDebouncedFormData(formData);
+      setDebouncedFormData(formDataRef.current);
     }, 3000); // 3 segundos de espera sin escribir
 
     return () => {
       clearTimeout(timer);
     };
-  }, [formData]);
+  }, [formData.codigo_estilo]); // Reinicia timer solo con cambios en codigo_estilo
 
   // ========================================
   // 🔧 FUNCIONES DE CARGA CORREGIDAS
@@ -685,20 +737,21 @@ const SistemaCotizadorTDV = () => {
 
   const cargarFamiliasProductos = useCallback(
     async (versionCalculo: string = "FLUIDO") => {
-      setCargandoFamilias(true);
+      setCargandoTipos(true);
       try {
-        const data = await get<{ familias: any[] }>(
+        const data = await get<{ tipos: any[] }>(
           `tipos-prenda?version_calculo=${encodeURIComponent(versionCalculo)}`,
         );
-        
+
+        setTiposDisponibles(data.tipos || []);
         // console.log(
-        //   `✅ Familias cargadas para ${versionCalculo}: ${data.familias.length}`,
+        //   `✅ Tipos de producto cargados para ${versionCalculo}: ${data.tipos?.length}`,
         // );
       } /*catch (error) {
-        // console.error("Error cargando familias:", error);
-        setFamiliasDisponibles([]);
+        // console.error("Error cargando tipos:", error);
+        setTiposDisponibles([]);
       }*/ finally {
-        setCargandoFamilias(false);
+        setCargandoTipos(false);
       }
     },
     [],

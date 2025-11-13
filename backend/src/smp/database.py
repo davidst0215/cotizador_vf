@@ -38,6 +38,32 @@ except ImportError:
 # Configurar logging estndar
 logger = logging.getLogger(__name__)
 
+# ========================================
+# NORMALIZACION DE VERSION_CALCULO
+# ========================================
+def normalize_version_calculo(version: Optional[str]) -> str:
+    """Normaliza version_calculo: acepta FLUIDO/FLUIDA/truncado y mapea a valor en BD"""
+    if version is None:
+        return "FLUIDA"
+
+    # Convertir a string si es necesario
+    version_str = str(version).upper() if version else "FLUIDA"
+
+    # Convertir "FLUIDO" (del API) a "FLUIDA" (valor en BD)
+    if version_str == "FLUIDO":
+        return "FLUIDA"
+
+    # "FLUIDA" se queda igual
+    if version_str == "FLUIDA":
+        return "FLUIDA"
+
+    # "truncado" en minúsculas se queda igual
+    if version_str.lower() == "truncado":
+        return "truncado"
+
+    # Default
+    return "FLUIDA"
+
 def translate_sql_server_to_postgresql(query: str) -> str:
     """Traduce queries de SQL Server a PostgreSQL"""
     if not query:
@@ -55,25 +81,6 @@ def translate_sql_server_to_postgresql(query: str) -> str:
     # Window functions funcionan igual
 
     return query
-
-def normalize_version_calculo(version: Optional[VersionCalculo]) -> str:
-    """Normaliza el version_calculo al valor que existe en la BD (FLUIDA no FLUIDO)"""
-    if version is None:
-        return "FLUIDA"
-
-    # Obtener el valor real del enum usando .value
-    version_value = version.value if hasattr(version, 'value') else str(version)
-
-    # Convertir "FLUIDO" (del enum/API) a "FLUIDA" (valor en BD)
-    if version_value == "FLUIDO":
-        return "FLUIDA"
-
-    # "FLUIDA" se queda igual
-    if version_value == "FLUIDA":
-        return "FLUIDA"
-
-    # El "truncado" se queda igual (ya viene en minsculas)
-    return version_value
 
 def calculate_mode(values: List[float]) -> Optional[float]:
     """
@@ -346,7 +353,7 @@ class TDVQueries:
             }
 
             if tabla in queries:
-                resultado = await self.db.query(queries[tabla], (normalize_version_calculo(version_calculo),))
+                resultado = await self.db.query(queries[tabla], (version_calculo,))
             else:
                 resultado = None
 
@@ -409,7 +416,7 @@ class TDVQueries:
 
             resultado_ops = await self.db.query(
                 query_ops,
-                (codigo_estilo, normalize_version_calculo(version_calculo), normalize_version_calculo(version_calculo), normalize_version_calculo(version_calculo)),
+                (codigo_estilo, version_calculo, version_calculo, version_calculo),
             )
             total_ops = resultado_ops[0]["total_ops"] if resultado_ops else 0
 
@@ -492,7 +499,7 @@ class TDVQueries:
 
             resultado = await self.db.query(
                 query,
-                (codigo_estilo, normalize_version_calculo(version_calculo), normalize_version_calculo(version_calculo), normalize_version_calculo(version_calculo)),
+                (codigo_estilo, version_calculo, version_calculo, version_calculo),
             )
 
             if resultado:
@@ -551,7 +558,7 @@ class TDVQueries:
 
             resultado_fallback = await self.db.query(
                 query_fallback,
-                (codigo_estilo, normalize_version_calculo(version_calculo), normalize_version_calculo(version_calculo), normalize_version_calculo(version_calculo)),
+                (codigo_estilo, version_calculo, version_calculo, version_calculo),
             )
 
             if resultado_fallback:
@@ -662,7 +669,7 @@ class TDVQueries:
         """
 
         # Normalizar version_calculo (FLUIDA -> FLUIDA)
-        version_normalized = normalize_version_calculo(version_calculo)
+        version_normalized = version_calculo
 
         params = (
             f"{prefijo}%",
@@ -723,66 +730,31 @@ class TDVQueries:
         logger.info(f" Clientes cargados para {version_calculo}: {len(clientes)}")
         return clientes
 
-    async def obtener_tipos_prenda(
-        self,
-        familia: str,
-        version_calculo: str = "FLUIDA",
+    async def obtener_familias_productos(
+        self, version_calculo: str = "FLUIDA"
     ) -> List[str]:
-        """ CORREGIDA: Obtiene tipos de prenda para una familia especfica con fechas relativas"""
-        query = f"""
-        SELECT DISTINCT tipo_de_producto
-        FROM {settings.db_schema}.costo_op_detalle
-        WHERE familia_de_productos = ?
-          AND tipo_de_producto IS NOT NULL
-          AND tipo_de_producto != ''
-          AND version_calculo = ?
-          AND fecha_corrida = (
-          SELECT MAX(fecha_corrida)
-          FROM {settings.db_schema}.costo_op_detalle
-          WHERE version_calculo = ?)
-        AND fecha_facturacion >= (
-          SELECT (MAX(fecha_facturacion) - INTERVAL '24 months')
-          FROM {settings.db_schema}.costo_op_detalle
-          WHERE version_calculo = ?
-        )
-        ORDER BY tipo_de_producto
-        """
+        """CORREGIDA: Obtiene familias de productos disponibles con fechas relativas"""
+        query = f"SELECT DISTINCT familia_de_productos FROM {settings.db_schema}.costo_op_detalle WHERE familia_de_productos IS NOT NULL AND version_calculo = ?"
 
-        resultados = await self.db.query(
-            query, (familia, normalize_version_calculo(version_calculo), normalize_version_calculo(version_calculo), normalize_version_calculo(version_calculo))
-        )
-        tipos = [row["tipo_de_producto"] for row in resultados]
-        logger.info(
-            f" Tipos cargados para {familia} ({version_calculo}): {len(tipos)}"
-        )
-        return tipos
+        resultados = await self.db.query(query, (version_calculo,))
+        familias = [row["familia_de_productos"] for row in resultados]
+        logger.info(f" Familias cargadas para {version_calculo}: {len(familias)}")
+        return familias
 
     async def obtener_todos_tipos_prenda(
-        self,
-        version_calculo: str = "FLUIDA",
+        self, version_calculo: Optional[str] = "FLUIDA"
     ) -> List[str]:
-        """ Obtiene TODOS los tipos de prenda disponibles (sin filtro de familia)"""
+        """Obtiene TODOS los tipos de prenda disponibles (sin filtro de familia)"""
         query = f"""
         SELECT DISTINCT tipo_de_producto
         FROM {settings.db_schema}.costo_op_detalle
         WHERE tipo_de_producto IS NOT NULL
           AND tipo_de_producto != ''
           AND version_calculo = ?
-          AND fecha_corrida = (
-          SELECT MAX(fecha_corrida)
-          FROM {settings.db_schema}.costo_op_detalle
-          WHERE version_calculo = ?)
-        AND fecha_facturacion >= (
-          SELECT (MAX(fecha_facturacion) - INTERVAL '24 months')
-          FROM {settings.db_schema}.costo_op_detalle
-          WHERE version_calculo = ?
-        )
         ORDER BY tipo_de_producto
         """
 
-        resultados = await self.db.query(
-            query, (normalize_version_calculo(version_calculo), normalize_version_calculo(version_calculo), normalize_version_calculo(version_calculo))
-        )
+        resultados = await self.db.query(query, (normalize_version_calculo(version_calculo),))
         tipos = [row["tipo_de_producto"] for row in resultados]
         logger.info(
             f" Todos los tipos de prenda cargados ({version_calculo}): {len(tipos)}"
@@ -938,7 +910,7 @@ class TDVQueries:
         try:
             resultados = await self.db.query(
                 query,
-                (codigo_estilo, normalize_version_calculo(version_calculo), normalize_version_calculo(version_calculo), str(meses), normalize_version_calculo(version_calculo)),
+                (codigo_estilo, version_calculo, version_calculo, str(meses), version_calculo),
             )
 
             if not resultados:
@@ -1104,9 +1076,9 @@ class TDVQueries:
         try:
             resultados = await self.db.query(
                 query,
-                (codigo_estilo, normalize_version_calculo(version_calculo),
-                 normalize_version_calculo(version_calculo), str(meses),
-                 normalize_version_calculo(version_calculo)),
+                (codigo_estilo, version_calculo,
+                 version_calculo, str(meses),
+                 version_calculo),
             )
 
             if not resultados:
@@ -1172,7 +1144,7 @@ class TDVQueries:
             logger.warning(f" [COSTOS-OPS-ESPECIFICAS] No se proporcionaron cod_ordpros")
             return []
 
-        version_norm = normalize_version_calculo(version_calculo)
+        version_norm = version_calculo
 
         # Crear lista de placeholders para los códigos de OP
         placeholders = ','.join(['%s'] * len(cod_ordpros))
@@ -1254,7 +1226,7 @@ class TDVQueries:
             logger.warning(" [WIP-DESGLOSE] No se proporcionaron cod_ordpros")
             return []
 
-        version_norm = normalize_version_calculo(version_calculo)
+        version_norm = version_calculo
 
         try:
             logger.info(f" [WIP-DESGLOSE] Iniciando con {len(cod_ordpros)} OPs: {cod_ordpros}")
@@ -1361,7 +1333,7 @@ class TDVQueries:
             logger.warning(" [COSTOS-PONDERADOS] No se proporcionaron OPs")
             return {}
 
-        version_norm = normalize_version_calculo(version_calculo)
+        version_norm = version_calculo
 
         try:
             logger.info(f" [COSTOS-PONDERADOS] Calculando para {len(cod_ordpros)} OPs: {cod_ordpros}")
@@ -1449,7 +1421,7 @@ class TDVQueries:
         costos_wips = {}
 
         #  QUERY CORREGIDA: marca + filtro prendas >= 200
-        version_norm = normalize_version_calculo(version_calculo)
+        version_norm = version_calculo
 
         query_variabilidad = f"""
         SELECT
@@ -1664,7 +1636,7 @@ class TDVQueries:
         """
 
         # Normalizar version_calculo (FLUIDA -> FLUIDA)
-        version_normalized = normalize_version_calculo(version_calculo)
+        version_normalized = version_calculo
 
         #  QUERY CORREGIDA: marca + filtro prendas >= 200
         query_ruta = f"""
@@ -1778,7 +1750,7 @@ class TDVQueries:
     ) -> Dict[str, float]:
         """ CORRECCIN: Filtra por marca y total_prendas >= 200"""
         costos_wips = {}
-        version_norm = normalize_version_calculo(version_calculo)
+        version_norm = version_calculo
 
         #  WIPs inestables (37, 45): Promedio con marca + filtro prendas >= 200
         query_inestables = f"""
@@ -1875,7 +1847,7 @@ class TDVQueries:
                 )
             else:
                 logger.info(f" Obteniendo WIPs genricos ({version_calculo})")
-                version_norm = normalize_version_calculo(version_calculo)
+                version_norm = version_calculo
 
                 # OPTIMIZACIN: Obtener MAX(fecha_corrida) primero
                 query_max_fecha = f"""
@@ -1976,7 +1948,7 @@ class TDVQueries:
         """
 
         try:
-            version_norm = normalize_version_calculo(version_calculo)
+            version_norm = version_calculo
 
             # OPTIMIZACION: Obtener fechas límite primero (dos queries rápidas)
             query_fechas = f"""
@@ -2187,7 +2159,7 @@ class TDVQueries:
             ORDER BY fecha_facturacion DESC
             """
 
-            version_norm = normalize_version_calculo(version_calculo)
+            version_norm = version_calculo
             params = (
                 marca,
                 tipo_prenda,
@@ -2376,7 +2348,7 @@ class TDVQueries:
 
         try:
             resultado = await self.db.query(
-                query, (normalize_version_calculo(version_calculo), normalize_version_calculo(version_calculo), normalize_version_calculo(version_calculo))
+                query, (version_calculo, version_calculo, version_calculo)
             )
         except Exception as e:
             logger.warning(f" Error en query de gastos genricos: {e}. Usando valores por defecto")
@@ -2421,7 +2393,7 @@ class TDVQueries:
         LIMIT 1
         """
 
-        resultado = await self.db.query(query, (normalize_version_calculo(version_calculo), normalize_version_calculo(version_calculo)))
+        resultado = await self.db.query(query, (version_calculo, version_calculo))
         if resultado:
             registro = resultado[0]
             prendas = (
@@ -2475,7 +2447,7 @@ class TDVQueries:
         """
 
         resultado = await self.db.query(
-            query, (codigo_estilo, normalize_version_calculo(version_calculo), normalize_version_calculo(version_calculo))
+            query, (codigo_estilo, version_calculo, version_calculo)
         )
         volumen = (
             int(resultado[0]["volumen_total"])
@@ -2525,6 +2497,7 @@ class TDVQueries:
         metodo_usado = "sin_datos"
 
         # PASO 1: Intentar por estilo especfico (si es recurrente)
+        # CORREGIDO: Buscar directamente en costo_op_detalle sin requerir historial_estilos
         if codigo_estilo:
             try:
                 # Fechas relativas en lugar de GETDATE()
@@ -2552,17 +2525,8 @@ class TDVQueries:
                   COALESCE(c.gasto_ventas, 0)
                     / NULLIF(c.prendas_requeridas, 0) as gasto_ventas_unit
                 FROM {settings.db_schema}.costo_op_detalle c
-                INNER JOIN {settings.db_schema}.historial_estilos h
-                  ON c.estilo_propio = h.codigo_estilo
-                WHERE h.codigo_estilo = ?
+                WHERE c.estilo_propio = ?
                   AND c.version_calculo = ?
-                  AND c.fecha_corrida = (
-                    SELECT MAX(fecha_corrida)
-                    FROM {settings.db_schema}.costo_op_detalle
-                    WHERE version_calculo = ?)
-                  AND h.fecha_corrida = (
-                    SELECT MAX(fecha_corrida)
-                    FROM {settings.db_schema}.historial_estilos)
                   AND c.fecha_facturacion >= (
                     SELECT (MAX(fecha_facturacion) - INTERVAL '18 months')
                     FROM {settings.db_schema}.costo_op_detalle
@@ -2575,7 +2539,7 @@ class TDVQueries:
 
                 resultados = await self.db.query(
                     query_estilo,
-                    (codigo_estilo, normalize_version_calculo(version_calculo), normalize_version_calculo(version_calculo), normalize_version_calculo(version_calculo)),
+                    (codigo_estilo, version_calculo, version_calculo),
                 )
 
                 if resultados:
@@ -2838,7 +2802,7 @@ class TDVQueries:
 
         resultado_volumen = await self.db.query(
             query_volumen,
-            (familia_producto, tipo_prenda, normalize_version_calculo(version_calculo), normalize_version_calculo(version_calculo)),
+            (familia_producto, tipo_prenda, version_calculo, version_calculo),
         )
         volumen = resultado_volumen[0] if resultado_volumen else {}
 
@@ -2868,7 +2832,7 @@ class TDVQueries:
 
         tendencias = await self.db.query(
             query_tendencias,
-            (familia_producto, tipo_prenda, normalize_version_calculo(version_calculo), normalize_version_calculo(version_calculo)),
+            (familia_producto, tipo_prenda, version_calculo, version_calculo),
         )
 
         # 3. Anlisis competitivo
@@ -2896,7 +2860,7 @@ class TDVQueries:
 
         competitivo = await self.db.query(
             query_competitivo,
-            (familia_producto, tipo_prenda, normalize_version_calculo(version_calculo), normalize_version_calculo(version_calculo)),
+            (familia_producto, tipo_prenda, version_calculo, version_calculo),
         )
 
         info_comercial = {

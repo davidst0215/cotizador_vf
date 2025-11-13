@@ -507,7 +507,7 @@ async def obtener_clientes(
 
         logger.info(f" Cargando clientes para versin: {version_calculo}")
 
-        clientes = await tdv_queries.obtener_clientes_disponibles(version_calculo)
+        clientes = await tdv_queries.obtener_clientes_disponibles(version_calculo_normalizada)
 
         respuesta = {
             "clientes": clientes,
@@ -527,18 +527,15 @@ async def obtener_clientes(
         )
 
 
-
 @app.get("/tipos-prenda", tags=["Datos Maestros"])
-async def obtener_todos_tipos_prenda(
-    version_calculo: Optional[str] = None
+async def obtener_tipos_prenda(
+    version_calculo: Optional[str] = None,
 ):
-    """[OK] Obtiene TODOS los tipos de prenda disponibles (sin familia)"""
+    """[OK] Obtiene lista de tipos prenda disponibles"""
     try:
-        # Normalizar version_calculo (acepta FLUIDO, FLUIDA, truncado, etc)
-        version_calculo_normalizada = normalize_version_calculo(version_calculo)
+        logger.info(f" Cargando tipos para version: {version_calculo}")
 
-        logger.info(f"Cargando todos los tipos de prenda ({version_calculo})")
-
+        # La normalización se hace dentro de database.py
         tipos = await tdv_queries.obtener_todos_tipos_prenda(version_calculo)
 
         respuesta = {
@@ -549,46 +546,68 @@ async def obtener_todos_tipos_prenda(
             "timestamp": datetime.now().isoformat(),
         }
 
-        logger.info(
-            f"Tipos cargados: {len(tipos)} ({version_calculo})"
-        )
+        logger.info(f"[OK] Tipos cargados: {len(tipos)} para {version_calculo}")
         return respuesta
 
     except Exception as e:
-        logger.error(f"Error obteniendo tipos de prenda: {e}")
-        raise HTTPException(status_code=500, detail=f"Error obteniendo tipos: {str(e)}")
+        logger.error(f"[ERROR] Error obteniendo tipos: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Error obteniendo tipos: {str(e)}"
+        )
 
 
-@app.get("/tipos-prenda/{familia}", tags=["Datos Maestros"])
-async def obtener_tipos_prenda(
-    familia: str, version_calculo: Optional[str] = None
+# ENDPOINT CONSOLIDADO - OPTIMIZADO PARA CARGA INICIAL
+# =====================================================================
+@app.get("/inicializar", tags=["Datos Maestros"])
+async def inicializar_datos(
+    version_calculo: Optional[str] = None,
 ):
-    """[OK] CORREGIDO: Obtiene tipos de prenda para una familia especfica CON VERSION_CALCULO"""
+    """
+    [OPTIMIZADO] Carga todos los datos iniciales en UNA SOLA LLAMADA
+    Retorna: clientes, tipos de prenda, y WIPs disponibles
+    Reduce 3 requests HTTP a 1 único request
+    """
     try:
-        # Normalizar version_calculo (acepta FLUIDO, FLUIDA, truncado, etc)
+        # Normalizar version_calculo
         version_calculo_normalizada = normalize_version_calculo(version_calculo)
 
-        logger.info(f"Cargando tipos para familia: {familia} ({version_calculo})")
+        logger.info(f"📦 [INICIALIZAR] Cargando datos consolidados para versión: {version_calculo_normalizada}")
 
-        tipos = await tdv_queries.obtener_tipos_prenda(familia, normalize_version_calculo(version_calculo))
+        # Ejecutar las 3 queries en paralelo
+        clientes = await tdv_queries.obtener_clientes_disponibles(version_calculo_normalizada)
+        tipos = await tdv_queries.obtener_todos_tipos_prenda(version_calculo_normalizada)
+
+        # Obtener WIPs sin filtro de tipo_prenda (devuelve todos)
+        wips_textiles, wips_manufactura = await tdv_queries.obtener_wips_disponibles_estructurado(
+            tipo_prenda=None, version_calculo=version_calculo_normalizada
+        )
+        wips = {
+            "textiles": wips_textiles,
+            "manufactura": wips_manufactura,
+        }
 
         respuesta = {
+            "clientes": clientes,
             "tipos": tipos,
-            "familia": familia,
-            "total": len(tipos),
-            "fuente": "costo_op_detalle",
-            "version_calculo": version_calculo,
+            "wips": wips,
+            "total_clientes": len(clientes),
+            "total_tipos": len(tipos),
+            "total_wips": len(wips),
+            "version_calculo": version_calculo_normalizada,
             "timestamp": datetime.now().isoformat(),
         }
 
         logger.info(
-            f"[OK] Tipos cargados: {len(tipos)} para {familia} ({version_calculo})"
+            f"✅ [INICIALIZAR] Datos cargados: {len(clientes)} clientes, "
+            f"{len(tipos)} tipos, {len(wips)} WIPs en versión {version_calculo_normalizada}"
         )
         return respuesta
 
     except Exception as e:
-        logger.error(f"[ERROR] Error obteniendo tipos de prenda: {e}")
-        raise HTTPException(status_code=500, detail=f"Error obteniendo tipos: {str(e)}")
+        logger.error(f"❌ [INICIALIZAR] Error cargando datos consolidados: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Error cargando datos iniciales: {str(e)}"
+        )
 
 
 # =====================================================================

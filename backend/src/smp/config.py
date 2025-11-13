@@ -222,6 +222,16 @@ class FactoresTDV:
         cls, valor: float, componente: str
     ) -> tuple[float, bool]:
         """Valida y ajusta valor segn rango de seguridad"""
+        # Validar y convertir valor a float si es necesario
+        try:
+            if valor is None:
+                valor = 0.0
+            else:
+                valor = float(valor)
+        except (ValueError, TypeError):
+            # Si no se puede convertir, retornar 0.0
+            return 0.0, False
+
         if componente not in cls.RANGOS_SEGURIDAD:
             return valor, False
 

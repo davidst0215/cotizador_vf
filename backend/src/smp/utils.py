@@ -184,7 +184,7 @@ class CotizadorTDV:
 
         # Validar version_calculo - el validador de Pydantic en models.py ya lo valida
         if not hasattr(input_data, "version_calculo") or not input_data.version_calculo:
-            input_data.version_calculo = VersionCalculo.FLUIDA  # Default
+            input_data.version_calculo = VersionCalculo.FLUIDO  # Default
 
         # Validar categora de lote
         if input_data.categoria_lote not in factores.RANGOS_LOTE:
@@ -714,15 +714,13 @@ class CotizadorTDV:
             f" PROCESANDO estilo NUEVO: {input_data.codigo_estilo} ({input_data.version_calculo})"
         )
 
-        #  VALIDAR QUE TENGA WIPS (REQUERIDO PARA ESTILOS NUEVOS)
-        if (not input_data.wips_textiles or len(input_data.wips_textiles) == 0) and (
-            not input_data.wips_manufactura or len(input_data.wips_manufactura) == 0
-        ):
-            raise ValueError(
-                "Para estilos nuevos se requieren WIPs textiles y/o manufactura seleccionadas"
-            )
+        # NOTA: Validación de WIPs removida - ahora es completamente opcional
+        # Los estilos nuevos pueden procesarse con WIPs seleccionados O sin ellos
+        # Si no hay WIPs, se usarán costos históricos o valores por defecto
 
         #  OBTENER COSTOS WIPS CON ANLISIS INTELIGENTE (CON filtro de marca + prendas >= 200)
+        # Esto se obtiene aunque no haya WIPs seleccionados, para tener referencia
+        costos_wips = []
         try:
             costos_wips = await tdv_queries.obtener_costos_wips_por_estabilidad(
                 input_data.tipo_prenda, input_data.version_calculo, input_data.cliente_marca
@@ -731,10 +729,8 @@ class CotizadorTDV:
                 f" Costos WIPs obtenidos: {len(costos_wips)} WIPs disponibles"
             )
         except Exception as e:
-            logger.error(f" Error obteniendo costos WIPs: {e}")
-            raise ValueError(
-                f"No se pudieron obtener costos de WIPs para {input_data.tipo_prenda}"
-            )
+            logger.warning(f" Advertencia al obtener costos WIPs: {e}")
+            # No es error fatal - continuamos con datos históricos
 
         #  PROCESAR WIPS CON VALIDACIN ROBUSTA
         componentes: List[ComponenteCosto] = []
@@ -1153,7 +1149,13 @@ class CotizadorTDV:
 
             # Esfuerzo: desde input_data si existe, sino usar default 6
             esfuerzo_total = input_data.esfuerzo_total if input_data.esfuerzo_total else 6
-            categoria_esfuerzo, factor_esfuerzo = factores.obtener_factor_esfuerzo(esfuerzo_total)
+            # Desempaqueta correctamente la tupla en dos variables distintas
+            categoria_esfuerzo_str, factor_esfuerzo = factores.obtener_factor_esfuerzo(esfuerzo_total)
+
+            # Opcional: convertir la categoría de string a un valor numérico si lo necesitas para la respuesta
+            # (Basado en el código que parece intentar hacer esto)
+            mapa_esfuerzo = {"Bajo": 5, "Medio": 6, "Alto": 7}
+            categoria_esfuerzo = mapa_esfuerzo.get(categoria_esfuerzo_str, 6)
 
             factor_marca = factores.obtener_factor_marca(input_data.cliente_marca)
 
@@ -1292,7 +1294,7 @@ class CotizadorTDV:
                 ],
                 registros_encontrados=len(costos_ops),
                 precision_estimada=95.0 if len(costos_ops) >= 2 else 90.0,  # Mayor precisión con más OPs
-                version_calculo_usada=input_data.version_calculo or VersionCalculo.FLUIDA,
+                version_calculo_usada=input_data.version_calculo or VersionCalculo.FLUIDO,
                 codigo_estilo=input_data.codigo_estilo,
                 estrategia_costos="promedio_ops_seleccionadas",
                 metadatos_adicionales={

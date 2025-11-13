@@ -47,7 +47,7 @@ export const WipDesgloseTable = React.memo(
       setError(null);
 
       try {
-        const response = await fetch("http://localhost:8000/desglose-wip-ops", {
+        const response = await fetch("http://localhost:8001/desglose-wip-ops", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({

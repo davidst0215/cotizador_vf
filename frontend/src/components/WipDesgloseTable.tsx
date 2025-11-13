@@ -21,7 +21,7 @@ interface WipDesgloseResponse {
   desgloses_total: DesgloseWip[];
 }
 
-interface WipDesgloseTableProps {
+export interface WipDesgloseTableProps {
   codigoEstilo: string;
   versionCalculo: string;
   codOrdpros: string[]; // OPs seleccionadas de OpsSelectionTable
@@ -30,8 +30,14 @@ interface WipDesgloseTableProps {
   onCostosCalculados?: (textilPorPrenda: number, manufacturaPorPrenda: number) => void;
 }
 
-export const WipDesgloseTable = React.memo(
-  ({ codigoEstilo, versionCalculo, codOrdpros, dataFrozen = false, onError, onCostosCalculados }: WipDesgloseTableProps) => {
+const WipDesgloseTableComponent: React.FC<WipDesgloseTableProps> = ({
+  codigoEstilo,
+  versionCalculo,
+  codOrdpros,
+  dataFrozen = false,
+  onError,
+  onCostosCalculados
+}) => {
     const [desgloseData, setDesgloseData] = useState<WipDesgloseResponse | null>(null);
     const [cargando, setCargando] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -295,7 +301,9 @@ export const WipDesgloseTable = React.memo(
         </div>
       </div>
     );
-  }
-);
+};
 
+export const WipDesgloseTable = React.memo(WipDesgloseTableComponent) as React.MemoExoticComponent<
+  React.FC<WipDesgloseTableProps>
+>;
 WipDesgloseTable.displayName = "WipDesgloseTable";

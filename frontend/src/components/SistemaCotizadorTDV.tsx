@@ -35,23 +35,29 @@ const CATEGORIAS_LOTE = {
 // NOTA: InputCodigoEstiloProps removido - no se usa más
 
 // ✨ INPUT HTML PURO - ESTADO LOCAL para evitar pérdida de foco
-const PureInputCodigoEstilo: React.FC<{ value: string; onChange: (valor: string) => void }> = ({
+const PureInputCodigoEstilo: React.FC<{ value?: string; onChange: (valor: string) => void }> = ({
   value: externalValue,
   onChange,
 }) => {
   // Estado local del input - Se actualiza INMEDIATAMENTE sin depender de re-renders del padre
-  const [localValue, setLocalValue] = useState<string>(externalValue);
+  const [localValue, setLocalValue] = useState<string>(externalValue || "");
 
-  // Sincronizar valor externo (ej: después de búsqueda) con estado local
+  // ⚡ SOLO sincronizar cuando viene un valor externo IMPORTANTE (búsqueda exitosa, no estado de botón)
+  // Usar un ref para detectar si el valor externo cambió SIGNIFICATIVAMENTE
+  const prevExternalValueRef = useRef<string>(externalValue || "");
+
   useEffect(() => {
-    console.log(`📍 [PureInputCodigoEstilo] SINCRONIZAR | externalValue="${externalValue}"`);
-    setLocalValue(externalValue);
+    // Solo sincronizar si el valor externo es DIFERENTE y NO VACÍO
+    // Esto evita sincronizar en cada keystroke/re-render
+    if (externalValue && externalValue !== prevExternalValueRef.current) {
+      prevExternalValueRef.current = externalValue;
+      setLocalValue(externalValue);
+    }
   }, [externalValue]);
 
   // ⚡ Handler interno - Sin transformación en keystroke
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
-    console.log(`⌨️ [PureInputCodigoEstilo.handleChange] keystroke | nuevo valor="${newValue}"`);
     // 1. Actualizar estado local INMEDIATAMENTE (el input lo verá al instante)
     setLocalValue(newValue);
     // 2. Reportar al padre (sin transformación)
@@ -80,9 +86,9 @@ const BuscarEstiloButton: React.FC<{
   <button
     type="button"
     onClick={onBuscar}
-    disabled={buscandoEstilo || value.length < 3}
+    disabled={buscandoEstilo || value.length < 5}
     className="mt-2 w-full py-2 px-4 bg-red-700 hover:bg-red-800 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-lg font-semibold transition-colors"
-    title={value.length < 3 ? "Ingresa al menos 3 caracteres" : "Buscar estilo"}
+    title={value.length <5 ? "Ingresa al menos 5 caracteres" : "Buscar estilo"}
   >
     {buscandoEstilo ? (
       <div className="flex items-center justify-center gap-2">
@@ -211,11 +217,6 @@ const CampoCodigoEstiloComponent = React.memo<CampoCodigoEstiloProps>(
     onBuscar,
     onSelectStyle,
   }) => {
-    // 🔍 LOGGING: Detectar si el componente se re-renderiza
-    useEffect(() => {
-      console.log(`🎪 [CampoCodigoEstiloComponent] RE-RENDERIZADO | value="${value}" buscandoEstilo=${buscandoEstilo}`);
-    }, [value, buscandoEstilo]);
-
     return (
       <div className="space-y-2">
         <label className="block text-sm font-semibold text-red-900">Código de estilo propio</label>
@@ -243,19 +244,13 @@ const CampoCodigoEstiloComponent = React.memo<CampoCodigoEstiloProps>(
   },
   // Función de comparación personalizada: solo re-renderizar si cambió algo relevante
   (prevProps: CampoCodigoEstiloProps, nextProps: CampoCodigoEstiloProps) => {
-    const sameValue = prevProps.value === nextProps.value;
-    const sameBuscando = prevProps.buscandoEstilo === nextProps.buscandoEstilo;
-    const sameEstilos = prevProps.estilosEncontrados === nextProps.estilosEncontrados;
-    const sameNuevo = prevProps.esEstiloNuevo === nextProps.esEstiloNuevo;
-    const sameInfo = prevProps.infoAutoCompletado === nextProps.infoAutoCompletado;
-
-    const result = sameValue && sameBuscando && sameEstilos && sameNuevo && sameInfo;
-
-    if (!result) {
-      console.log(`🔍 [CampoCodigoEstilo MEMO] RENDERIZAR | value=${!sameValue} buscandoEstilo=${!sameBuscando} estilos=${!sameEstilos} nuevo=${!sameNuevo} info=${!sameInfo}`);
-    }
-
-    return result;
+    return (
+      prevProps.value === nextProps.value &&
+      prevProps.buscandoEstilo === nextProps.buscandoEstilo &&
+      prevProps.estilosEncontrados === nextProps.estilosEncontrados &&
+      prevProps.esEstiloNuevo === nextProps.esEstiloNuevo &&
+      prevProps.infoAutoCompletado === nextProps.infoAutoCompletado
+    );
   }
 );
 
@@ -593,7 +588,6 @@ const SistemaCotizadorTDV = () => {
 
   // Memoized validation
   const erroresFormulario = useMemo(() => {
-    console.log(`✅ [erroresFormulario] RECALCULADO | codigoEstiloLocal="${codigoEstiloLocalRef.current}"`);
     const errores = [];
 
     if (!formData.cliente_marca) errores.push("Cliente/Marca es requerido");
@@ -627,11 +621,15 @@ const SistemaCotizadorTDV = () => {
   // Esto evita re-renders del padre en cada keystroke
   const handleCodigoEstiloChange = useCallback(
     (valor: string) => {
-      console.log(`🎯 [handleCodigoEstiloChange] EJECUTADO | valor="${valor}"`);
       // ⚡ USAR REF EN LUGAR DE ESTADO - Esto evita re-renders del padre
       codigoEstiloLocalRef.current = valor;
       inputSyncedRef.current = false; // Marcar como no sincronizado
-      // No llamar a setCodigoEstiloLocal() para evitar re-render del padre
+
+      // ✅ Forzar un render MÍNIMO cuando el usuario escriba 5+ caracteres (para activar/mantener botón)
+      // o cuando está vacío (para desactivar botón)
+      if (valor.length >= 5 || valor.length === 0) {
+        setCodigoEstiloForceRender(valor);
+      }
     },
     [],  // Sin dependencias - nunca cambia
   );
@@ -834,7 +832,7 @@ const SistemaCotizadorTDV = () => {
         abortControllerRef.current.abort();
       }
 
-      if (!codigoEstilo || codigoEstilo.length < 3) {
+      if (!codigoEstilo || codigoEstilo.length < 5) {
         setEstilosEncontrados([]);
         setEsEstiloNuevo(true);
         setInfoAutoCompletado(null);
@@ -931,9 +929,7 @@ const SistemaCotizadorTDV = () => {
   // ⚡ Handler para buscar estilo manualmente - SINCRONIZA ref local con formData
   const onBuscarEstilo = useCallback(() => {
     const codigoActual = codigoEstiloLocalRef.current.toUpperCase();  // ✅ Transformar aquí
-    console.log(`🔍 [onBuscarEstilo] EJECUTADO | codigoEstiloLocal="${codigoActual}"`);
-    if (codigoActual && codigoActual.length >= 3) {
-      console.log(`🚀 [onBuscarEstilo] Buscando | buscando="${codigoActual}"`);
+    if (codigoActual && codigoActual.length >= 5) {
       // Marcar como sincronizado para evitar efectos secundarios
       inputSyncedRef.current = true;
 
@@ -1570,7 +1566,7 @@ const SistemaCotizadorTDV = () => {
             />
 
             <CampoCodigoEstiloComponent
-              value={codigoEstiloLocalRef.current}
+              value={codigoEstiloForceRender || codigoEstiloLocalRef.current}
               buscandoEstilo={buscandoEstilo}
               estilosEncontrados={estilosEncontrados}
               esEstiloNuevo={esEstiloNuevo}

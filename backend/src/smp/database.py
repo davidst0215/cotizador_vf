@@ -1,3 +1,4 @@
+
 """
 =====================================================================
 CONEXIN BASE DE DATOS Y QUERIES - BACKEND TDV COTIZADOR - COMPLETAMENTE CORREGIDO
@@ -566,8 +567,8 @@ class TDVQueries:
                 volumen_total = int(info["volumen_total"])
                 total_ops = int(info["total_ops"])
 
-                #  Solo considerar vlido si tiene mltiples OPs
-                if total_ops >= 2:
+                #  Solo considerar vlido si tiene al menos 1 OP
+                if total_ops >= 1:
                     return {
                         "codigo_estilo": info["codigo_estilo"],
                         "familia_producto": info["familia_de_productos"],
@@ -1069,7 +1070,8 @@ class TDVQueries:
               AND c.fecha_corrida = (
                 SELECT MAX(fecha_corrida)
                 FROM {settings.db_schema}.costo_op_detalle
-                WHERE version_calculo = %s)
+                WHERE version_calculo = %s
+                AND estilo_propio::text = %s)
               AND c.prendas_requeridas >= 200
               AND c.fecha_facturacion >= (
                 SELECT (MAX(fecha_facturacion) - (%s || ' months')::INTERVAL)
@@ -1082,7 +1084,7 @@ class TDVQueries:
             resultados = await self.db.query(
                 query_strict,
                 (codigo_estilo, version_calculo,
-                 version_calculo, str(meses),
+                 version_calculo, codigo_estilo, str(meses),
                  version_calculo),
             )
 
@@ -1110,7 +1112,8 @@ class TDVQueries:
                   AND c.fecha_corrida = (
                     SELECT MAX(fecha_corrida)
                     FROM {settings.db_schema}.costo_op_detalle
-                    WHERE version_calculo = %s)
+                    WHERE version_calculo = %s
+                    AND estilo_propio::text = %s)
                   AND c.fecha_facturacion >= (
                     SELECT (MAX(fecha_facturacion) - (%s || ' months')::INTERVAL)
                     FROM {settings.db_schema}.costo_op_detalle
@@ -1122,7 +1125,7 @@ class TDVQueries:
                 resultados = await self.db.query(
                     query_flexible,
                     (codigo_estilo, version_calculo,
-                     version_calculo, str(meses),
+                     version_calculo, codigo_estilo, str(meses),
                      version_calculo),
                 )
 

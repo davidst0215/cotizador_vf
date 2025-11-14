@@ -5,11 +5,9 @@
   "framework": "nextjs",
   "outputDirectory": ".next",
   "public": false,
-  "env": [
-    {
-      "key": "NEXT_PUBLIC_API_URL",
-      "description": "URL del backend API",
-      "value": "@api_url_production"
+  "env": {
+    "NEXT_PUBLIC_API_URL": {
+      "description": "URL del backend API"
     }
-  ]
+  }
 }

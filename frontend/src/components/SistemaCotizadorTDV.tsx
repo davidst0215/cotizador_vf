@@ -519,18 +519,9 @@ const SistemaCotizadorTDV = () => {
     const [tiposDisponibles, setTiposDisponibles] = useState<string[]>([]);
   const [cargandoTipos, setCargandoTipos] = useState(false);
 
-  // Estados para OPs reales
-  const [_opsReales, _setOpsReales] = useState<OpsResponse | null>(null);
-  const [_cargandoOps, _setCargandoOps] = useState(false);
-  const [_errorOps, _setErrorOps] = useState<string | null>(null);
-
   // Estado para OPs seleccionadas en la tabla interactiva
   const [selectedOpsCode, setSelectedOpsCode] = useState<string[]>([]);
   const [selectedOpsData, setSelectedOpsData] = useState<any[]>([]); // ✨ Guardar datos completos de las OPs
-
-  // ✨ CONGELACIÓN DE DATOS: Una vez que se seleccionan OPs y se genera cotización, TODO se congela
-  const [_dataFrozen, _setDataFrozen] = useState(false);
-  const _frozenOpsRef = useRef<string[]>([]);
   const formDataRef = useRef<FormData | null>(null); // ✨ Mantiene formData actual sin affecting dependencies
   const wipDesgloseTableRef = useRef<WipDesgloseTableRef>(null); // ✨ Ref para acceder a WIPs seleccionados
   const selectedWipsRef = useRef<string[]>([]); // ✨ Mantener WIPs seleccionados en ref para persistencia visual
@@ -749,8 +740,8 @@ const SistemaCotizadorTDV = () => {
 
   // Callback memoizado para OpsSelectionTable - evita re-renders innecesarios
   const handleOpsSelectionError = useCallback(
-    (error: string) => {
-      _setErrorOps(error);
+    (_error: string) => {
+      // Error handling for Ops selection is handled in the parent component
     },
     []
   );
@@ -1047,9 +1038,6 @@ const SistemaCotizadorTDV = () => {
   // cargarOpsReales (POST)
   const cargarOpsReales = useCallback(
     async (cotizacion: ResultadoCotizacion) => {
-      _setCargandoOps(true);
-      _setErrorOps(null);
-
       try {
         const payload = {
           cliente_marca: cotizacion.inputs.cliente_marca,
@@ -1064,21 +1052,16 @@ const SistemaCotizadorTDV = () => {
           wips_manufactura: null,
         };
 
-        const resultado = await post<any>(
+        const _resultado = await post<any>(
           "/ops-utilizadas-cotizacion",
           payload,
         );
-        _setOpsReales(resultado);
         // console.log(
         //   `✅ OPs reales cargadas: ${resultado.total_ops_encontradas}`,
         // );
-      } catch (error: any) {
+      } catch (_error: any) {
         // console.error("Error cargando OPs reales:", error);
-        _setErrorOps(
-          error?.message || "Error de conexión al cargar OPs de referencia",
-        );
-      } finally {
-        _setCargandoOps(false);
+        // Error handling for ops is handled in the parent component
       }
     },
     [],
@@ -1846,83 +1829,6 @@ const SistemaCotizadorTDV = () => {
   // ========================================
 
   const PantallaResultados = React.memo(() => {
-    // Memoized componentesAgrupados
-    const _componentesAgrupados = useMemo(() => {
-      if (!cotizacionActual) return []; // Safe: inside callback, not hook
-
-      // Usar costos del WIP si están disponibles, sino usar los del backend
-      const costoTextil = costosWipCalculados.textil_por_prenda ?? cotizacionActual.costo_textil;
-      const costoManufactura = costosWipCalculados.manufactura_por_prenda ?? cotizacionActual.costo_manufactura;
-
-      return [
-        {
-          nombre: "Costo Textil",
-          costo_unitario: costoTextil,
-          fuente: costosWipCalculados.textil_por_prenda ? "wip" : "historico",
-          badge: costosWipCalculados.textil_por_prenda
-            ? `${selectedOpsCode.length} OPs seleccionadas`
-            : esEstiloNuevo
-            ? `${wipsTextiles?.length || 0} WIPs`
-            : "histórico",
-          es_agrupado: false,
-        },
-        {
-          nombre: "Costo Manufactura",
-          costo_unitario: costoManufactura,
-          fuente: costosWipCalculados.manufactura_por_prenda ? "wip" : "historico",
-          badge: costosWipCalculados.manufactura_por_prenda
-            ? `${selectedOpsCode.length} OPs seleccionadas`
-            : esEstiloNuevo
-            ? `${wipsManufactura?.length || 0} WIPs`
-            : "histórico",
-          es_agrupado: false,
-        },
-        {
-          nombre: "Costo Materia Prima",
-          costo_unitario: cotizacionActual.costo_materia_prima,
-          fuente: "ultimo_costo",
-          badge: "último costo",
-          es_agrupado: false,
-        },
-        {
-          nombre: "Costo Avíos",
-          costo_unitario: cotizacionActual.costo_avios,
-          fuente: "ultimo_costo",
-          badge: "último costo",
-          es_agrupado: false,
-        },
-        {
-          nombre: "Costo Indirecto Fijo",
-          costo_unitario: cotizacionActual.costo_indirecto_fijo,
-          fuente: "formula",
-          badge: "fórmula",
-          es_agrupado: false,
-        },
-        {
-          nombre: "Gasto Administración",
-          costo_unitario: cotizacionActual.gasto_administracion,
-          fuente: "formula",
-          badge: "fórmula",
-          es_agrupado: false,
-        },
-        {
-          nombre: "Gasto Ventas",
-          costo_unitario: cotizacionActual.gasto_ventas,
-          fuente: "formula",
-          badge: "fórmula",
-          es_agrupado: false,
-        },
-      ];
-    }, [
-      cotizacionActual,
-      esEstiloNuevo,
-      wipsTextiles.length,
-      wipsManufactura.length,
-      costosWipCalculados.textil_por_prenda,
-      costosWipCalculados.manufactura_por_prenda,
-      selectedOpsCode.length,
-    ]);
-
     // Early return after hooks (safe)
     if (!cotizacionActual) {
       return (

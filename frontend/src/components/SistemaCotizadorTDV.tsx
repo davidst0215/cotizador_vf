@@ -750,7 +750,7 @@ const SistemaCotizadorTDV = () => {
   // Callback memoizado para OpsSelectionTable - evita re-renders innecesarios
   const handleOpsSelectionError = useCallback(
     (error: string) => {
-      setErrorOps(error);
+      _setErrorOps(error);
     },
     []
   );
@@ -1047,8 +1047,8 @@ const SistemaCotizadorTDV = () => {
   // cargarOpsReales (POST)
   const cargarOpsReales = useCallback(
     async (cotizacion: ResultadoCotizacion) => {
-      setCargandoOps(true);
-      setErrorOps(null);
+      _setCargandoOps(true);
+      _setErrorOps(null);
 
       try {
         const payload = {
@@ -1068,17 +1068,17 @@ const SistemaCotizadorTDV = () => {
           "/ops-utilizadas-cotizacion",
           payload,
         );
-        setOpsReales(resultado);
+        _setOpsReales(resultado);
         // console.log(
         //   `✅ OPs reales cargadas: ${resultado.total_ops_encontradas}`,
         // );
       } catch (error: any) {
         // console.error("Error cargando OPs reales:", error);
-        setErrorOps(
+        _setErrorOps(
           error?.message || "Error de conexión al cargar OPs de referencia",
         );
       } finally {
-        setCargandoOps(false);
+        _setCargandoOps(false);
       }
     },
     [],

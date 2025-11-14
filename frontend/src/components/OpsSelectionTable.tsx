@@ -1,10 +1,22 @@
 "use client";
 
-import React, { useState, useCallback, useMemo, forwardRef, useRef } from "react";
-import { useImperativeHandle } from "react";
-import { ChevronDown, ChevronUp, CheckSquare, Square } from "lucide-react";
+import React, { useState, useCallback, useEffect } from "react";
+import { ChevronDown, ChevronUp } from "lucide-react";
 
-// Interface para una OP individual
+// Rangos de categorías de lote
+const CATEGORIAS_LOTE_RANGOS: Record<string, string> = {
+  "Micro Lote": "1-50",
+  "Lote Pequeo": "51-500",
+  "Lote Mediano": "501-1000",
+  "Lote Grande": "1001-4000",
+  "Lote Masivo": "4001+",
+};
+
+// Mapeo para mostrar nombres correctos (BD puede tener valores sin ñ)
+const CATEGORIAS_LOTE_NOMBRES: Record<string, string> = {
+  "Lote Pequeo": "Lote Pequeño",
+};
+
 interface OP {
   cod_ordpro: string;
   textil_unitario: number;
@@ -22,7 +34,6 @@ interface OP {
   seleccionado: boolean;
 }
 
-// Interface para la respuesta de OPs
 interface OpsResponse {
   codigo_estilo: string;
   version_calculo: string;
@@ -34,83 +45,66 @@ interface OpsResponse {
 interface OpsSelectionTableProps {
   codigoEstilo: string;
   versionCalculo: string;
-  onOpsSelected: (opsSeleccionadas: OP[]) => Promise<void>;
+  marca: string;
+  tipoPrenda: string;
+  onOpsSelected: (ops: OP[]) => void; // Solo pasa OPs seleccionadas, sin calcular
   onError?: (error: string) => void;
-  opsSeleccionadasPrevia?: string[]; // Mantener selección anterior
-  marca: string; // Para búsqueda alternativa por marca + tipo_prenda (REQUERIDO)
-  tipoPrenda: string; // Para búsqueda alternativa por marca + tipo_prenda (REQUERIDO)
+  opsPreseleccionadas?: string[]; // ✨ OPs que ya fueron seleccionadas
 }
 
-export interface OpsSelectionTableRef {
-  iniciarBusqueda: () => void;
-  iniciarBusquedaPorMarca: (marca: string, tipoPrenda: string) => void;
-}
-
-type SortField = "cod_ordpro" | "textil_unitario" | "manufactura_unitario" | "prendas_requeridas" | "fecha_facturacion";
+type SortField = "cod_ordpro" | "prendas_requeridas" | "fecha_facturacion";
 type SortDirection = "asc" | "desc";
 
-export const OpsSelectionTable = forwardRef<OpsSelectionTableRef, OpsSelectionTableProps>(
-  ({ codigoEstilo, versionCalculo, onOpsSelected, onError, opsSeleccionadasPrevia, marca, tipoPrenda }, ref) => {
-    const [opsData, setOpsData] = useState<OP[]>([]);
-    const [cargando, setCargando] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const [sortField, setSortField] = useState<SortField>("fecha_facturacion");
-    const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
-    const [selectedOps, setSelectedOps] = useState<Set<string>>(new Set());
-    const [filtrosCategoriaLote, setFiltrosCategoriaLote] = useState<Set<string>>(new Set()); // Filtros post-búsqueda
+export const OpsSelectionTable: React.FC<OpsSelectionTableProps> = ({
+  codigoEstilo,
+  versionCalculo,
+  marca,
+  tipoPrenda,
+  onOpsSelected,
+  onError,
+  opsPreseleccionadas = [],
+}) => {
+  const [opsData, setOpsData] = useState<OP[]>([]);
+  const [cargando, setCargando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedOps, setSelectedOps] = useState<Set<string>>(new Set(opsPreseleccionadas)); // ✨ Usar preseleccionadas
+  const [sortField, setSortField] = useState<SortField>("fecha_facturacion");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [filtroLoteSeleccionado, setFiltroLoteSeleccionado] = useState<Set<string>>(new Set()); // ✨ Filtro por checkboxes
 
-    // Cargar OPs detalladas - el endpoint maneja fallback automáticamente
-    // ⚠️ IMPORTANTE: Solo carga si opsData está vacío para evitar recargar después de cotizar
-    const cargarOpsDetalladas = useCallback(async (forceReload: boolean = false) => {
-      // ✨ LÓGICA SIMPLE: Si ya hay OPs cargadas, NUNCA resetear
-      if (opsData.length > 0 && !forceReload) {
-        console.log("✅ OPs ya cargadas - conservando estado actual");
-        return;
-      }
+  // Sincronizar selectedOps cuando opsPreseleccionadas cambia
+  useEffect(() => {
+    if (opsPreseleccionadas.length > 0) {
+      setSelectedOps(new Set(opsPreseleccionadas));
+    }
+  }, [opsPreseleccionadas]);
 
-      console.log("📋 cargarOpsDetalladas iniciada");
-      console.log("  - codigoEstilo:", codigoEstilo);
-      console.log("  - marca:", marca);
-      console.log("  - tipoPrenda:", tipoPrenda);
-      console.log("  - versionCalculo:", versionCalculo);
+  // Cargar OPs una sola vez cuando el componente se monta
+  useEffect(() => {
+    if (!codigoEstilo || !versionCalculo) return;
 
+    const cargarOps = async () => {
       setCargando(true);
       setError(null);
 
       try {
-        // Construir URL con fallback integrado en el backend
         const params = new URLSearchParams({
           version_calculo: versionCalculo,
+          marca,
+          tipo_prenda: tipoPrenda,
         });
 
-        // Pasar marca y tipo_prenda para fallback
-        if (marca) params.append("marca", marca);
-        if (tipoPrenda) params.append("tipo_prenda", tipoPrenda);
-
         const url = `http://localhost:8000/obtener-ops-detalladas/${codigoEstilo}?${params.toString()}`;
-        console.log("🔗 URL de OPs:", url);
-
         const response = await fetch(url);
-        console.log("📦 Response status:", response.status);
 
         if (!response.ok) {
           throw new Error(`Error ${response.status}: No se pudieron cargar las OPs`);
         }
 
         const data: OpsResponse = await response.json();
-        console.log("✅ Datos recibidos:", data);
-        console.log("📊 Cantidad de OPs:", data.ops.length);
-        console.log("🔍 es_estilo_nuevo:", data.es_estilo_nuevo);
-
-        if (data.ops.length === 0) {
-          console.log("ℹ️ Estilo nuevo - no hay OPs previas");
-          setError(null);
-          setOpsData([]);
-          setSelectedOps(new Set());
-        } else {
-          // Inicializar OPs - seleccionar todas por defecto
-          console.log("✨ Guardando OPs en estado:", data.ops);
-          setOpsData(data.ops);
+        setOpsData(data.ops || []);
+        // Si no hay preseleccionadas, seleccionar todas por defecto
+        if (opsPreseleccionadas.length === 0) {
           setSelectedOps(new Set(data.ops.map((op) => op.cod_ordpro)));
         }
       } catch (err) {
@@ -120,338 +114,198 @@ export const OpsSelectionTable = forwardRef<OpsSelectionTableRef, OpsSelectionTa
       } finally {
         setCargando(false);
       }
-    }, [codigoEstilo, versionCalculo, marca, tipoPrenda, onError]);
-
-    // Exponer métodos imperativos al componente padre
-    useImperativeHandle(ref, () => ({
-      iniciarBusqueda: () => {
-        console.log("🔄 OpsSelectionTable: iniciarBusqueda llamado desde padre");
-        cargarOpsDetalladas();
-      },
-      iniciarBusquedaPorMarca: (m: string, t: string) => {
-        console.log(`🔄 OpsSelectionTable: iniciarBusquedaPorMarca llamado: ${m}/${t}`);
-        // Ya no necesario - el endpoint maneja fallback automáticamente
-      },
-    }), [cargarOpsDetalladas]);
-
-    // Restaurar selección anterior cuando opsSeleccionadasPrevia cambia
-    React.useEffect(() => {
-      if (opsSeleccionadasPrevia && opsSeleccionadasPrevia.length > 0 && opsData.length > 0) {
-        // Solo actualizar si las OPs cargadas contienen las OPs de la selección previa
-        const opsValidas = opsSeleccionadasPrevia.filter(opCode =>
-          opsData.some(op => op.cod_ordpro === opCode)
-        );
-        if (opsValidas.length > 0) {
-          setSelectedOps(new Set(opsValidas));
-          console.log("✅ Restaurada selección anterior de OPs:", opsValidas);
-        }
-      }
-    }, [opsSeleccionadasPrevia, opsData]);
-
-    // Ordenar OPs
-    const sortedOps = useMemo(() => {
-      const sorted = [...opsData].sort((a, b) => {
-        let aVal: any = a[sortField];
-        let bVal: any = b[sortField];
-
-        // Manejar valores numéricos vs. strings
-        if (typeof aVal === "number" && typeof bVal === "number") {
-          return sortDirection === "asc" ? aVal - bVal : bVal - aVal;
-        } else {
-          aVal = String(aVal);
-          bVal = String(bVal);
-          return sortDirection === "asc" ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
-        }
-      });
-      return sorted;
-    }, [opsData, sortField, sortDirection]);
-
-    // Obtener categorías únicas para filtros
-    const categoriasUnicas = useMemo(() => {
-      return Array.from(new Set(opsData.map(op => op.categoria_lote))).sort();
-    }, [opsData]);
-
-    // Aplicar filtro de categoría lote (post-búsqueda)
-    const opsFiltradasPorCategoria = useMemo(() => {
-      if (filtrosCategoriaLote.size === 0) return sortedOps; // Sin filtros, mostrar todas
-      return sortedOps.filter(op => filtrosCategoriaLote.has(op.categoria_lote));
-    }, [sortedOps, filtrosCategoriaLote]);
-
-    // Toggle selección de una OP
-    const toggleOp = useCallback((codOrdpro: string) => {
-      setSelectedOps((prev) => {
-        const newSet = new Set(prev);
-        if (newSet.has(codOrdpro)) {
-          newSet.delete(codOrdpro);
-        } else {
-          newSet.add(codOrdpro);
-        }
-        return newSet;
-      });
-    }, []);
-
-    // Toggle seleccionar todas (sobre el universo de OPs filtradas)
-    const toggleSelectAll = useCallback(() => {
-      const opsATratar = filtrosCategoriaLote.size === 0 ? opsData : opsFiltradasPorCategoria;
-      if (selectedOps.size === opsATratar.length) {
-        setSelectedOps(new Set());
-      } else {
-        setSelectedOps(new Set(opsATratar.map((op) => op.cod_ordpro)));
-      }
-    }, [opsData, opsFiltradasPorCategoria, selectedOps.size, filtrosCategoriaLote.size]);
-
-    // Manejar cambio de sorting
-    const handleSort = (field: SortField) => {
-      if (sortField === field) {
-        setSortDirection(sortDirection === "asc" ? "desc" : "asc");
-      } else {
-        setSortField(field);
-        setSortDirection("asc");
-      }
     };
 
-    // Obtener OPs seleccionadas
-    const opsSeleccionadas = useMemo(
-      () => opsData.filter((op) => selectedOps.has(op.cod_ordpro)),
-      [opsData, selectedOps]
-    );
+    cargarOps();
+  }, [codigoEstilo, versionCalculo, marca, tipoPrenda, onError, opsPreseleccionadas]);
 
-    // Manejar recálculo de promedios
-    const handleRecalcular = useCallback(async () => {
-      if (opsSeleccionadas.length === 0) {
-        setError("Debes seleccionar al menos una OP");
-        return;
+  const toggleSelection = useCallback((codOrdpro: string) => {
+    setSelectedOps((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(codOrdpro)) {
+        newSet.delete(codOrdpro);
+      } else {
+        newSet.add(codOrdpro);
       }
+      return newSet;
+    });
+  }, []);
 
-      try {
-        await onOpsSelected(opsSeleccionadas);
-      } catch (err) {
-        const errorMsg = err instanceof Error ? err.message : "Error recalculando promedios";
-        setError(errorMsg);
-        if (onError) onError(errorMsg);
+  // ✨ Filtrar OPs según las categorías de lote seleccionadas
+  const opsFiltradasPorLote = filtroLoteSeleccionado.size === 0
+    ? opsData
+    : opsData.filter((op) => filtroLoteSeleccionado.has(op.categoria_lote));
+
+  // ✨ Obtener categorías únicas para el filtro
+  const categoriasLoteUnicas = Array.from(new Set(opsData.map((op) => op.categoria_lote))).sort();
+
+  // ✨ Toggle checkbox de categoría de lote
+  const toggleFiltroLote = useCallback((categoria: string) => {
+    setFiltroLoteSeleccionado((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(categoria)) {
+        newSet.delete(categoria);
+      } else {
+        newSet.add(categoria);
       }
-    }, [opsSeleccionadas, onOpsSelected, onError]);
+      return newSet;
+    });
+  }, []);
 
-    // Renderizar encabezado de columna con sort
-    const SortHeader = ({ field, label }: { field: SortField; label: string }) => (
-      <th
-        onClick={() => handleSort(field)}
-        className="px-4 py-3 text-left text-sm font-semibold text-gray-700 cursor-pointer hover:bg-gray-200 transition-colors"
-      >
-        <div className="flex items-center gap-2">
-          {label}
-          {sortField === field && (
-            sortDirection === "asc" ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />
-          )}
-        </div>
-      </th>
-    );
+  const toggleSelectAll = useCallback(() => {
+    if (selectedOps.size === opsFiltradasPorLote.length) {
+      setSelectedOps(new Set());
+    } else {
+      setSelectedOps(new Set(opsFiltradasPorLote.map((op) => op.cod_ordpro)));
+    }
+  }, [opsFiltradasPorLote, selectedOps.size]);
 
-    if (cargando) {
-      return (
-        <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-500 mr-3"></div>
-          <span className="text-lg text-gray-600">Cargando OPs detalladas...</span>
-        </div>
-      );
+  const sortedOps = [...opsFiltradasPorLote].sort((a, b) => {
+    const aVal = a[sortField];
+    const bVal = b[sortField];
+
+    if (typeof aVal === "string") {
+      return sortDirection === "asc" ? aVal.localeCompare(bVal as string) : (bVal as string).localeCompare(aVal);
     }
 
-    if (error) {
-      return (
-        <div className="p-6 bg-red-50 border-2 border-red-200 rounded-xl">
-          <p className="text-red-800 font-semibold mb-3">⚠️ {error}</p>
+    const diff = (aVal as number) - (bVal as number);
+    return sortDirection === "asc" ? diff : -diff;
+  });
+
+  // Botón: Setear OPs Seleccionadas (SIN CALCULAR)
+  const handleSetearOps = useCallback(() => {
+    const selected = opsData.filter((op) => selectedOps.has(op.cod_ordpro));
+    onOpsSelected(selected);
+  }, [opsData, selectedOps, onOpsSelected]);
+
+  if (cargando) {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-red-500 mr-2"></div>
+        <span className="text-sm text-gray-600">Cargando OPs...</span>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+        <p className="text-sm text-red-700">{error}</p>
+      </div>
+    );
+  }
+
+  if (opsData.length === 0) {
+    return <div className="p-4 text-gray-500">No hay OPs disponibles</div>;
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-semibold text-gray-700">
+            {opsFiltradasPorLote.length} OPs disponibles • {selectedOps.size} seleccionadas
+          </h3>
+        </div>
+
+        {/* ✨ FILTRO POR CATEGORÍA DE LOTE CON CHECKBOXES */}
+        <div className="mb-4 space-y-2">
+          <label className="text-sm font-semibold text-gray-600">Filtrar por Tamaño de Lote:</label>
+          <div className="flex flex-wrap gap-3">
+            {categoriasLoteUnicas.map((categoria) => (
+              <label key={categoria} className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={filtroLoteSeleccionado.has(categoria)}
+                  onChange={() => toggleFiltroLote(categoria)}
+                  className="w-4 h-4 text-blue-600 rounded cursor-pointer"
+                />
+                <span className="text-sm text-gray-700">
+                  {CATEGORIAS_LOTE_NOMBRES[categoria] || categoria} ({CATEGORIAS_LOTE_RANGOS[categoria] || "N/A"})
+                </span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div className="mb-4 flex justify-end">
           <button
-            onClick={() => cargarOpsDetalladas(true)}
-            className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+            onClick={toggleSelectAll}
+            className="text-xs px-3 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
           >
-            Reintentar
+            {selectedOps.size === opsFiltradasPorLote.length ? "Desseleccionar todas" : "Seleccionar todas"}
           </button>
         </div>
-      );
-    }
 
-    if (opsData.length === 0) {
-      return (
-        <div className="p-6 bg-yellow-50 border-2 border-yellow-200 rounded-xl text-center">
-          <p className="text-yellow-800 font-semibold">
-            No hay OPs disponibles para este estilo. Será tratado como un estilo nuevo.
-          </p>
-        </div>
-      );
-    }
-
-    return (
-      <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
-        {/* Encabezado */}
-        <div className="p-6 border-b border-gray-100 bg-red-800">
-          <div className="flex justify-between items-center mb-3">
-            <h3 className="text-xl font-bold text-white">OPs de Referencia - Tabla Interactiva</h3>
-            <span className="text-white/80 text-sm">
-              {selectedOps.size} de {opsFiltradasPorCategoria.length} seleccionadas
-            </span>
-          </div>
-          <p className="text-white/80 text-sm">
-            Selecciona las OPs que deseas usar para calcular los promedios de costos
-          </p>
-        </div>
-
-        {/* Filtros de Categoría Lote */}
-        {categoriasUnicas.length > 0 && (
-          <div className="p-4 border-b border-gray-200 bg-gray-50">
-            <h4 className="font-semibold text-sm text-gray-700 mb-3">Filtrar por Categoría de Lote:</h4>
-            <div className="flex flex-wrap gap-3">
-              {categoriasUnicas.map((categoria) => (
-                <label key={categoria} className="flex items-center gap-2 cursor-pointer hover:bg-white hover:px-2 hover:py-1 hover:rounded transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={filtrosCategoriaLote.has(categoria)}
-                    onChange={(e) => {
-                      setFiltrosCategoriaLote((prev) => {
-                        const newSet = new Set(prev);
-                        if (e.target.checked) {
-                          newSet.add(categoria);
-                        } else {
-                          newSet.delete(categoria);
-                        }
-                        return newSet;
-                      });
-                    }}
-                    className="rounded cursor-pointer w-4 h-4"
-                  />
-                  <span className="text-sm text-gray-700">{categoria}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Tabla */}
-        <div className="overflow-x-auto overflow-y-auto max-h-96 border-b border-gray-200">
-          <table className="w-full">
+        <div className="overflow-x-auto overflow-y-auto max-h-96 border border-gray-200 rounded">
+          <table className="w-full text-sm">
             <thead>
-              <tr className="bg-gray-100 border-b border-gray-200">
-                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 w-12">
-                  <button
-                    onClick={toggleSelectAll}
-                    className="flex items-center justify-center w-6 h-6 rounded hover:bg-gray-300 transition-colors"
-                    title={selectedOps.size === opsData.length ? "Desseleccionar todas" : "Seleccionar todas"}
-                  >
-                    {selectedOps.size === opsData.length ? (
-                      <CheckSquare className="h-5 w-5 text-red-600" />
-                    ) : (
-                      <Square className="h-5 w-5 text-gray-400" />
-                    )}
-                  </button>
+              <tr className="border-b border-gray-300 bg-gray-100">
+                <th className="px-3 py-2 text-center w-8">
+                  <input type="checkbox" checked={selectedOps.size === opsFiltradasPorLote.length && opsFiltradasPorLote.length > 0} onChange={toggleSelectAll} />
                 </th>
-                <SortHeader field="cod_ordpro" label="Código OP" />
-                <SortHeader field="textil_unitario" label="Costo Textil ($/prenda)" />
-                <SortHeader field="manufactura_unitario" label="Manufactura ($/prenda)" />
-                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Materia Prima ($/prenda)</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Avios ($/prenda)</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Indirecto Fijo ($/prenda)</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Administración ($/prenda)</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Ventas ($/prenda)</th>
-                <SortHeader field="prendas_requeridas" label="Prendas" />
-                <SortHeader field="fecha_facturacion" label="Fecha" />
-                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Categoría</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Esfuerzo</th>
+                {(["cod_ordpro", "fecha_facturacion", "prendas_requeridas"] as const).map((field) => (
+                  <th
+                    key={field}
+                    onClick={() => {
+                      setSortField(field);
+                      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+                    }}
+                    className="px-3 py-2 text-center font-semibold text-gray-700 cursor-pointer hover:bg-gray-200"
+                  >
+                    <div className="flex items-center justify-center gap-1">
+                      {field === "cod_ordpro"
+                        ? "OP"
+                        : field === "fecha_facturacion"
+                          ? "Fecha de Facturación"
+                          : "Prendas Facturadas"}
+                      {sortField === field && (sortDirection === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
+                    </div>
+                  </th>
+                ))}
+                <th className="px-3 py-2 text-center font-semibold text-gray-700">Categoría</th>
+                <th className="px-3 py-2 text-center font-semibold text-gray-700">Costo Textil</th>
+                <th className="px-3 py-2 text-center font-semibold text-gray-700">Costo Manufactura</th>
+                <th className="px-3 py-2 text-center font-semibold text-gray-700 hidden">Costo Mat. Prima</th>
+                <th className="px-3 py-2 text-center font-semibold text-gray-700 hidden">Costo Avíos</th>
+                <th className="px-3 py-2 text-center font-semibold text-gray-700 hidden">Costo Ind. Fijo</th>
+                <th className="px-3 py-2 text-center font-semibold text-gray-700 hidden">Costo Admin</th>
+                <th className="px-3 py-2 text-center font-semibold text-gray-700 hidden">Costo Ventas</th>
               </tr>
             </thead>
             <tbody>
-              {opsFiltradasPorCategoria.map((op) => {
-                const isSelected = selectedOps.has(op.cod_ordpro);
-                return (
-                  <tr
-                    key={op.cod_ordpro}
-                    className={`border-b border-gray-200 hover:bg-gray-50 transition-colors ${
-                      isSelected ? "bg-blue-50" : ""
-                    }`}
-                  >
-                    <td className="px-4 py-3 text-center">
-                      <button
-                        onClick={() => toggleOp(op.cod_ordpro)}
-                        className="flex items-center justify-center w-6 h-6 rounded hover:bg-gray-200 transition-colors"
-                      >
-                        {isSelected ? (
-                          <CheckSquare className="h-5 w-5 text-red-600" />
-                        ) : (
-                          <Square className="h-5 w-5 text-gray-400" />
-                        )}
-                      </button>
-                    </td>
-                    <td className="px-4 py-3 text-sm font-mono text-red-900">{op.cod_ordpro}</td>
-                    <td className="px-4 py-3 text-sm text-right text-gray-700">
-                      ${op.textil_unitario.toFixed(2)}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-right text-gray-700">
-                      ${op.manufactura_unitario.toFixed(2)}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-right text-gray-700">
-                      ${op.materia_prima_unitario.toFixed(2)}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-right text-gray-700">
-                      ${op.avios_unitario.toFixed(2)}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-right text-gray-700">
-                      ${op.indirecto_fijo_unitario.toFixed(2)}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-right text-gray-700">
-                      ${op.administracion_unitario.toFixed(2)}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-right text-gray-700">
-                      ${op.ventas_unitario.toFixed(2)}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-right text-gray-700">
-                      {op.prendas_requeridas.toLocaleString()}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-700">
-                      {new Date(op.fecha_facturacion).toLocaleDateString("es-ES")}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-700">{op.categoria_lote}</td>
-                    <td className="px-4 py-3 text-sm text-center">
-                      <span className="inline-block px-2 py-1 bg-orange-100 text-orange-800 rounded-full text-xs font-semibold">
-                        {op.esfuerzo_total}/10
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
+              {sortedOps.map((op) => (
+                <tr key={op.cod_ordpro} className="border-b border-gray-200 hover:bg-gray-50">
+                  <td className="px-3 py-2 text-center">
+                    <input type="checkbox" checked={selectedOps.has(op.cod_ordpro)} onChange={() => toggleSelection(op.cod_ordpro)} />
+                  </td>
+                  <td className="px-3 py-2 text-center font-semibold text-gray-900">{op.cod_ordpro}</td>
+                  <td className="px-3 py-2 text-center text-gray-700">{new Date(op.fecha_facturacion).toLocaleDateString("es-ES")}</td>
+                  <td className="px-3 py-2 text-center text-gray-700">{op.prendas_requeridas.toLocaleString()}</td>
+                  <td className="px-3 py-2 text-center text-gray-700 text-xs">{CATEGORIAS_LOTE_NOMBRES[op.categoria_lote] || op.categoria_lote}</td>
+                  <td className="px-3 py-2 text-center text-gray-700">${op.textil_unitario.toFixed(2)}</td>
+                  <td className="px-3 py-2 text-center text-gray-700">${op.manufactura_unitario.toFixed(2)}</td>
+                  <td className="px-3 py-2 text-center text-gray-700 text-xs hidden">${op.materia_prima_unitario.toFixed(2)}</td>
+                  <td className="px-3 py-2 text-center text-gray-700 text-xs hidden">${op.avios_unitario.toFixed(2)}</td>
+                  <td className="px-3 py-2 text-center text-gray-700 text-xs hidden">${op.indirecto_fijo_unitario.toFixed(2)}</td>
+                  <td className="px-3 py-2 text-center text-gray-700 text-xs hidden">${op.administracion_unitario.toFixed(2)}</td>
+                  <td className="px-3 py-2 text-center text-gray-700 text-xs hidden">${op.ventas_unitario.toFixed(2)}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
 
-        {/* Pie de tabla con resumen y botón */}
-        <div className="p-6 border-t border-gray-200 bg-gray-50 flex justify-between items-center">
-          <div>
-            <p className="text-sm text-gray-600">
-              <strong>{selectedOps.size}</strong> OPs seleccionadas de <strong>{opsData.length}</strong>
-            </p>
-            {selectedOps.size > 0 && (
-              <p className="text-xs text-gray-500 mt-1">
-                Promedio textil: $
-                {(
-                  opsSeleccionadas.reduce((sum, op) => sum + op.textil_unitario * op.prendas_requeridas, 0) /
-                  opsSeleccionadas.reduce((sum, op) => sum + op.prendas_requeridas, 0)
-                ).toFixed(2)}{" "}
-                | Promedio manufactura: $
-                {(
-                  opsSeleccionadas.reduce((sum, op) => sum + op.manufactura_unitario * op.prendas_requeridas, 0) /
-                  opsSeleccionadas.reduce((sum, op) => sum + op.prendas_requeridas, 0)
-                ).toFixed(2)}
-              </p>
-            )}
-          </div>
+        <div className="mt-4 flex justify-end">
           <button
-            onClick={handleRecalcular}
+            onClick={handleSetearOps}
             disabled={selectedOps.size === 0}
-            className="px-6 py-3 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+            className="px-6 py-2 bg-red-700 text-white rounded-lg font-semibold hover:bg-red-800 disabled:bg-gray-400 disabled:cursor-not-allowed"
           >
-            Generar Cotizaciónsada
+            Setear OPs Seleccionadas ({selectedOps.size})
           </button>
         </div>
       </div>
-    );
-  },
-);
-
-OpsSelectionTable.displayName = "OpsSelectionTable";
+    </div>
+  );
+};

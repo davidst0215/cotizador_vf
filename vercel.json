@@ -3,11 +3,5 @@
   "devCommand": "npm run dev",
   "installCommand": "npm install",
   "framework": "nextjs",
-  "outputDirectory": ".next",
-  "public": false,
-  "env": {
-    "NEXT_PUBLIC_API_URL": {
-      "description": "URL del backend API"
-    }
-  }
+  "outputDirectory": ".next"
 }

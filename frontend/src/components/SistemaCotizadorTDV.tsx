@@ -439,29 +439,6 @@ interface ResultadoCotizacion {
   volumen_historico?: number;
 }
 
-interface OpReal {
-  cod_ordpro: string;
-  estilo_propio: string;
-  cliente: string;
-  fecha_facturacion: string | null;
-  prendas_requeridas: number;
-  monto_factura: number;
-  precio_unitario: number;
-  costos_componentes: {
-    textil: number;
-    manufactura: number;
-    avios: number;
-    materia_prima: number;
-    indirecto_fijo: number;
-    gasto_admin: number;
-    gasto_ventas: number;
-  };
-  costo_total_unitario: number;
-  costo_total_original?: number;
-  fue_ajustado?: boolean;
-  esfuerzo_total: number;
-}
-
 interface AutoCompletadoInfo {
   autocompletado_disponible: boolean;
   info_estilo?: {
@@ -1887,7 +1864,7 @@ const SistemaCotizadorTDV = () => {
                       versionCalculo: formData.version_calculo,
                       codOrdpros: selectedOpsCode,
                       onCostosCalculados: handleCostosWipCalculados,
-                      onError: handleOpsSelectionError,
+                      onError: handleOpsSelected,
                       wipsPreseleccionados: selectedWipsRef.current, // ✨ Mantener selecciones visualmente desde ref
                     } as any)}
                   />

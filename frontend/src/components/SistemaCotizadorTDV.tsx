@@ -695,11 +695,11 @@ const SistemaCotizadorTDV = () => {
   );
 
   // ✨ Callback MEMOIZADO para OpsSelected - SIN DEPENDENCIAS (evita re-renders infinitos)
+  // 🎯 NUEVO FLUJO: Solo setea las OPs seleccionadas, sin generar cotización
   const handleOpsSelected = useCallback(
-    async (opsSeleccionadas: any[]) => {
+    (opsSeleccionadas: any[]) => {
       try {
         // ✨ VALIDAR CAMPOS REQUERIDOS ANTES DE PROCESAR
-        // Usar formDataRef.current para acceder a los valores actuales sin affecting dependencies
         if (!formDataRef.current?.tipo_prenda || formDataRef.current.tipo_prenda.trim() === "") {
           throw new Error("Por favor selecciona un Tipo de Prenda");
         }
@@ -713,46 +713,21 @@ const SistemaCotizadorTDV = () => {
         // Guardar los códigos de OP seleccionadas
         const codOrdpros = opsSeleccionadas.map((op) => op.cod_ordpro);
 
-        // ✨ CONGELAR LOS OPS SELECCIONADOS
-        frozenOpsRef.current = [...codOrdpros];
-        setSelectedOpsCode(codOrdpros);
+        console.log("✅ [handleOpsSelected] OPs seleccionadas seteadas:", codOrdpros);
+        console.log("📊 [handleOpsSelected] Esperando configuración de WIPs...");
 
+        // ✨ SOLO SETEAR OPs - NO CONGELAR, NO GENERAR COTIZACIÓN
+        setSelectedOpsCode(codOrdpros);
         setFormData(prev => ({
           ...prev,
           cod_ordpros: codOrdpros
         }));
 
-        // Procesar la cotización completa
-        setCargando(true);
-        const payload = {
-          cliente_marca: formDataRef.current.cliente_marca,
-          temporada: formDataRef.current.temporada,
-          categoria_lote: formDataRef.current.categoria_lote,
-          familia_producto: formDataRef.current.familia_producto,
-          tipo_prenda: formDataRef.current.tipo_prenda,
-          codigo_estilo: formDataRef.current.codigo_estilo,
-          usuario: formDataRef.current.usuario,
-          version_calculo: formDataRef.current.version_calculo,
-          wips_textiles: esEstiloNuevo ? wipsTextiles : null,
-          wips_manufactura: esEstiloNuevo ? wipsManufactura : null,
-          cod_ordpros: codOrdpros,
-        };
-
-        console.log("📤 PAYLOAD ENVIADO AL BACKEND:", JSON.stringify(payload, null, 2));
-        const resultado = await post<any>("/cotizar", payload);
-        console.log("🔍 BACKEND RESPONSE - costo_textil:", resultado.costo_textil, "costo_manufactura:", resultado.costo_manufactura);
-        console.log("📊 OPs seleccionadas siendo procesadas:", codOrdpros);
-        console.log("📋 Full resultado from backend:", resultado);
-
-        // ✨ CONGELAR DATOS - Ya no se permite ningún cambio automático
-        setDataFrozen(true);
-        setCotizacionActual(resultado);
-        console.log("🔒 DATOS CONGELADOS - No se permiten más cambios automáticos");
+        // 🎯 NO HACER MÁS NADA - El usuario configurará WIPs en WipDesgloseTable
+        // Luego hará click en "Generar Cotización Final" con WIPs configurados
       } catch (error) {
-        console.error("Error generando cotización:", error);
-        alert("Error al generar cotización: " + (error instanceof Error ? error.message : "Error desconocido"));
-      } finally {
-        setCargando(false);
+        console.error("Error al setear OPs seleccionadas:", error);
+        alert("Error: " + (error instanceof Error ? error.message : "Error desconocido"));
       }
     },
     [] // ✨ Sin dependencias - formDataRef proporciona acceso a valores actuales
@@ -1508,17 +1483,17 @@ const SistemaCotizadorTDV = () => {
                 onError={handleOpsSelectionError}
               />
 
-              {/* Mostrar desglose WIP cuando hay OPs seleccionadas */}
-              {selectedOpsCode.length > 0 && cotizacionActual && (
+              {/* Mostrar desglose WIP cuando hay OPs seleccionadas - SIN CONGELAR para permitir fetch */}
+              {selectedOpsCode.length > 0 && formData.codigo_estilo && (
                 <div className="mt-8">
                   <h3 className="text-lg font-bold text-red-900 mb-4">
-                    Análisis de Costos por WIP
+                    Análisis de Costos por WIP - Selecciona WIPs para incluir en cotización
                   </h3>
                   <WipDesgloseTable
-                    codigoEstilo={cotizacionActual.inputs.codigo_estilo}
-                    versionCalculo={cotizacionActual.inputs.version_calculo}
+                    codigoEstilo={formData.codigo_estilo}
+                    versionCalculo={formData.version_calculo}
                     codOrdpros={selectedOpsCode}
-                    dataFrozen={dataFrozen}
+                    dataFrozen={false}
                     onCostosCalculados={handleCostosWipCalculados}
                   />
                 </div>

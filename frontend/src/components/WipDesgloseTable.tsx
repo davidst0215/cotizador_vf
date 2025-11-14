@@ -45,6 +45,13 @@ const WipDesgloseTableComponent: React.FC<WipDesgloseTableProps> = ({
     const prevCodOrdprosRef = useRef<string>("");
     const fetchAbortRef = useRef<AbortController | null>(null);
 
+    // 🛡️ PROTECCIÓN CONTRA FETCH INFINITOS
+    const fetchCountRef = useRef<number>(0);
+    const fetchTimestampsRef = useRef<number[]>([]);
+
+    // 🔒 AUTO-CONGELAR después del primer fetch exitoso
+    const [autoFreeze, setAutoFreeze] = useState(false);
+
     // Si dataFrozen es true, no hacer más fetches
     if (dataFrozen && desgloseData) {
       console.log("🔒 [WipDesgloseTable] DATOS CONGELADOS - No se hacen más fetches");
@@ -52,13 +59,30 @@ const WipDesgloseTableComponent: React.FC<WipDesgloseTableProps> = ({
 
     // Cargar desglose WIP cuando las OPs seleccionadas cambian
     const cargarDesgloseWip = useCallback(async () => {
-      // ✨ SI DATOS CONGELADOS, NO HACER NADA
-      if (dataFrozen) {
+      // ✨ SI DATOS CONGELADOS (manual o auto), NO HACER NADA
+      if (dataFrozen || autoFreeze) {
         console.log("🔒 [WipDesgloseTable] DATOS CONGELADOS - No hacer fetch");
         return;
       }
 
-      console.log("📊 [WipDesgloseTable] cargarDesgloseWip iniciado");
+      // 🛡️ DETECTAR FETCH INFINITOS
+      const now = Date.now();
+      fetchTimestampsRef.current.push(now);
+      fetchCountRef.current += 1;
+
+      // Limpiar timestamps antiguos (> 5 segundos)
+      fetchTimestampsRef.current = fetchTimestampsRef.current.filter(ts => now - ts < 5000);
+
+      // Si hay más de 5 fetches en 5 segundos = fetch infinito
+      if (fetchTimestampsRef.current.length > 5) {
+        const errorMsg = `⚠️ FETCH INFINITO DETECTADO! ${fetchCountRef.current} fetches en 5s. Verifica que codOrdpros no se regenere constantemente.`;
+        console.error(`❌ [WipDesgloseTable] ${errorMsg}`);
+        setError(errorMsg);
+        if (onError) onError(errorMsg);
+        return;
+      }
+
+      console.log(`📊 [WipDesgloseTable] Fetch #${fetchCountRef.current}: cargarDesgloseWip iniciado`);
       console.log("📊 [WipDesgloseTable] codOrdpros:", codOrdpros);
       console.log("📊 [WipDesgloseTable] versionCalculo:", versionCalculo);
 
@@ -105,6 +129,10 @@ const WipDesgloseTableComponent: React.FC<WipDesgloseTableProps> = ({
 
         setDesgloseData(data);
 
+        // 🔒 AUTO-CONGELAR después del primer fetch exitoso para evitar infinitos
+        console.log("🔒 [WipDesgloseTable] AUTO-CONGELANDO datos después de fetch exitoso");
+        setAutoFreeze(true);
+
         if (data.desgloses_total && data.desgloses_total.length === 0) {
           console.warn("📊 [WipDesgloseTable] ⚠️ No hay WIPs en la respuesta");
           setError("No hay datos WIP disponibles para las OPs seleccionadas");
@@ -123,14 +151,14 @@ const WipDesgloseTableComponent: React.FC<WipDesgloseTableProps> = ({
       } finally {
         setCargando(false);
       }
-    }, [codOrdpros, versionCalculo]); // NO incluir dataFrozen para evitar redefiniciones
+    }, [codOrdpros, versionCalculo, autoFreeze]); // Incluir autoFreeze para verificar estado actual
 
     // Usar useMemo para comparar OPs por valor y disparar fetch solo cuando realmente cambian
     const opsJson = useMemo(() => JSON.stringify(codOrdpros), [codOrdpros]);
 
     React.useEffect(() => {
-      // ✨ SI DATOS ESTÁN CONGELADOS, NO HACER NADA
-      if (dataFrozen) {
+      // ✨ SI DATOS ESTÁN CONGELADOS (manual o auto), NO HACER NADA
+      if (dataFrozen || autoFreeze) {
         console.log("🔒 [WipDesgloseTable] DATOS CONGELADOS - Saltando fetch");
         return;
       }
@@ -138,9 +166,12 @@ const WipDesgloseTableComponent: React.FC<WipDesgloseTableProps> = ({
       if (codOrdpros.length > 0 && opsJson !== prevCodOrdprosRef.current) {
         console.log("📊 [WipDesgloseTable] OPs cambiaron, cargando desglose");
         prevCodOrdprosRef.current = opsJson;
+        // 🛡️ Resetear contador de fetch cuando las OPs cambian
+        fetchCountRef.current = 0;
+        fetchTimestampsRef.current = [];
         cargarDesgloseWip();
       }
-    }, [opsJson, cargarDesgloseWip, dataFrozen]); // ✨ INCLUIR dataFrozen para que se verifique cada vez
+    }, [opsJson, cargarDesgloseWip, dataFrozen, autoFreeze]); // ✨ INCLUIR ambos para que se verifique cada vez
 
     // Calcular totales por grupo
     const totalesPorGrupo = useMemo(() => {

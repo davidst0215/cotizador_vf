@@ -7,12 +7,10 @@ import React, {
   useRef,
   useMemo,
 } from "react";
-import type { OpsSelectionTableRef } from "./OpsSelectionTable";
 import { get, post } from "@/libs/api";
 import {
   DollarSign,
   Package,
-  AlertTriangle,
   BarChart3,
   FileText,
   Download,
@@ -21,7 +19,7 @@ import {
   Database,
 } from "lucide-react";
 import { OpsSelectionTable } from "./OpsSelectionTable";
-import { WipDesgloseTable } from "./WipDesgloseTable";
+import { WipDesgloseTable, WipDesgloseTableRef } from "./WipDesgloseTable";
 
 // Constantes del sistema
 const CATEGORIAS_LOTE = {
@@ -507,14 +505,10 @@ interface AutoCompletadoInfo {
 }
 
 const SistemaCotizadorTDV = () => {
-  // 🔍 LOGGING: Detectar re-renders del componente principal
-  useEffect(() => {
-    console.log(`🏢 [SistemaCotizadorTDV] COMPONENTE RE-RENDERIZADO`);
-  });
 
   // Estados principales
   const [pestanaActiva, setPestanaActiva] = useState<
-    "formulario" | "resultados"
+    "formulario" | "resultados" | "costos"
   >("formulario");
   const [cotizacionActual, setCotizacionActual] =
     useState<ResultadoCotizacion | null>(null);
@@ -526,17 +520,20 @@ const SistemaCotizadorTDV = () => {
   const [cargandoTipos, setCargandoTipos] = useState(false);
 
   // Estados para OPs reales
-  const [opsReales, setOpsReales] = useState<OpsResponse | null>(null);
-  const [cargandoOps, setCargandoOps] = useState(false);
-  const [errorOps, setErrorOps] = useState<string | null>(null);
+  const [_opsReales, _setOpsReales] = useState<OpsResponse | null>(null);
+  const [_cargandoOps, _setCargandoOps] = useState(false);
+  const [_errorOps, _setErrorOps] = useState<string | null>(null);
 
   // Estado para OPs seleccionadas en la tabla interactiva
   const [selectedOpsCode, setSelectedOpsCode] = useState<string[]>([]);
+  const [selectedOpsData, setSelectedOpsData] = useState<any[]>([]); // ✨ Guardar datos completos de las OPs
 
   // ✨ CONGELACIÓN DE DATOS: Una vez que se seleccionan OPs y se genera cotización, TODO se congela
-  const [dataFrozen, setDataFrozen] = useState(false);
-  const frozenOpsRef = useRef<string[]>([]);
+  const [_dataFrozen, _setDataFrozen] = useState(false);
+  const _frozenOpsRef = useRef<string[]>([]);
   const formDataRef = useRef<FormData | null>(null); // ✨ Mantiene formData actual sin affecting dependencies
+  const wipDesgloseTableRef = useRef<WipDesgloseTableRef>(null); // ✨ Ref para acceder a WIPs seleccionados
+  const selectedWipsRef = useRef<string[]>([]); // ✨ Mantener WIPs seleccionados en ref para persistencia visual
 
   // Estados para costos calculados del WIP (para sobrescribir backend values)
   const [costosWipCalculados, setCostosWipCalculados] = useState<{
@@ -588,20 +585,10 @@ const SistemaCotizadorTDV = () => {
 
   // Referencias para evitar re-renders y debouncing
   const abortControllerRef = useRef<AbortController | null>(null);
-  const opsSelectionTableRef = useRef<OpsSelectionTableRef>(null); // Ref para dispara búsqueda de OPs
 
-  // ⚡ SOLUCIÓN: Dispara iniciarBusqueda() cuando OpsSelectionTable se monta
-  React.useEffect(() => {
-    if (cotizacionActual && opsSelectionTableRef.current) {
-      console.log("🚀 OpsSelectionTable está montado, disparando iniciarBusqueda...");
-      opsSelectionTableRef.current.iniciarBusqueda();
-    }
-  }, [cotizacionActual?.id_cotizacion]); // Depende del ID de cotización, no del objeto completo
-
-  // ✨ SINCRONIZAR formDataRef con formData para que handleOpsSelected tenga acceso a valores actuales
+  // Sincronizar formDataRef con formData
   React.useEffect(() => {
     formDataRef.current = formData;
-    console.log("📝 [formDataRef] Sincronizado con formData actual:", formData);
   }, [formData]);
 
   // Memoized validation
@@ -686,6 +673,80 @@ const SistemaCotizadorTDV = () => {
     []
   );
 
+  // ✨ NUEVO: Calcular costos finales usando valores directos del WIP
+  const handleCalcularCostosFinales = useCallback(() => {
+    if (!selectedOpsData || selectedOpsData.length === 0) {
+      return;
+    }
+
+    if (!cotizacionActual) {
+      return;
+    }
+
+    // ✨ OBTENER valores de textil y manufactura directamente del WIP resumen
+    const promedioTextil = wipDesgloseTableRef.current?.getTotalTextil() || 0;
+    const promedioManufactura = wipDesgloseTableRef.current?.getTotalManufactura() || 0;
+
+    // ✨ GUARDAR los WIP IDs en ref para mantener la selección visual
+    const wipIdsSeleccionados = wipDesgloseTableRef.current?.getSelectedWipsIds() || [];
+    selectedWipsRef.current = wipIdsSeleccionados;
+
+    // Otros costos desde OPs (materia prima, avíos, indirecto, admin, ventas)
+    let totalMateriaPrima = 0;
+    let totalAvios = 0;
+    let totalIndirecto = 0;
+    let totalAdministracion = 0;
+    let totalVentas = 0;
+
+    selectedOpsData.forEach((op) => {
+      totalMateriaPrima += op.materia_prima_unitario || 0;
+      totalAvios += op.avios_unitario || 0;
+      totalIndirecto += op.indirecto_fijo_unitario || 0;
+      totalAdministracion += op.administracion_unitario || 0;
+      totalVentas += op.ventas_unitario || 0;
+    });
+
+    const promedioMateriaPrima = selectedOpsData.length > 0 ? totalMateriaPrima / selectedOpsData.length : 0;
+    const promedioAvios = selectedOpsData.length > 0 ? totalAvios / selectedOpsData.length : 0;
+    const promedioIndirecto = selectedOpsData.length > 0 ? totalIndirecto / selectedOpsData.length : 0;
+    const promedioAdministracion = selectedOpsData.length > 0 ? totalAdministracion / selectedOpsData.length : 0;
+    const promedioVentas = selectedOpsData.length > 0 ? totalVentas / selectedOpsData.length : 0;
+
+    // Sumar todos para costo base
+    const costosBase = promedioTextil + promedioManufactura + promedioMateriaPrima + promedioAvios + promedioIndirecto + promedioAdministracion + promedioVentas;
+
+    // Aplicar factores
+    const costosConFactores =
+      costosBase *
+      (cotizacionActual.factor_lote || 1) *
+      (cotizacionActual.factor_esfuerzo || 1) *
+      (cotizacionActual.factor_estilo || 1) *
+      (cotizacionActual.factor_marca || 1);
+
+    // Aplicar margen
+    const precioFinal = costosConFactores * (1 + (cotizacionActual.margen_aplicado || 0) / 100);
+
+    // ✨ ACTUALIZAR cotizacionActual con los nuevos valores
+    setCotizacionActual((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        costo_textil: promedioTextil,
+        costo_manufactura: promedioManufactura,
+        costo_materia_prima: promedioMateriaPrima,
+        costo_avios: promedioAvios,
+        costo_indirecto_fijo: promedioIndirecto,
+        gasto_administracion: promedioAdministracion,
+        gasto_ventas: promedioVentas,
+        costo_base_total: costosBase,
+        precio_final: precioFinal,
+      };
+    });
+
+    // ✨ NAVEGAR a la pestaña de costos finales
+    setPestanaActiva("costos");
+  }, [selectedOpsData, cotizacionActual]);
+
   // Callback memoizado para OpsSelectionTable - evita re-renders innecesarios
   const handleOpsSelectionError = useCallback(
     (error: string) => {
@@ -694,44 +755,17 @@ const SistemaCotizadorTDV = () => {
     []
   );
 
-  // ✨ Callback MEMOIZADO para OpsSelected - SIN DEPENDENCIAS (evita re-renders infinitos)
-  // 🎯 NUEVO FLUJO: Solo setea las OPs seleccionadas, sin generar cotización
-  const handleOpsSelected = useCallback(
-    (opsSeleccionadas: any[]) => {
-      try {
-        // ✨ VALIDAR CAMPOS REQUERIDOS ANTES DE PROCESAR
-        if (!formDataRef.current?.tipo_prenda || formDataRef.current.tipo_prenda.trim() === "") {
-          throw new Error("Por favor selecciona un Tipo de Prenda");
-        }
-        if (!formDataRef.current?.codigo_estilo || formDataRef.current.codigo_estilo.trim() === "") {
-          throw new Error("Por favor ingresa un Código de Estilo");
-        }
-        if (!formDataRef.current?.cliente_marca || formDataRef.current.cliente_marca.trim() === "") {
-          throw new Error("Por favor selecciona un Cliente/Marca");
-        }
-
-        // Guardar los códigos de OP seleccionadas
-        const codOrdpros = opsSeleccionadas.map((op) => op.cod_ordpro);
-
-        console.log("✅ [handleOpsSelected] OPs seleccionadas seteadas:", codOrdpros);
-        console.log("📊 [handleOpsSelected] Esperando configuración de WIPs...");
-
-        // ✨ SOLO SETEAR OPs - NO CONGELAR, NO GENERAR COTIZACIÓN
-        setSelectedOpsCode(codOrdpros);
-        setFormData(prev => ({
-          ...prev,
-          cod_ordpros: codOrdpros
-        }));
-
-        // 🎯 NO HACER MÁS NADA - El usuario configurará WIPs en WipDesgloseTable
-        // Luego hará click en "Generar Cotización Final" con WIPs configurados
-      } catch (error) {
-        console.error("Error al setear OPs seleccionadas:", error);
-        alert("Error: " + (error instanceof Error ? error.message : "Error desconocido"));
-      }
-    },
-    [] // ✨ Sin dependencias - formDataRef proporciona acceso a valores actuales
-  );
+  // Callback para OPs seleccionadas - SOLO SETEA, SIN CALCULAR
+  // Manejar OPs seleccionadas desde OpsSelectionTable
+  const handleOpsSelected = useCallback((opsSeleccionadas: any[]) => {
+    const codOrdpros = opsSeleccionadas.map((op) => op.cod_ordpro);
+    setSelectedOpsCode(codOrdpros);
+    setSelectedOpsData(opsSeleccionadas); // ✨ Guardar datos completos para cálculo posterior
+    setFormData((prev) => ({
+      ...prev,
+      cod_ordpros: codOrdpros,
+    }));
+  }, []);
 
   // NOTA: Efecto 3 (cargar WIPs cuando cambia tipo) fue eliminado - cargarWipsPorTipoPrenda removido
 
@@ -1101,9 +1135,6 @@ const SistemaCotizadorTDV = () => {
       // console.log("🚀 Procesando cotización:", payload);
 
       const resultado = await post<any>("/cotizar", payload);
-      console.log("🔍 BACKEND RESPONSE (Tab 1) - costo_textil:", resultado.costo_textil, "costo_manufactura:", resultado.costo_manufactura);
-      console.log("📊 selectedOpsCode being used:", selectedOpsCode);
-      console.log("📋 Full resultado from backend:", resultado);
       setCotizacionActual(resultado);
       setPestanaActiva("resultados");
       // console.log(`✅ Cotización exitosa: ${resultado.id_cotizacion}`);
@@ -1411,113 +1442,6 @@ const SistemaCotizadorTDV = () => {
 
   RutaTextilRecomendada.displayName = "RutaTextilRecomendada";
 
-  // Memoized ComponenteOpsReales
-  const ComponenteOpsReales = React.memo(() => {
-    if (!cotizacionActual) return null;
-
-    const { info_comercial } = cotizacionActual;
-
-    return (
-      <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
-        <div className="p-6 border-b border-gray-100 bg-red-800">
-          <h2 className="text-xl font-bold flex items-center gap-3 text-white">
-            <FileText className="h-6 w-6" />
-            OPs de Referencia Utilizadas para el Cálculo
-          </h2>
-          <p className="text-white/80 mt-1">
-            {opsReales ? (
-              <>
-                Base histórica: {opsReales.total_ops_encontradas} órdenes |
-                Método: {opsReales.ops_data.metodo_utilizado} | Versión:{" "}
-                {opsReales.ops_data.parametros_busqueda.version_calculo}
-                {opsReales.ops_data.rangos_aplicados === true && (
-                  <span className="ml-2 px-2 py-1 bg-yellow-500/30 rounded text-xs">
-                    ✓ Rangos de seguridad aplicados
-                  </span>
-                )}
-              </>
-            ) : (
-              <>
-                Base histórica: {info_comercial?.ops_utilizadas || 0} órdenes
-                procesadas | Volumen:{" "}
-                {info_comercial?.historico_volumen?.volumen_total_6m?.toLocaleString() ||
-                  0}{" "}
-                prendas
-              </>
-            )}
-          </p>
-        </div>
-
-        <div className="p-6">
-          {cargandoOps ? (
-            <div className="flex items-center justify-center py-8">
-              <RefreshCw className="h-8 w-8 animate-spin mr-3 text-red-500" />
-              <span className="text-lg text-red-900">
-                Cargando OPs de referencia...
-              </span>
-            </div>
-          ) : errorOps ? (
-            <div className="text-center py-8">
-              <AlertTriangle className="h-12 w-12 mx-auto mb-4 text-red-400" />
-              <p className="text-lg font-semibold mb-2 text-red-900">
-                Error al cargar OPs
-              </p>
-              <p className="text-sm text-gray-600">{errorOps}</p>
-              <button
-                onClick={() => cargarOpsReales(cotizacionActual)}
-                className="mt-4 px-4 py-2 rounded-lg text-white bg-red-500"
-              >
-                Reintentar
-              </button>
-            </div>
-          ) : cotizacionActual ? (
-            <>
-              <OpsSelectionTable
-                ref={opsSelectionTableRef}
-                codigoEstilo={cotizacionActual.inputs.codigo_estilo || ""}
-                versionCalculo={cotizacionActual.inputs.version_calculo}
-                marca={cotizacionActual.inputs.cliente_marca}
-                tipoPrenda={cotizacionActual.inputs.tipo_prenda}
-                opsSeleccionadasPrevia={selectedOpsCode}
-                onOpsSelected={handleOpsSelected}
-                onError={handleOpsSelectionError}
-              />
-
-              {/* Mostrar desglose WIP cuando hay OPs seleccionadas - SIN CONGELAR para permitir fetch */}
-              {selectedOpsCode.length > 0 && formData.codigo_estilo && (
-                <div className="mt-8">
-                  <h3 className="text-lg font-bold text-red-900 mb-4">
-                    Análisis de Costos por WIP - Selecciona WIPs para incluir en cotización
-                  </h3>
-                  <WipDesgloseTable
-                    codigoEstilo={formData.codigo_estilo}
-                    versionCalculo={formData.version_calculo}
-                    codOrdpros={selectedOpsCode}
-                    dataFrozen={false}
-                    onCostosCalculados={handleCostosWipCalculados}
-                  />
-                </div>
-              )}
-            </>
-          ) : (
-            <div className="text-center py-8">
-              <Package className="h-12 w-12 mx-auto mb-4 text-red-500" />
-              <p className="text-lg font-semibold mb-2 text-red-900">
-                Sin OPs de referencia
-              </p>
-              <p className="text-sm text-gray-600">
-                No se encontraron órdenes de producción para los criterios
-                especificados
-              </p>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  });
-
-  ComponenteOpsReales.displayName = "ComponenteOpsReales";
-
   // ========================================
   // 🎨 FORMULARIO PRINCIPAL CORREGIDO
   // ========================================
@@ -1648,12 +1572,282 @@ const SistemaCotizadorTDV = () => {
   FormularioPrincipal.displayName = "FormularioPrincipal";
 
   // ========================================
+  // 🎨 PANTALLA COSTOS FINALES
+  // ========================================
+
+  const PantallaCostosFinales = React.memo(() => {
+    // Memoized componentesAgrupados (misma lógica que en PantallaResultados)
+    const componentesAgrupados = useMemo(() => {
+      if (!cotizacionActual) return [];
+
+      const costoTextil = costosWipCalculados.textil_por_prenda ?? cotizacionActual.costo_textil;
+      const costoManufactura = costosWipCalculados.manufactura_por_prenda ?? cotizacionActual.costo_manufactura;
+
+      return [
+        {
+          nombre: "Costo Textil",
+          costo_unitario: costoTextil,
+          fuente: costosWipCalculados.textil_por_prenda ? "wip" : "historico",
+          badge: costosWipCalculados.textil_por_prenda
+            ? `${selectedOpsCode.length} OPs seleccionadas`
+            : esEstiloNuevo
+            ? `${wipsTextiles?.length || 0} WIPs`
+            : "histórico",
+          es_agrupado: false,
+        },
+        {
+          nombre: "Costo Manufactura",
+          costo_unitario: costoManufactura,
+          fuente: costosWipCalculados.manufactura_por_prenda ? "wip" : "historico",
+          badge: costosWipCalculados.manufactura_por_prenda
+            ? `${selectedOpsCode.length} OPs seleccionadas`
+            : esEstiloNuevo
+            ? `${wipsManufactura?.length || 0} WIPs`
+            : "histórico",
+          es_agrupado: false,
+        },
+        {
+          nombre: "Costo Materia Prima",
+          costo_unitario: cotizacionActual.costo_materia_prima,
+          fuente: "ultimo_costo",
+          badge: "último costo",
+          es_agrupado: false,
+        },
+        {
+          nombre: "Costo Avíos",
+          costo_unitario: cotizacionActual.costo_avios,
+          fuente: "ultimo_costo",
+          badge: "último costo",
+          es_agrupado: false,
+        },
+        {
+          nombre: "Costo Indirecto Fijo",
+          costo_unitario: cotizacionActual.costo_indirecto_fijo,
+          fuente: "formula",
+          badge: "fórmula",
+          es_agrupado: false,
+        },
+        {
+          nombre: "Gasto Administración",
+          costo_unitario: cotizacionActual.gasto_administracion,
+          fuente: "formula",
+          badge: "fórmula",
+          es_agrupado: false,
+        },
+        {
+          nombre: "Gasto Ventas",
+          costo_unitario: cotizacionActual.gasto_ventas,
+          fuente: "formula",
+          badge: "fórmula",
+          es_agrupado: false,
+        },
+      ];
+    }, [
+      cotizacionActual,
+      esEstiloNuevo,
+      wipsTextiles.length,
+      wipsManufactura.length,
+      costosWipCalculados.textil_por_prenda,
+      costosWipCalculados.manufactura_por_prenda,
+      selectedOpsCode.length,
+    ]);
+
+    if (!cotizacionActual) {
+      return (
+        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 text-center">
+          <p className="text-lg font-semibold text-red-800">
+            No hay cotización disponible
+          </p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-8">
+        {/* DESGLOSE DETALLADO DE COSTOS */}
+        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
+          <div className="p-6 border-b border-gray-100 bg-red-800">
+            <h2 className="text-xl font-bold flex items-center gap-3 text-white">
+              <BarChart3 className="h-6 w-6" />
+              Desglose Detallado de Costos
+            </h2>
+            <p className="text-white/80 mt-1">
+              Análisis completo de componentes y factores de ajuste • Versión:{" "}
+              {cotizacionActual.version_calculo_usada ||
+                cotizacionActual.inputs.version_calculo}
+            </p>
+          </div>
+
+          <div className="p-6">
+            <div className="grid grid-cols-2 gap-8">
+              {/* COMPONENTES AGRUPADOS CORRECTAMENTE */}
+              <div>
+                <h3 className="font-bold mb-4 text-red-500">
+                  Componentes de Costo
+                </h3>
+                <div className="space-y-3">
+                  {componentesAgrupados.map((comp, idx) => (
+                    <div key={idx}>
+                      <div className="flex justify-between items-center p-3 rounded-xl bg-orange-50">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-red-900">
+                              {comp.nombre}
+                            </span>
+                            <span
+                              className={`px-2 py-1 rounded-full text-xs font-semibold text-white ${
+                                comp.fuente === "wip"
+                                  ? "bg-red-600"
+                                  : comp.fuente === "historico"
+                                    ? "bg-red-500"
+                                    : "bg-gray-500"
+                              }`}
+                            >
+                              {comp.fuente}
+                            </span>
+                            {comp.es_agrupado && (
+                              <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
+                                {comp.badge}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Mostrar solo badge informativo, NO detalles individuales */}
+                          <div className="text-xs text-gray-600 mt-1">
+                            {comp.badge}
+                          </div>
+                        </div>
+                        <span className="font-bold text-lg ml-4 text-red-900">
+                          ${comp.costo_unitario.toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+
+                  <div className="border-t-2 pt-3 mt-4 border-orange-400">
+                    <div className="flex justify-between items-center font-bold text-lg p-3 rounded-xl bg-orange-200 text-red-900">
+                      <span>Costo Base Total</span>
+                      <span>
+                        ${(cotizacionActual.costo_base_total || 0).toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Vector de ajuste */}
+              <div>
+                <h3 className="font-bold mb-4 text-red-500">
+                  Vector de Ajuste
+                </h3>
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center p-3 rounded-xl bg-orange-50">
+                    <span className="font-semibold text-red-900">
+                      Factor Lote ({cotizacionActual.inputs.categoria_lote})
+                    </span>
+                    <span className="font-bold text-red-500">
+                      {(cotizacionActual.factor_lote || 1).toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center p-3 rounded-xl bg-orange-50">
+                    <span className="font-semibold text-red-900">
+                      Factor Esfuerzo (
+                      {cotizacionActual.categoria_esfuerzo || 6}/10)
+                    </span>
+                    <span className="font-bold text-red-500">
+                      {(cotizacionActual.factor_esfuerzo || 1).toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center p-3 rounded-xl bg-orange-50">
+                    <span className="font-semibold text-red-900">
+                      Factor Estilo (
+                      {cotizacionActual.categoria_estilo || "Nuevo"})
+                    </span>
+                    <span className="font-bold text-red-500">
+                      {(cotizacionActual.factor_estilo || 1).toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center p-3 rounded-xl bg-orange-50">
+                    <span className="font-semibold text-red-900">
+                      Factor Marca ({cotizacionActual.inputs.cliente_marca})
+                    </span>
+                    <span className="font-bold text-red-500">
+                      {(cotizacionActual.factor_marca || 1).toFixed(2)}
+                    </span>
+                  </div>
+
+                  <div className="border-t-2 pt-3 mt-4 border-orange-400">
+                    <div className="flex justify-between items-center font-bold text-lg p-3 rounded-xl bg-orange-200 text-red-900">
+                      <span>Vector Total</span>
+                      <span>
+                        {(cotizacionActual.vector_total || 1).toFixed(3)}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="p-4 rounded-xl text-center bg-red-500">
+                    <div className="text-sm text-white/90 mb-1">
+                      Precio Final
+                    </div>
+                    <div className="text-xl font-bold text-white">
+                      ${(cotizacionActual.costo_base_total || 0).toFixed(2)} ×
+                      (1 + 15% ×{" "}
+                      {(cotizacionActual.vector_total || 1).toFixed(3)}) = $
+                      {(cotizacionActual.precio_final || 0).toFixed(2)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Botones de acción */}
+        <div className="flex justify-center gap-4">
+          <button
+            onClick={() => setPestanaActiva("formulario")}
+            className="px-8 py-3 font-semibold text-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 bg-red-500"
+          >
+            Nueva Cotización
+          </button>
+
+          <button
+            onClick={() => window.print()}
+            className="px-8 py-3 font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 flex items-center gap-2 bg-orange-50 text-red-900"
+          >
+            <Printer className="h-5 w-5" />
+            Imprimir
+          </button>
+
+          <button
+            onClick={() => {
+              const data = JSON.stringify(cotizacionActual, null, 2);
+              const blob = new Blob([data], { type: "application/json" });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = `cotizacion_${cotizacionActual.id_cotizacion}.json`;
+              a.click();
+            }}
+            className="px-8 py-3 font-semibold text-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 flex items-center gap-2 bg-red-400"
+          >
+            <Download className="h-5 w-5" />
+            Descargar
+          </button>
+        </div>
+      </div>
+    );
+  });
+
+  PantallaCostosFinales.displayName = "PantallaCostosFinales";
+
+  // ========================================
   // 🎨 PANTALLA RESULTADOS
   // ========================================
 
   const PantallaResultados = React.memo(() => {
     // Memoized componentesAgrupados
-    const componentesAgrupados = useMemo(() => {
+    const _componentesAgrupados = useMemo(() => {
       if (!cotizacionActual) return []; // Safe: inside callback, not hook
 
       // Usar costos del WIP si están disponibles, sino usar los del backend
@@ -1793,181 +1987,55 @@ const SistemaCotizadorTDV = () => {
         </div>
 
         {/* OPs de referencia */}
-        <ComponenteOpsReales />
+        {cotizacionActual && (
+          <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
+            <div className="p-6 border-b border-gray-100 bg-red-800">
+              <h2 className="text-xl font-bold flex items-center gap-3 text-white">
+                <FileText className="h-6 w-6" />
+                OPs de Referencia
+              </h2>
+            </div>
 
-        {/* DESGLOSE CORREGIDO */}
-        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
-          <div className="p-6 border-b border-gray-100 bg-red-800">
-            <h2 className="text-xl font-bold flex items-center gap-3 text-white">
-              <BarChart3 className="h-6 w-6" />
-              Desglose Detallado de Costos
-            </h2>
-            <p className="text-white/80 mt-1">
-              Análisis completo de componentes y factores de ajuste • Versión:{" "}
-              {cotizacionActual.version_calculo_usada ||
-                cotizacionActual.inputs.version_calculo}
-            </p>
-          </div>
+            <div className="p-6">
+              <OpsSelectionTable
+                codigoEstilo={cotizacionActual.inputs.codigo_estilo || ""}
+                versionCalculo={cotizacionActual.inputs.version_calculo}
+                marca={cotizacionActual.inputs.cliente_marca}
+                tipoPrenda={cotizacionActual.inputs.tipo_prenda}
+                onOpsSelected={handleOpsSelected}
+                onError={handleOpsSelectionError}
+                opsPreseleccionadas={selectedOpsCode} // ✨ Mantener selecciones
+              />
 
-          <div className="p-6">
-            <div className="grid grid-cols-2 gap-8">
-              {/* COMPONENTES AGRUPADOS CORRECTAMENTE */}
-              <div>
-                <h3 className="font-bold mb-4 text-red-500">
-                  Componentes de Costo
-                </h3>
-                <div className="space-y-3">
-                  {componentesAgrupados.map((comp, idx) => (
-                    <div key={idx}>
-                      <div className="flex justify-between items-center p-3 rounded-xl bg-orange-50">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className="font-semibold text-red-900">
-                              {comp.nombre}
-                            </span>
-                            <span
-                              className={`px-2 py-1 rounded-full text-xs font-semibold text-white ${
-                                comp.fuente === "wip"
-                                  ? "bg-red-600"
-                                  : comp.fuente === "historico"
-                                    ? "bg-red-500"
-                                    : "bg-gray-500"
-                              }`}
-                            >
-                              {comp.fuente}
-                            </span>
-                            {comp.es_agrupado && (
-                              <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
-                                {comp.badge}
-                              </span>
-                            )}
-                          </div>
+              {selectedOpsCode.length > 0 && (
+                <div className="mt-8 border-t pt-8">
+                  <h3 className="text-lg font-bold text-red-900 mb-4">Análisis de Costos por WIP</h3>
+                  <WipDesgloseTable
+                    ref={wipDesgloseTableRef}
+                    {...({
+                      codigoEstilo: formData.codigo_estilo,
+                      versionCalculo: formData.version_calculo,
+                      codOrdpros: selectedOpsCode,
+                      onCostosCalculados: handleCostosWipCalculados,
+                      onError: handleOpsSelectionError,
+                      wipsPreseleccionados: selectedWipsRef.current, // ✨ Mantener selecciones visualmente desde ref
+                    } as any)}
+                  />
 
-                          {/* Mostrar solo badge informativo, NO detalles individuales */}
-                          <div className="text-xs text-gray-600 mt-1">
-                            {comp.badge}
-                          </div>
-                        </div>
-                        <span className="font-bold text-lg ml-4 text-red-900">
-                          ${comp.costo_unitario.toFixed(2)}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-
-                  <div className="border-t-2 pt-3 mt-4 border-orange-400">
-                    <div className="flex justify-between items-center font-bold text-lg p-3 rounded-xl bg-orange-200 text-red-900">
-                      <span>Costo Base Total</span>
-                      <span>
-                        ${(cotizacionActual.costo_base_total || 0).toFixed(2)}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* NOTA SOBRE AJUSTES */}
-                </div>
-              </div>
-
-              {/* Vector de ajuste */}
-              <div>
-                <h3 className="font-bold mb-4 text-red-500">
-                  Vector de Ajuste
-                </h3>
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center p-3 rounded-xl bg-orange-50">
-                    <span className="font-semibold text-red-900">
-                      Factor Lote ({cotizacionActual.inputs.categoria_lote})
-                    </span>
-                    <span className="font-bold text-red-500">
-                      {(cotizacionActual.factor_lote || 1).toFixed(2)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center p-3 rounded-xl bg-orange-50">
-                    <span className="font-semibold text-red-900">
-                      Factor Esfuerzo (
-                      {cotizacionActual.categoria_esfuerzo || 6}/10)
-                    </span>
-                    <span className="font-bold text-red-500">
-                      {(cotizacionActual.factor_esfuerzo || 1).toFixed(2)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center p-3 rounded-xl bg-orange-50">
-                    <span className="font-semibold text-red-900">
-                      Factor Estilo (
-                      {cotizacionActual.categoria_estilo || "Nuevo"})
-                    </span>
-                    <span className="font-bold text-red-500">
-                      {(cotizacionActual.factor_estilo || 1).toFixed(2)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center p-3 rounded-xl bg-orange-50">
-                    <span className="font-semibold text-red-900">
-                      Factor Marca ({cotizacionActual.inputs.cliente_marca})
-                    </span>
-                    <span className="font-bold text-red-500">
-                      {(cotizacionActual.factor_marca || 1).toFixed(2)}
-                    </span>
-                  </div>
-
-                  <div className="border-t-2 pt-3 mt-4 border-orange-400">
-                    <div className="flex justify-between items-center font-bold text-lg p-3 rounded-xl bg-orange-200 text-red-900">
-                      <span>Vector Total</span>
-                      <span>
-                        {(cotizacionActual.vector_total || 1).toFixed(3)}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="p-4 rounded-xl text-center bg-red-500">
-                    <div className="text-sm text-white/90 mb-1">
-                      Precio Final
-                    </div>
-                    <div className="text-xl font-bold text-white">
-                      ${(cotizacionActual.costo_base_total || 0).toFixed(2)} ×
-                      (1 + 15% ×{" "}
-                      {(cotizacionActual.vector_total || 1).toFixed(3)}) = $
-                      {(cotizacionActual.precio_final || 0).toFixed(2)}
-                    </div>
+                  {/* ✨ BOTÓN: Calcular Costos Finales */}
+                  <div className="mt-6 flex justify-end">
+                    <button
+                      onClick={handleCalcularCostosFinales}
+                      className="px-8 py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-colors"
+                    >
+                      💰 Calcular Costos Finales
+                    </button>
                   </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
-        </div>
-
-        {/* Botones de acción */}
-        <div className="flex justify-center gap-4">
-          <button
-            onClick={() => setPestanaActiva("formulario")}
-            className="px-8 py-3 font-semibold text-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 bg-red-500"
-          >
-            Nueva Cotización
-          </button>
-
-          <button
-            onClick={() => window.print()}
-            className="px-8 py-3 font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 flex items-center gap-2 bg-orange-50 text-red-900"
-          >
-            <Printer className="h-5 w-5" />
-            Imprimir
-          </button>
-
-          <button
-            onClick={() => {
-              const data = JSON.stringify(cotizacionActual, null, 2);
-              const blob = new Blob([data], { type: "application/json" });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement("a");
-              a.href = url;
-              a.download = `cotizacion_${cotizacionActual.id_cotizacion}.json`;
-              a.click();
-            }}
-            className="px-8 py-3 font-semibold text-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 flex items-center gap-2 bg-red-400"
-          >
-            <Download className="h-5 w-5" />
-            Descargar
-          </button>
-        </div>
+        )}
       </div>
     );
   });
@@ -2019,6 +2087,24 @@ const SistemaCotizadorTDV = () => {
               Resultados
             </button>
 
+            <button
+              onClick={() => setPestanaActiva("costos")}
+              disabled={!cotizacionActual}
+              className={`px-8 py-4 font-bold transition-all duration-300 flex items-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed ${
+                pestanaActiva === "costos"
+                  ? "text-white shadow-lg"
+                  : "hover:shadow-md"
+              }`}
+              style={{
+                backgroundColor:
+                  pestanaActiva === "costos" ? "#821417" : "transparent",
+                color: pestanaActiva === "costos" ? "white" : "#bd4c42",
+              }}
+            >
+              <DollarSign className="h-5 w-5" />
+              Costos Finales
+            </button>
+
             <div className="ml-auto px-8 py-4 text-sm font-semibold flex items-center gap-2 text-red-500">
               <div className="w-2 h-2 rounded-full bg-red-500"></div>
               Sistema TDV - Metodología WIP-Based
@@ -2059,6 +2145,7 @@ const SistemaCotizadorTDV = () => {
         {/* Contenido principal */}
         {pestanaActiva === "formulario" && <FormularioPrincipal />}
         {pestanaActiva === "resultados" && <PantallaResultados />}
+        {pestanaActiva === "costos" && <PantallaCostosFinales />}
       </div>
     </div>
   );

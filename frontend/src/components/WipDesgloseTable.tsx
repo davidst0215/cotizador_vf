@@ -60,7 +60,7 @@ const WipDesgloseTableComponent = forwardRef<WipDesgloseTableRef, WipDesgloseTab
   versionCalculo,
   codOrdpros,
   onError,
-  onWipsSelected,
+  onWipsSelected: _onWipsSelected,
   wipsPreseleccionados = [],
 }, ref) => {
   const [desgloseData, setDesgloseData] = useState<WipDesgloseResponse | null>(null);

@@ -56,11 +56,9 @@ export interface WipDesgloseTableRef {
 }
 
 const WipDesgloseTableComponent = forwardRef<WipDesgloseTableRef, WipDesgloseTableProps>(({
-  codigoEstilo: _codigoEstilo,
   versionCalculo,
   codOrdpros,
   onError,
-  onWipsSelected: _onWipsSelected,
   wipsPreseleccionados = [],
 }, ref) => {
   const [desgloseData, setDesgloseData] = useState<WipDesgloseResponse | null>(null);

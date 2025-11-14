@@ -1,0 +1,78 @@
+name: Deploy to EC2
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        required: true
+        default: "staging"
+        type: choice
+        options:
+          - staging
+          - prod
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Install SSH client
+        run: sudo apt-get update -qy && sudo apt-get install -qy openssh-client
+
+      - name: Prepare SSH key and known hosts
+        env:
+          ENV: ${{ github.event.inputs.environment }}
+          KEY: ${{ secrets.EC2_SSH_KEY }}
+          HOST_STAGING: ${{ vars.EC2_HOST_STAGING }}
+          HOST_PROD: ${{ vars.EC2_HOST_PROD }}
+          KNOWN_HOSTS: ${{ secrets.KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          case "$ENV" in
+            staging) HOST="$HOST_STAGING" ;;
+            prod)    HOST="$HOST_PROD" ;;
+            *) echo "Invalid environment: $ENV" >&2; exit 2 ;;
+          esac
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/id_ed25519 && chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Deploy via SSH
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_USER: ${{ github.actor }}
+          ENV: ${{ github.event.inputs.environment }}
+          HOST_STAGING: ${{ vars.EC2_HOST_STAGING }}
+          HOST_PROD: ${{ vars.EC2_HOST_PROD }}
+          DIR: ${{ vars.SERVICE_DIR }}
+        run: |
+          set -euo pipefail
+          case "$ENV" in
+            staging) HOST="$HOST_STAGING" ;;
+            prod)    HOST="$HOST_PROD" ;;
+            *) echo "Invalid environment: $ENV" >&2; exit 2 ;;
+          esac
+
+          # Send GH_USER, GH_TOKEN, and SERVICE_DIR securely via stdin
+          {
+            printf '%s\n' "$GH_USER"
+            printf '%s\n' "$GH_TOKEN"
+            printf '%s\n' "$DIR"
+          } | ssh -i ~/.ssh/id_ed25519 \
+                -o BatchMode=yes \
+                -o StrictHostKeyChecking=yes \
+                "$HOST" /usr/local/bin/gh-deploy
+
+      - name: Cleanup
+        if: always()
+        run: rm -f ~/.ssh/id_ed25519 || true
+

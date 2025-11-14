@@ -462,34 +462,6 @@ interface OpReal {
   esfuerzo_total: number;
 }
 
-interface OpsResponse {
-  ops_data: {
-    ops_utilizadas: OpReal[];
-    metodo_utilizado: string;
-    estadisticas: {
-      total_ops: number;
-      costo_promedio: number;
-      costo_min: number;
-      costo_max: number;
-      esfuerzo_promedio: number;
-      rango_fechas?: {
-        desde: string;
-        hasta: string;
-      };
-    };
-    parametros_busqueda: {
-      codigo_estilo: string | null;
-      familia_producto: string | null;
-      tipo_prenda: string | null;
-      cliente: string | null;
-      version_calculo: string;
-    };
-    rangos_aplicados?: boolean;
-  };
-  timestamp: string;
-  total_ops_encontradas: number;
-}
-
 interface AutoCompletadoInfo {
   autocompletado_disponible: boolean;
   info_estilo?: {
@@ -738,13 +710,6 @@ const SistemaCotizadorTDV = () => {
     setPestanaActiva("costos");
   }, [selectedOpsData, cotizacionActual]);
 
-  // Callback memoizado para OpsSelectionTable - evita re-renders innecesarios
-  const handleOpsSelectionError = useCallback(
-    (_error: string) => {
-      // Error handling for Ops selection is handled in the parent component
-    },
-    []
-  );
 
   // Callback para OPs seleccionadas - SOLO SETEA, SIN CALCULAR
   // Manejar OPs seleccionadas desde OpsSelectionTable
@@ -1052,15 +1017,15 @@ const SistemaCotizadorTDV = () => {
           wips_manufactura: null,
         };
 
-        const _resultado = await post<any>(
+        await post<any>(
           "/ops-utilizadas-cotizacion",
           payload,
         );
         // console.log(
-        //   `✅ OPs reales cargadas: ${resultado.total_ops_encontradas}`,
+        //   `✅ OPs reales cargadas`,
         // );
-      } catch (_error: any) {
-        // console.error("Error cargando OPs reales:", error);
+      } catch {
+        // console.error("Error cargando OPs reales");
         // Error handling for ops is handled in the parent component
       }
     },
@@ -1909,7 +1874,6 @@ const SistemaCotizadorTDV = () => {
                 marca={cotizacionActual.inputs.cliente_marca}
                 tipoPrenda={cotizacionActual.inputs.tipo_prenda}
                 onOpsSelected={handleOpsSelected}
-                onError={handleOpsSelectionError}
                 opsPreseleccionadas={selectedOpsCode} // ✨ Mantener selecciones
               />
 

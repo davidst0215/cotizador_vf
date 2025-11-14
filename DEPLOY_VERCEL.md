@@ -89,3 +89,4 @@ git push origin main
 **Tu app estará en:** https://cotizador-tdv.vercel.app
 
 **Más info:** Ver SECURITY.md
+# Vercel Deployment Configured

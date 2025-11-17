@@ -65,7 +65,6 @@ const WipDesgloseTableComponent = forwardRef<WipDesgloseTableRef, WipDesgloseTab
   wipsPreseleccionados = [],
   factoresWip: factoresWipProp = {}, // ✨ Factores desde el padre
   onFactoresChange, // ✨ Callback para actualizar factores en padre
-  kgPrendaPromedio = 0, // ✨ Promedio de kg/prenda de las OPs seleccionadas
 }, ref) => {
   const [desgloseData, setDesgloseData] = useState<WipDesgloseResponse | null>(null);
   const [cargando, setCargando] = useState(false);

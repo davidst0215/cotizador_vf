@@ -780,14 +780,6 @@ const SistemaCotizadorTDV = () => {
     [],  // Sin dependencias - nunca cambia
   );
 
-  // Handlers memoizados para otros campos
-  const handleCategoriaLoteChange = useCallback(
-    (valor: string) => {
-      manejarCambioFormulario("categoria_lote", valor);
-    },
-    [manejarCambioFormulario],
-  );
-
   const handleTipoPrendaChange = useCallback(
     (valor: string) => {
       manejarCambioFormulario("tipo_prenda", valor);

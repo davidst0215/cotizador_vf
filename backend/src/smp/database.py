@@ -607,6 +607,141 @@ class TDVQueries:
                 "version_calculo": version_calculo,
             }
 
+    async def obtener_info_detallada_estilo_cliente(
+        self,
+        estilo_cliente: str,
+        version_calculo: str = "FLUIDA",
+    ) -> Dict[str, Any]:
+        """
+         FUNCIÓN NUEVA v2.0: Obtiene información detallada buscando por estilo_cliente
+        Similar a obtener_info_detallada_estilo pero busca en estilo_cliente en lugar de estilo_propio
+        """
+
+        if not estilo_cliente:
+            return {"encontrado": False, "razon": "estilo_cliente_vacio"}
+
+        estilo_cliente = estilo_cliente.strip().upper()
+
+        try:
+            #  QUERY DIRECTA: Buscar por estilo_cliente en costo_op_detalle
+            query = f"""
+            SELECT
+              c.estilo_cliente as codigo_estilo,
+              c.familia_de_productos,
+              c.tipo_de_producto,
+              c.cliente,
+              COUNT(*) OVER() as total_ops,
+              SUM(c.prendas_requeridas) OVER() as volumen_total,
+              AVG(c.esfuerzo_total) OVER() as esfuerzo_promedio,
+              MAX(c.fecha_facturacion) OVER() as ultima_facturacion,
+              MIN(c.fecha_facturacion) OVER() as primera_facturacion
+            FROM {settings.db_schema}.costo_op_detalle c
+            WHERE UPPER(TRIM(c.estilo_cliente)) = UPPER(TRIM(?))
+              AND c.version_calculo = ?
+              AND c.fecha_corrida = (
+                SELECT MAX(fecha_corrida)
+                FROM {settings.db_schema}.costo_op_detalle
+                WHERE version_calculo = ?)
+              AND c.prendas_requeridas > 0
+            ORDER BY c.fecha_facturacion DESC
+            LIMIT 1
+            """
+
+            resultado = await self.db.query(
+                query,
+                (estilo_cliente, version_calculo, version_calculo),
+            )
+
+            if resultado:
+                info = resultado[0]
+                volumen_total = int(info["volumen_total"])
+                total_ops = int(info["total_ops"])
+
+                logger.info(
+                    f" Estilo Cliente {estilo_cliente} encontrado: volumen={volumen_total}, ops={total_ops}"
+                )
+
+                return {
+                    "codigo_estilo": info["codigo_estilo"],
+                    "familia_producto": info["familia_de_productos"],
+                    "tipo_prenda": info["tipo_de_producto"],
+                    "cliente_principal": info["cliente"],
+                    "total_ops": total_ops,
+                    "volumen_total": volumen_total,
+                    "esfuerzo_promedio": float(info["esfuerzo_promedio"])
+                    if info["esfuerzo_promedio"]
+                    else 6,
+                    "ultima_facturacion": info["ultima_facturacion"],
+                    "primera_facturacion": info["primera_facturacion"],
+                    "categoria": self._determinar_categoria_por_volumen(volumen_total),
+                    "encontrado": True,
+                    "fuente": "estilo_cliente",
+                    "version_calculo": version_calculo,
+                }
+
+            logger.info(f" Estilo Cliente {estilo_cliente} no encontrado")
+
+            return {
+                "encontrado": False,
+                "razon": "no_encontrado",
+                "codigo_estilo": estilo_cliente,
+                "version_calculo": version_calculo,
+            }
+
+        except Exception as e:
+            logger.error(
+                f" Error obteniendo info detallada estilo_cliente {estilo_cliente}: {e}"
+            )
+            return {
+                "encontrado": False,
+                "error": str(e),
+                "codigo_estilo": estilo_cliente,
+                "version_calculo": version_calculo,
+            }
+
+    async def obtener_volumen_historico_estilo_cliente(
+        self,
+        estilo_cliente: str,
+        version_calculo: str = "FLUIDA",
+    ) -> int:
+        """
+         FUNCIÓN NUEVA v2.0: Obtiene volumen histórico por estilo_cliente
+        Similar a obtener_volumen_historico_estilo pero busca estilo_cliente
+        """
+        try:
+            query = f"""
+            SELECT COALESCE(SUM(prendas_requeridas), 0) as volumen_total
+            FROM {settings.db_schema}.costo_op_detalle c
+            WHERE UPPER(TRIM(c.estilo_cliente)) = UPPER(TRIM(?))
+              AND c.version_calculo = ?
+              AND c.fecha_corrida = (
+                SELECT MAX(fecha_corrida)
+                FROM {settings.db_schema}.costo_op_detalle
+                WHERE version_calculo = ?)
+              AND c.prendas_requeridas > 0
+            """
+
+            resultado = await self.db.query(
+                query, (estilo_cliente, version_calculo, version_calculo)
+            )
+
+            volumen = (
+                int(resultado[0]["volumen_total"])
+                if resultado and resultado[0]["volumen_total"]
+                else 0
+            )
+
+            logger.info(
+                f" Volumen histórico estilo_cliente {estilo_cliente} ({version_calculo}): {volumen} prendas"
+            )
+            return volumen
+
+        except Exception as e:
+            logger.error(
+                f" Error obteniendo volumen estilo_cliente {estilo_cliente}: {e}"
+            )
+            return 0
+
     def _determinar_categoria_por_volumen(self, volumen: int) -> str:
         """Determina categora basada en volumen histrico"""
         if volumen >= 4000:
@@ -954,6 +1089,96 @@ class TDVQueries:
             resultados, "estilo_especifico"
         )
 
+    async def buscar_costos_estilo_cliente(
+        self,
+        estilo_cliente: str,
+        meses: int = 12,
+        version_calculo: str = "FLUIDA",
+    ) -> Dict[str, Any]:
+        """
+         FUNCIÓN NUEVA v2.0: Busca costos históricos por estilo_cliente
+        Similar a buscar_costos_estilo_especifico pero busca por estilo_cliente
+        """
+
+        #  QUERY: Buscar por estilo_cliente en lugar de estilo_propio
+        query = f"""
+        SELECT
+          COALESCE(costo_textil, 0) as costo_textil,
+          COALESCE(costo_manufactura, 0) as costo_manufactura,
+          COALESCE(costo_avios, 0) as costo_avios,
+          COALESCE(costo_materia_prima, 0) as costo_materia_prima,
+          COALESCE(costo_indirecto_fijo, 0) as costo_indirecto_fijo,
+          COALESCE(gasto_administracion, 0) as gasto_administracion,
+          COALESCE(gasto_ventas, 0) as gasto_ventas,
+          COALESCE(esfuerzo_total, 6) as esfuerzo_total,
+          prendas_requeridas, fecha_facturacion,
+          cod_ordpro, cliente
+        FROM {settings.db_schema}.costo_op_detalle c
+        WHERE UPPER(TRIM(c.estilo_cliente)) = UPPER(TRIM(?))
+          AND c.version_calculo = ?
+          AND c.fecha_corrida = (
+            SELECT MAX(fecha_corrida)
+            FROM {settings.db_schema}.costo_op_detalle
+            WHERE version_calculo = ?)
+          AND c.prendas_requeridas >= 200
+          AND c.fecha_facturacion >= (
+            SELECT (MAX(fecha_facturacion) - (? || ' months')::INTERVAL)
+            FROM {settings.db_schema}.costo_op_detalle
+            WHERE version_calculo = ?
+          )
+        ORDER BY c.fecha_facturacion DESC
+        """
+
+        try:
+            resultados = await self.db.query(
+                query,
+                (estilo_cliente, version_calculo, version_calculo, str(meses), version_calculo),
+            )
+
+            if not resultados:
+                logger.warning(
+                    f" No se encontraron costos históricos para estilo_cliente {estilo_cliente} en {meses} meses"
+                )
+                # Retornar estructura vacía en lugar de lanzar excepción
+                return {
+                    "codigo_estilo": estilo_cliente,
+                    "costo_textil": 0,
+                    "costo_manufactura": 0,
+                    "costo_avios": 0,
+                    "costo_materia_prima": 0,
+                    "costo_indirecto_fijo": 0,
+                    "gasto_administracion": 0,
+                    "gasto_ventas": 0,
+                    "esfuerzo_total": 6,
+                    "registros_encontrados": 0,
+                    "encontrado": False,
+                }
+        except Exception as e:
+            logger.warning(
+                f" Error en query de costos estilo_cliente {estilo_cliente}: {e}. Retornando valores por defecto"
+            )
+            # Retornar estructura con valores por defecto en caso de error
+            return {
+                "codigo_estilo": estilo_cliente,
+                "costo_textil": 0,
+                "costo_manufactura": 0,
+                "costo_avios": 0,
+                "costo_materia_prima": 0,
+                "costo_indirecto_fijo": 0,
+                "gasto_administracion": 0,
+                "gasto_ventas": 0,
+                "esfuerzo_total": 6,
+                "registros_encontrados": 0,
+                "encontrado": False,
+            }
+
+        logger.info(
+            f" Costos estilo_cliente encontrados: {len(resultados)} registros para {estilo_cliente}"
+        )
+        return self._procesar_costos_historicos_con_limites_previos(
+            resultados, "estilo_cliente"
+        )
+
     def _procesar_costos_historicos_con_limites_previos(
         self, recs: List[dict], strat: str
     ) -> Dict[str, Any]:
@@ -1034,6 +1259,7 @@ class TDVQueries:
         codigo_estilo: str,
         meses: int = 12,
         version_calculo: str = "FLUIDA",
+        tipo_estilo: str = "estilo_propio",  # v2.0: "estilo_propio" o "estilo_cliente"
     ) -> List[Dict[str, Any]]:
         """
         Obtiene lista detallada de OPs sin aplicar factor de seguridad.
@@ -1042,10 +1268,16 @@ class TDVQueries:
         BÚSQUEDA PROGRESIVA:
         1. Intenta primero con prendas >= 200 (filtro estricto)
         2. Si no encuentra, intenta sin ese filtro (fallback flexible)
+
+        v2.0: Soporta búsqueda por estilo_propio o estilo_cliente
         """
 
         try:
+            # v2.0: Determinar qué columna usar según tipo_estilo
+            columna_estilo = "estilo_cliente" if tipo_estilo == "estilo_cliente" else "estilo_propio"
+
             # PASO 1: Intento CON filtro estricto (prendas >= 200)
+            # v2.0: Usar TRIM para eliminar espacios en blanco
             query_strict = f"""
             SELECT
               cod_ordpro,
@@ -1058,16 +1290,17 @@ class TDVQueries:
               COALESCE(gasto_administracion, 0) as gasto_administracion_total,
               COALESCE(gasto_ventas, 0) as gasto_ventas_total,
               COALESCE(esfuerzo_total, 6) as esfuerzo_total,
+              COALESCE(kg_prenda, 0) as kg_prenda,
               fecha_facturacion,
               cliente
             FROM {settings.db_schema}.costo_op_detalle c
-            WHERE c.estilo_propio::text = %s
+            WHERE TRIM(c.{columna_estilo}::text) = %s
               AND c.version_calculo = %s
               AND c.fecha_corrida = (
                 SELECT MAX(fecha_corrida)
                 FROM {settings.db_schema}.costo_op_detalle
                 WHERE version_calculo = %s
-                AND estilo_propio::text = %s)
+                AND TRIM({columna_estilo}::text) = %s)
               AND c.prendas_requeridas >= 200
             ORDER BY c.fecha_facturacion DESC
             """
@@ -1094,16 +1327,17 @@ class TDVQueries:
                   COALESCE(gasto_administracion, 0) as gasto_administracion_total,
                   COALESCE(gasto_ventas, 0) as gasto_ventas_total,
                   COALESCE(esfuerzo_total, 6) as esfuerzo_total,
+                  COALESCE(kg_prenda, 0) as kg_prenda,
                   fecha_facturacion,
                   cliente
                 FROM {settings.db_schema}.costo_op_detalle c
-                WHERE c.estilo_propio::text = %s
+                WHERE TRIM(c.{columna_estilo}::text) = %s
                   AND c.version_calculo = %s
                   AND c.fecha_corrida = (
                     SELECT MAX(fecha_corrida)
                     FROM {settings.db_schema}.costo_op_detalle
                     WHERE version_calculo = %s
-                    AND estilo_propio::text = %s)
+                    AND TRIM({columna_estilo}::text) = %s)
                 ORDER BY c.fecha_facturacion DESC
                 """
 
@@ -1139,6 +1373,7 @@ class TDVQueries:
                     "esfuerzo_total": int(row['esfuerzo_total']) or 6,
                     "cliente": row['cliente'],
                     "seleccionado": True,  # Por defecto todas las OPs estn seleccionadas
+                    "kg_prenda": float(row.get('kg_prenda', 0)) or 0,  # ✨ Agregar kg_prenda si existe
                 }
 
                 # Calcular categora de lote
@@ -1185,7 +1420,8 @@ class TDVQueries:
               COALESCE(gasto_ventas, 0) as gasto_ventas_total,
               COALESCE(esfuerzo_total, 6) as esfuerzo_total,
               fecha_facturacion,
-              cliente
+              cliente,
+              COALESCE(kg_prenda, 0) as kg_prenda
             FROM {settings.db_schema}.costo_op_detalle c
             WHERE c.cliente ILIKE %s
               AND c.tipo_de_producto = %s
@@ -1221,7 +1457,8 @@ class TDVQueries:
                   COALESCE(gasto_ventas, 0) as gasto_ventas_total,
                   COALESCE(esfuerzo_total, 6) as esfuerzo_total,
                   fecha_facturacion,
-                  cliente
+                  cliente,
+                  COALESCE(kg_prenda, 0) as kg_prenda
                 FROM {settings.db_schema}.costo_op_detalle c
                 WHERE c.cliente ILIKE %s
                   AND c.tipo_de_producto = %s
@@ -1264,6 +1501,7 @@ class TDVQueries:
                     "fecha_facturacion": row['fecha_facturacion'].isoformat() if row['fecha_facturacion'] else None,
                     "esfuerzo_total": int(row['esfuerzo_total']) or 6,
                     "cliente": row['cliente'],
+                    "kg_prenda": float(row.get('kg_prenda', 0)) or 0,
                     "seleccionado": True,
                 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useCallback, forwardRef, useImperativeHandle } from "react";
+import React, { useState, useEffect, useMemo, useCallback, forwardRef, useImperativeHandle, useRef } from "react";
 import { TrendingUp } from "lucide-react";
 
 // Mapping de WIP IDs a nombres
@@ -46,6 +46,9 @@ export interface WipDesgloseTableProps {
   onError?: (error: string) => void;
   onWipsSelected?: (wips: DesgloseWip[]) => void; // Callback cuando se seleccionan WIPs
   wipsPreseleccionados?: string[]; // ✨ WIPs que ya fueron seleccionados
+  factoresWip?: Record<string, number>; // ✨ Factores de ajuste persistentes (desde padre)
+  onFactoresChange?: (factores: Record<string, number>) => void; // ✨ Callback para actualizar factores en padre
+  kgPrendaPromedio?: number; // ✨ Promedio de kg/prenda de las OPs seleccionadas
 }
 
 export interface WipDesgloseTableRef {
@@ -60,12 +63,30 @@ const WipDesgloseTableComponent = forwardRef<WipDesgloseTableRef, WipDesgloseTab
   codOrdpros,
   onError,
   wipsPreseleccionados = [],
+  factoresWip: factoresWipProp = {}, // ✨ Factores desde el padre
+  onFactoresChange, // ✨ Callback para actualizar factores en padre
+  kgPrendaPromedio = 0, // ✨ Promedio de kg/prenda de las OPs seleccionadas
 }, ref) => {
   const [desgloseData, setDesgloseData] = useState<WipDesgloseResponse | null>(null);
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedWips, setSelectedWips] = useState<Set<string>>(new Set(wipsPreseleccionados)); // ✨ Inicializar con preseleccionados
-  const [factoresWip, setFactoresWip] = useState<Record<string, number>>({}); // ✨ Factores multiplicadores por WIP
+  // ✨ Usar estado local que se sincroniza con el padre
+  const [factoresWipLocal, setFactoresWipLocal] = useState<Record<string, number>>(factoresWipProp);
+  const [factoresInputLocal, setFactoresInputLocal] = useState<Record<string, string>>({}); // ✨ Estado local para inputs de factor (para permitir typing intermedio)
+
+  // ✨ Ref para almacenar factoresWipLocal sin crear dependencias (evita re-renders)
+  const factoresWipRef = useRef<Record<string, number>>(factoresWipLocal);
+
+  // ✨ Sincronizar estado local con props del padre cuando el padre cambia (ej: viniendo de pestaña 3)
+  useEffect(() => {
+    setFactoresWipLocal(factoresWipProp);
+  }, [factoresWipProp]);
+
+  // ✨ Mantener ref sincronizado con estado local
+  useEffect(() => {
+    factoresWipRef.current = factoresWipLocal;
+  }, [factoresWipLocal]);
 
   // Sincronizar selectedWips cuando wipsPreseleccionados cambia
   useEffect(() => {
@@ -125,6 +146,15 @@ const WipDesgloseTableComponent = forwardRef<WipDesgloseTableRef, WipDesgloseTab
     cargarDesglose();
   }, [codOrdpros, versionCalculo]); // 🔒 NO incluir onError para evitar loops infinitos
 
+  // ✨ Sincronizar el estado local de inputs cuando el estado de factoresWip cambia (ej: volviendo de pestaña 3)
+  useEffect(() => {
+    const newLocalState: Record<string, string> = {};
+    Object.entries(factoresWipLocal).forEach(([wipId, value]) => {
+      newLocalState[wipId] = value.toString();
+    });
+    setFactoresInputLocal(newLocalState);
+  }, [factoresWipLocal]);
+
   // Calcular totales por grupo - SOLO para los WIPs seleccionados - CON FACTORES APLICADOS
   const totalesPorGrupo = useMemo(() => {
     if (!desgloseData) return { textil: 0, manufactura: 0, conteoTextil: 0, conteoManufactura: 0 };
@@ -133,14 +163,14 @@ const WipDesgloseTableComponent = forwardRef<WipDesgloseTableRef, WipDesgloseTab
     const textilSeleccionados = desgloseData.desgloses_textil.filter((d) => selectedWips.has(d.wip_id));
     const manufacturaSeleccionados = desgloseData.desgloses_manufactura.filter((d) => selectedWips.has(d.wip_id));
 
-    // ✨ Aplicar factores al cálculo
+    // ✨ Aplicar factores al cálculo - usar factoresWipLocal
     const totalTextil = textilSeleccionados.reduce((sum, d) => {
-      const factor = factoresWip[d.wip_id] || 1;
+      const factor = factoresWipLocal[d.wip_id] || 1;
       return sum + (d.textil_por_prenda * factor);
     }, 0);
 
     const totalManufactura = manufacturaSeleccionados.reduce((sum, d) => {
-      const factor = factoresWip[d.wip_id] || 1;
+      const factor = factoresWipLocal[d.wip_id] || 1;
       return sum + (d.manufactura_por_prenda * factor);
     }, 0);
 
@@ -150,7 +180,7 @@ const WipDesgloseTableComponent = forwardRef<WipDesgloseTableRef, WipDesgloseTab
       conteoTextil: textilSeleccionados.length,
       conteoManufactura: manufacturaSeleccionados.length,
     };
-  }, [desgloseData, selectedWips, factoresWip]);
+  }, [desgloseData, selectedWips, factoresWipLocal]);
 
   // Exponer métodos al padre para acceder a WIPs seleccionados sin callbacks
   useImperativeHandle(ref, () => ({
@@ -195,13 +225,13 @@ const WipDesgloseTableComponent = forwardRef<WipDesgloseTableRef, WipDesgloseTab
     }
   }, [desgloseData, selectedWips.size]);
 
-  // ✨ Manejar cambio de factor para un WIP
-  const handleFactorChange = useCallback((wipId: string, factor: number) => {
-    setFactoresWip((prev) => ({
-      ...prev,
-      [wipId]: factor,
-    }));
-  }, []);
+  // ✨ Manejar blur para notificar al padre cuando termina la edición (SIN dependencias para evitar re-renders)
+  const handleFactorBlur = useCallback(() => {
+    // Notificar al padre solo una vez cuando pierde el foco - usar ref para evitar dependencias
+    if (onFactoresChange) {
+      onFactoresChange(factoresWipRef.current);
+    }
+  }, [onFactoresChange]);
 
   if (cargando) {
     return (
@@ -306,8 +336,8 @@ const WipDesgloseTableComponent = forwardRef<WipDesgloseTableRef, WipDesgloseTab
                 <th className="px-4 py-3 text-right font-semibold text-gray-600">Textil/Prenda</th>
                 <th className="px-4 py-3 text-right font-semibold text-gray-600">Manufactura/Prenda</th>
                 <th className="px-4 py-3 text-center font-semibold text-gray-600">Factor</th>
-                <th className="px-4 py-3 text-right font-semibold text-gray-600">Textil Ajustado</th>
-                <th className="px-4 py-3 text-right font-semibold text-gray-600">Manufactura Ajustada</th>
+                <th className="px-4 py-3 text-right font-semibold text-gray-600">Costo Textil Ajustado</th>
+                <th className="px-4 py-3 text-right font-semibold text-gray-600">Costo Manufactura Ajustado</th>
               </tr>
             </thead>
             <tbody>
@@ -343,20 +373,59 @@ const WipDesgloseTableComponent = forwardRef<WipDesgloseTableRef, WipDesgloseTab
                   <td className="px-4 py-3 text-right text-gray-900">${desglose.manufactura_por_prenda.toFixed(2)}</td>
                   <td className="px-4 py-3 text-center">
                     <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      defaultValue="1"
-                      value={factoresWip[desglose.wip_id] !== undefined ? factoresWip[desglose.wip_id] : 1}
-                      onChange={(e) => handleFactorChange(desglose.wip_id, parseFloat(e.target.value) || 1)}
+                      type="text"
+                      inputMode="decimal"
+                      min="0.1"
+                      max="10"
+                      value={factoresInputLocal[desglose.wip_id] !== undefined ? factoresInputLocal[desglose.wip_id] : (factoresWipLocal[desglose.wip_id] || "1")}
+                      onChange={(e) => {
+                        const rawValue = e.target.value;
+                        // ✨ Permitir CUALQUIER escritura - sin validación, solo actualizar estado local
+                        setFactoresInputLocal((prev) => ({
+                          ...prev,
+                          [desglose.wip_id]: rawValue,
+                        }));
+
+                        // ✨ Solo actualizar factoresWipLocal si es un número válido (para cálculos)
+                        const valor = parseFloat(rawValue);
+                        if (!isNaN(valor) && valor >= 0.1) {
+                          setFactoresWipLocal((prev) => ({
+                            ...prev,
+                            [desglose.wip_id]: valor,
+                          }));
+                        }
+                      }}
+                      onBlur={(e) => {
+                        // ✨ Al perder el foco: validar, sincronizar y notificar al padre
+                        const rawValue = e.currentTarget.value;
+                        const valor = parseFloat(rawValue);
+
+                        if (isNaN(valor) || valor < 0.1) {
+                          // Usar valor anterior o 1 por defecto
+                          const fallbackValue = factoresWipLocal[desglose.wip_id] || 1;
+                          setFactoresInputLocal((prev) => ({
+                            ...prev,
+                            [desglose.wip_id]: fallbackValue.toString(),
+                          }));
+                        } else if (valor !== factoresWipLocal[desglose.wip_id]) {
+                          // Si el valor cambió, asegurar que está sincronizado antes de notificar
+                          setFactoresWipLocal((prev) => ({
+                            ...prev,
+                            [desglose.wip_id]: valor,
+                          }));
+                        }
+                        // ✨ Notificar al padre SOLO al perder el foco (una sola vez)
+                        handleFactorBlur();
+                      }}
+                      placeholder="1"
                       className="w-16 px-2 py-1 border border-gray-300 rounded text-center text-sm"
                     />
                   </td>
                   <td className="px-4 py-3 text-right text-gray-900 bg-blue-50 font-semibold">
-                    ${(desglose.textil_por_prenda * (factoresWip[desglose.wip_id] || 1)).toFixed(2)}
+                    ${(desglose.textil_por_prenda * (factoresWipLocal[desglose.wip_id] || 1)).toFixed(2)}
                   </td>
                   <td className="px-4 py-3 text-right text-gray-900 bg-orange-50 font-semibold">
-                    ${(desglose.manufactura_por_prenda * (factoresWip[desglose.wip_id] || 1)).toFixed(2)}
+                    ${(desglose.manufactura_por_prenda * (factoresWipLocal[desglose.wip_id] || 1)).toFixed(2)}
                   </td>
                 </tr>
               ))}

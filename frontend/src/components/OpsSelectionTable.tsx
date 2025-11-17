@@ -32,6 +32,7 @@ interface OP {
   cliente: string;
   categoria_lote: string;
   seleccionado: boolean;
+  kg_prenda?: number; // ✨ Peso en kg por prenda (para cálculo de costos por kg)
 }
 
 interface OpsResponse {
@@ -50,6 +51,7 @@ interface OpsSelectionTableProps {
   onOpsSelected: (ops: OP[]) => void; // Solo pasa OPs seleccionadas, sin calcular
   onError?: (error: string) => void;
   opsPreseleccionadas?: string[]; // ✨ OPs que ya fueron seleccionadas
+  tipoEstilo?: "estilo_propio" | "estilo_cliente"; // v2.0: Tipo de búsqueda
 }
 
 type SortField = "cod_ordpro" | "prendas_requeridas" | "fecha_facturacion";
@@ -63,6 +65,7 @@ export const OpsSelectionTable: React.FC<OpsSelectionTableProps> = ({
   onOpsSelected,
   onError,
   opsPreseleccionadas = [],
+  tipoEstilo = "estilo_propio", // v2.0: Default a estilo_propio
 }) => {
   const [opsData, setOpsData] = useState<OP[]>([]);
   const [cargando, setCargando] = useState(false);
@@ -92,6 +95,7 @@ export const OpsSelectionTable: React.FC<OpsSelectionTableProps> = ({
           version_calculo: versionCalculo,
           marca,
           tipo_prenda: tipoPrenda,
+          tipo_estilo: tipoEstilo, // v2.0: Indicar si es estilo_propio o estilo_cliente
         });
 
         const url = `http://localhost:8000/obtener-ops-detalladas/${codigoEstilo}?${params.toString()}`;
@@ -264,6 +268,8 @@ export const OpsSelectionTable: React.FC<OpsSelectionTableProps> = ({
                   </th>
                 ))}
                 <th className="px-3 py-2 text-center font-semibold text-gray-700">Categoría</th>
+                <th className="px-3 py-2 text-center font-semibold text-gray-700">Esfuerzo</th>
+                <th className="px-3 py-2 text-center font-semibold text-gray-700">Kg/Prenda</th>
                 <th className="px-3 py-2 text-center font-semibold text-gray-700">Costo Textil</th>
                 <th className="px-3 py-2 text-center font-semibold text-gray-700">Costo Manufactura</th>
                 <th className="px-3 py-2 text-center font-semibold text-gray-700 hidden">Costo Mat. Prima</th>
@@ -283,6 +289,8 @@ export const OpsSelectionTable: React.FC<OpsSelectionTableProps> = ({
                   <td className="px-3 py-2 text-center text-gray-700">{new Date(op.fecha_facturacion).toLocaleDateString("es-ES")}</td>
                   <td className="px-3 py-2 text-center text-gray-700">{op.prendas_requeridas.toLocaleString()}</td>
                   <td className="px-3 py-2 text-center text-gray-700 text-xs">{CATEGORIAS_LOTE_NOMBRES[op.categoria_lote] || op.categoria_lote}</td>
+                  <td className="px-3 py-2 text-center font-semibold text-red-600">{op.esfuerzo_total}/10</td>
+                  <td className="px-3 py-2 text-center text-gray-700">{op.kg_prenda ? op.kg_prenda.toFixed(3) : "N/A"}</td>
                   <td className="px-3 py-2 text-center text-gray-700">${op.textil_unitario.toFixed(2)}</td>
                   <td className="px-3 py-2 text-center text-gray-700">${op.manufactura_unitario.toFixed(2)}</td>
                   <td className="px-3 py-2 text-center text-gray-700 text-xs hidden">${op.materia_prima_unitario.toFixed(2)}</td>

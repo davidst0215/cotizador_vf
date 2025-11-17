@@ -17,6 +17,7 @@ import {
   Printer,
   RefreshCw,
   Database,
+  Search,
 } from "lucide-react";
 import { OpsSelectionTable } from "./OpsSelectionTable";
 import { WipDesgloseTable, WipDesgloseTableRef } from "./WipDesgloseTable";
@@ -45,11 +46,11 @@ const PureInputCodigoEstilo: React.FC<{ value?: string; onChange: (valor: string
   const prevExternalValueRef = useRef<string>(externalValue || "");
 
   useEffect(() => {
-    // Solo sincronizar si el valor externo es DIFERENTE y NO VACÍO
-    // Esto evita sincronizar en cada keystroke/re-render
-    if (externalValue && externalValue !== prevExternalValueRef.current) {
-      prevExternalValueRef.current = externalValue;
-      setLocalValue(externalValue);
+    // ✨ Sincronizar cuando el valor externo cambió (incluyendo cadenas vacías para limpiar)
+    // Comparar sin la condición "truthy" para permitir limpiar el campo
+    if (externalValue !== prevExternalValueRef.current) {
+      prevExternalValueRef.current = externalValue || "";
+      setLocalValue(externalValue || "");
     }
   }, [externalValue]);
 
@@ -75,7 +76,44 @@ const PureInputCodigoEstilo: React.FC<{ value?: string; onChange: (valor: string
   );
 };
 
-// Botón de búsqueda - SIN MEMO
+// ✨ v2.0: INPUT HTML PURO para Estilo Cliente - ESTADO LOCAL para evitar pérdida de foco
+const PureInputEstiloCliente: React.FC<{ value?: string; onChange: (valor: string) => void }> = ({
+  value: externalValue,
+  onChange,
+}) => {
+  const [localValue, setLocalValue] = useState<string>(externalValue || "");
+  const prevExternalValueRef = useRef<string>(externalValue || "");
+
+  useEffect(() => {
+    // ✨ Sincronizar también cuando recibe cadena vacía (para limpiar el campo)
+    console.log(`🔄 PureInputEstiloCliente sync: external="${externalValue}" vs prev="${prevExternalValueRef.current}"`);
+    if (externalValue !== prevExternalValueRef.current) {
+      console.log(`✅ Sincronizando: setLocalValue("${externalValue || ""}")`);
+      prevExternalValueRef.current = externalValue || "";
+      setLocalValue(externalValue || "");
+    }
+  }, [externalValue]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newValue = e.target.value;
+    setLocalValue(newValue);
+    onChange(newValue);
+  };
+
+  return (
+    <input
+      type="text"
+      value={localValue}
+      onChange={handleChange}
+      className="w-full p-4 border-2 border-gray-200 rounded-xl focus:border-red-500 focus:border-opacity-50 transition-colors"
+      placeholder="ej: LAC001-V25, GRY2024-P01"
+      autoComplete="off"
+      spellCheck={false}
+    />
+  );
+};
+
+// Botón de búsqueda - SIN MEMO (ICONO DE LUPA)
 const BuscarEstiloButton: React.FC<{
   value: string;
   buscandoEstilo: boolean;
@@ -85,16 +123,46 @@ const BuscarEstiloButton: React.FC<{
     type="button"
     onClick={onBuscar}
     disabled={buscandoEstilo || value.length < 5}
-    className="mt-2 w-full py-2 px-4 bg-red-700 hover:bg-red-800 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-lg font-semibold transition-colors"
-    title={value.length <5 ? "Ingresa al menos 5 caracteres" : "Buscar estilo"}
+    className="mt-2 w-full py-3 px-4 bg-red-700 hover:bg-red-800 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-lg font-semibold transition-colors flex items-center justify-center gap-2"
+    title={value.length < 5 ? "Ingresa al menos 5 caracteres" : "Buscar estilo"}
   >
     {buscandoEstilo ? (
-      <div className="flex items-center justify-center gap-2">
-        <RefreshCw className="h-4 w-4 animate-spin" />
-        Buscando...
-      </div>
+      <>
+        <RefreshCw className="h-5 w-5 animate-spin" />
+        <span>Buscando...</span>
+      </>
     ) : (
-      "Buscar Estilo"
+      <>
+        <Search className="h-5 w-5" />
+        <span>Buscar</span>
+      </>
+    )}
+  </button>
+);
+
+// v2.0: Botón de búsqueda para Estilo Cliente - SIN MEMO (ICONO DE LUPA)
+const BuscarEstiloClienteButton: React.FC<{
+  value: string;
+  buscandoEstilo: boolean;
+  onBuscar: () => void;
+}> = ({ value, buscandoEstilo, onBuscar }) => (
+  <button
+    type="button"
+    onClick={onBuscar}
+    disabled={buscandoEstilo || value.length === 0}
+    className="mt-2 w-full py-3 px-4 bg-red-700 hover:bg-red-800 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-lg font-semibold transition-colors flex items-center justify-center gap-2"
+    title={value.length === 0 ? "Ingresa un código de estilo" : "Buscar estilo cliente"}
+  >
+    {buscandoEstilo ? (
+      <>
+        <RefreshCw className="h-5 w-5 animate-spin" />
+        <span>Buscando...</span>
+      </>
+    ) : (
+      <>
+        <Search className="h-5 w-5" />
+        <span>Buscar</span>
+      </>
     )}
   </button>
 );
@@ -167,6 +235,33 @@ const EstadoEstiloComponent = React.memo(
   }
 );
 EstadoEstiloComponent.displayName = "EstadoEstiloComponent";
+
+// ✨ v2.0: Componente de estado para Estilo Cliente - Muestra badge Nuevo/Recurrente
+interface EstadoEstiloClienteComponentProps {
+  esEstiloClienteNuevo: boolean | null;
+  buscandoEstilo: boolean;
+  value: string;
+}
+
+const EstadoEstiloClienteComponent = React.memo(
+  ({ esEstiloClienteNuevo, buscandoEstilo, value }: EstadoEstiloClienteComponentProps) => {
+    if (!value || buscandoEstilo || esEstiloClienteNuevo === null) return null;
+
+    return (
+      <div className="mt-3 inline-block">
+        <div
+          className={`px-4 py-2 rounded-full text-white text-sm font-bold ${
+            esEstiloClienteNuevo ? "bg-red-500" : "bg-green-600"
+          }`}
+        >
+          {esEstiloClienteNuevo ? "🆕 Nuevo" : "✅ Recurrente"}
+        </div>
+      </div>
+    );
+  }
+);
+
+EstadoEstiloClienteComponent.displayName = "EstadoEstiloClienteComponent";
 
 // Estilos similares - Componente separado
 interface EstilosSimilaresComponentProps {
@@ -254,6 +349,69 @@ const CampoCodigoEstiloComponent = React.memo<CampoCodigoEstiloProps>(
 
 CampoCodigoEstiloComponent.displayName = "CampoCodigoEstiloComponent";
 
+// ✨ v2.0: COMPONENTE MEMOIZADO para Estilo Cliente (usa misma lógica de búsqueda que estilo_propio)
+interface CampoEstiloClienteProps {
+  value: string;
+  buscandoEstilo: boolean;
+  infoAutoCompletadoCliente: any;
+  esEstiloClienteNuevo: boolean | null;
+  onChange: (valor: string) => void;
+  onBuscar: () => void;
+}
+
+const CampoEstiloClienteComponent = React.memo<CampoEstiloClienteProps>(
+  ({
+    value,
+    buscandoEstilo,
+    infoAutoCompletadoCliente,
+    esEstiloClienteNuevo,
+    onChange,
+    onBuscar,
+  }) => {
+    return (
+      <div className="space-y-2">
+        <label className="block text-sm font-semibold text-red-900">Código de Estilo Cliente</label>
+
+        {/* Input puro - SIN MEMO */}
+        <PureInputEstiloCliente value={value} onChange={onChange} />
+
+        {/* Botón de búsqueda - SIN MEMO */}
+        <BuscarEstiloClienteButton value={value} buscandoEstilo={buscandoEstilo} onBuscar={onBuscar} />
+
+        {/* ✨ Estado del estilo cliente (Nuevo/Recurrente) */}
+        <EstadoEstiloClienteComponent
+          esEstiloClienteNuevo={esEstiloClienteNuevo}
+          buscandoEstilo={buscandoEstilo}
+          value={value}
+        />
+
+        {/* Información de auto-completado si está disponible */}
+        {infoAutoCompletadoCliente?.autocompletado_disponible && (
+          <div className="mt-2 p-3 rounded-xl border-2 bg-green-100 border-green-400">
+            <div className="text-sm font-semibold mb-2 text-green-700">
+              ✅ Auto-completado:
+            </div>
+            <div className="text-xs text-green-700">
+              📁 {infoAutoCompletadoCliente.campos_sugeridos?.familia_producto} | 🏷️{" "}
+              {infoAutoCompletadoCliente.campos_sugeridos?.tipo_prenda}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  },
+  (prevProps: CampoEstiloClienteProps, nextProps: CampoEstiloClienteProps) => {
+    return (
+      prevProps.value === nextProps.value &&
+      prevProps.buscandoEstilo === nextProps.buscandoEstilo &&
+      prevProps.infoAutoCompletadoCliente === nextProps.infoAutoCompletadoCliente &&
+      prevProps.esEstiloClienteNuevo === nextProps.esEstiloClienteNuevo
+    );
+  }
+);
+
+CampoEstiloClienteComponent.displayName = "CampoEstiloClienteComponent";
+
 // ========================================
 // 📋 FORM INPUT COMPONENTS - Memoized para evitar re-renders innecesarios
 // ========================================
@@ -286,8 +444,9 @@ const ClienteSelect = React.memo(({ value, clientesDisponibles, onChange }: Clie
 ClienteSelect.displayName = "ClienteSelect";
 
 // NOTA: TemporadaInput fue eliminado - temporada ya no se usa en la UI
+// NOTA: EstiloClienteInput fue reemplazado por CampoEstiloClienteComponent
 
-// Categoría de Lote select
+// Categoría de Lote select (DEPRECATED v2.0, se mantiene para compatibilidad)
 interface CategoriaLoteSelectProps {
   value: string;
   onChange: (value: string) => void;
@@ -377,6 +536,7 @@ interface EstiloSimilar {
 }
 
 interface FormData {
+  estilo_cliente: string; // v2.0: Búsqueda principal
   cliente_marca: string;
   temporada: string;
   categoria_lote: string;
@@ -484,8 +644,12 @@ const SistemaCotizadorTDV = () => {
     manufactura_por_prenda: null,
   });
 
+  // ✨ Estado para factores de ajuste WIP - PERSISTENTE entre pestañas
+  const [factoresWip, setFactoresWip] = useState<Record<string, number>>({});
+
   // Estados para formulario - separados para evitar pérdida de foco
   const [formData, setFormData] = useState<FormData>({
+    estilo_cliente: "", // v2.0: Código de estilo cliente
     cliente_marca: "LACOSTE",
     temporada: "", // NOTA: Ya no se usa en la UI
     categoria_lote: "Lote Mediano",
@@ -502,12 +666,18 @@ const SistemaCotizadorTDV = () => {
   // ⚡ REF LOCAL DEL INPUT (NO useState) - Esto evita re-renders del padre en cada keystroke
   // El input se mantiene controlado pero los cambios NO disparan renders
   const codigoEstiloLocalRef = useRef<string>("");
+  const estiloClienteLocalRef = useRef<string>("");
+
+  // ⚡ Ref adicional para almacenar el valor actual del input de estilo cliente (para búsqueda)
+  const estiloClienteInputRef = useRef<string>("");
 
   // Estado para forzar un render SOLO cuando es necesario (búsqueda, validación, etc)
   const [codigoEstiloForceRender, setCodigoEstiloForceRender] = useState<string>("");
+  const [estiloClienteForceRender, setEstiloClienteForceRender] = useState<string>("");
 
   // ⚡ Estado para controlar si el input ha sido sincronizado (evita loops)
   const inputSyncedRef = useRef<boolean>(false);
+  const estiloClienteSyncedRef = useRef<boolean>(false);
 
   // Estados para búsqueda de estilos
   const [estilosEncontrados, setEstilosEncontrados] = useState<EstiloSimilar[]>(
@@ -519,17 +689,32 @@ const SistemaCotizadorTDV = () => {
   const [infoAutoCompletado, setInfoAutoCompletado] =
     useState<AutoCompletadoInfo | null>(null);
 
+  // v2.0: Estados para búsqueda de estilo_cliente (reutiliza misma función, diferentes estados)
+  const [infoAutoCompletadoCliente, setInfoAutoCompletadoCliente] =
+    useState<AutoCompletadoInfo | null>(null);
+  const [esEstiloClienteNuevo, setEsEstiloClienteNuevo] = useState<boolean | null>(null);
+
   // Estados para WIPs seleccionadas
   const [wipsTextiles] = useState<WipSeleccionada[]>([]);
   const [wipsManufactura] = useState<WipSeleccionada[]>([]);
 
   // Referencias para evitar re-renders y debouncing
   const abortControllerRef = useRef<AbortController | null>(null);
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null); // ✨ Para debounce de Estilo Cliente
 
   // Sincronizar formDataRef con formData
   React.useEffect(() => {
     formDataRef.current = formData;
   }, [formData]);
+
+  // ✨ Cleanup: Limpiar debounce timer cuando el componente se desmonta
+  React.useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, []);
 
   // Memoized validation
   const erroresFormulario = useMemo(() => {
@@ -538,8 +723,14 @@ const SistemaCotizadorTDV = () => {
     if (!formData.cliente_marca) errores.push("Cliente/Marca es requerido");
     // NOTA: temporada y familia_producto ya no son requeridas
     if (!formData.tipo_prenda) errores.push("Tipo de Prenda es requerido");
-    // ⚡ Usar codigoEstiloLocal en lugar de formData.codigo_estilo (comparar con trim para ignorar espacios)
-    if (!codigoEstiloLocalRef.current.trim() && !formData.codigo_estilo) errores.push("Código de estilo propio es requerido");
+
+    // ✨ v2.0: Validación UNO U OTRO - Estilo Cliente OR Estilo Propio
+    const tieneEstiloCliente = estiloClienteInputRef.current.trim().length > 0;
+    const tieneEstiloPropio = codigoEstiloLocalRef.current.trim().length > 0;
+
+    if (!tieneEstiloCliente && !tieneEstiloPropio) {
+      errores.push("Ingresa Estilo Cliente O Estilo Propio (uno es suficiente)");
+    }
 
     // NOTA: Se removió validación de WIPs requeridas - ahora es opcional
 
@@ -570,11 +761,21 @@ const SistemaCotizadorTDV = () => {
       codigoEstiloLocalRef.current = valor;
       inputSyncedRef.current = false; // Marcar como no sincronizado
 
-      // ✅ Forzar un render MÍNIMO cuando el usuario escriba 5+ caracteres (para activar/mantener botón)
-      // o cuando está vacío (para desactivar botón)
-      if (valor.length >= 5 || valor.length === 0) {
-        setCodigoEstiloForceRender(valor);
+      // ✨ DEBOUNCE: Solo hacer setState después de 500ms sin cambios
+      // Limpiar timeout anterior
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
       }
+
+      // Crear nuevo timeout
+      debounceTimerRef.current = setTimeout(() => {
+        // ✅ Forzar un render MÍNIMO cuando el usuario escriba 5+ caracteres
+        // o cuando está vacío (para desactivar botón)
+        if (valor.length >= 5 || valor.length === 0) {
+          console.log(`⏱️ Debounce completado: actualizando ForceRender a "${valor}"`);
+          setCodigoEstiloForceRender(valor);
+        }
+      }, 1000); // 1 segundo de debounce
     },
     [],  // Sin dependencias - nunca cambia
   );
@@ -601,6 +802,32 @@ const SistemaCotizadorTDV = () => {
     [manejarCambioFormulario],
   );
 
+  // v2.0: Handler para estilo_cliente - SOLO ESTADO LOCAL, sin tocar formData
+  const handleEstiloClienteChange = useCallback(
+    (valor: string) => {
+      // ✨ Actualizar inmediatamente en refs (sin setState, mantiene el foco)
+      estiloClienteLocalRef.current = valor;
+      estiloClienteInputRef.current = valor;
+      estiloClienteSyncedRef.current = false;
+
+      // ✨ DEBOUNCE: Solo hacer setState después de 500ms sin cambios
+      // Limpiar timeout anterior
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+
+      // Crear nuevo timeout
+      debounceTimerRef.current = setTimeout(() => {
+        // Actualizar UI solo cuando el usuario deja de escribir
+        if (valor.length >= 3 || valor.length === 0) {
+          console.log(`⏱️ Debounce completado: actualizando ForceRender a "${valor}"`);
+          setEstiloClienteForceRender(valor);
+        }
+      }, 1000); // 1 segundo de debounce
+    },
+    [],
+  );
+
   // ✨ MEMOIZED CALLBACKS para evitar re-renders innecesarios en child components
   // Callback memoizado para WipDesgloseTable - evita infinite requests por cambio de función
   const handleCostosWipCalculados = useCallback(
@@ -622,6 +849,28 @@ const SistemaCotizadorTDV = () => {
     if (!cotizacionActual) {
       return;
     }
+
+    // ✨ v2.0: CALCULAR ESFUERZO PROMEDIO DE OPs SELECCIONADAS Y DETERMINAR FACTOR
+    const totalEsfuerzo = selectedOpsData.reduce((sum, op) => sum + (op.esfuerzo_total || 6), 0);
+    const esforzoPromedio = Math.round(totalEsfuerzo / selectedOpsData.length);
+
+    // Mapear esfuerzo a factor (misma lógica que backend)
+    let nuevoFactorEsfuerzo = 1.00; // Default: Medio
+    let categoriaNueva = "Medio";
+    if (esforzoPromedio >= 0 && esforzoPromedio <= 5) {
+      nuevoFactorEsfuerzo = 0.90;
+      categoriaNueva = "Bajo";
+    } else if (esforzoPromedio === 6) {
+      nuevoFactorEsfuerzo = 1.00;
+      categoriaNueva = "Medio";
+    } else if (esforzoPromedio >= 7 && esforzoPromedio <= 10) {
+      nuevoFactorEsfuerzo = 1.15;
+      categoriaNueva = "Alto";
+    }
+
+    console.log(`🎯 Recalculando vector con esfuerzo promedio: ${esforzoPromedio}`);
+    console.log(`   Factor Esfuerzo Anterior: ${(cotizacionActual.factor_esfuerzo || 1).toFixed(2)}`);
+    console.log(`   Factor Esfuerzo Nuevo: ${nuevoFactorEsfuerzo.toFixed(2)} (${categoriaNueva})`);
 
     // ✨ OBTENER valores de textil y manufactura directamente del WIP resumen
     const promedioTextil = wipDesgloseTableRef.current?.getTotalTextil() || 0;
@@ -655,16 +904,19 @@ const SistemaCotizadorTDV = () => {
     // Sumar todos para costo base
     const costosBase = promedioTextil + promedioManufactura + promedioMateriaPrima + promedioAvios + promedioIndirecto + promedioAdministracion + promedioVentas;
 
-    // Aplicar factores
-    const costosConFactores =
-      costosBase *
-      (cotizacionActual.factor_lote || 1) *
-      (cotizacionActual.factor_esfuerzo || 1) *
-      (cotizacionActual.factor_estilo || 1) *
-      (cotizacionActual.factor_marca || 1);
+    // ✨ v2.0: RECALCULAR VECTOR TOTAL CON NUEVO FACTOR ESFUERZO
+    const nuevoVectorTotal = nuevoFactorEsfuerzo * (cotizacionActual.factor_marca || 1);
+    const nuevoMargenAplicado = 15 * nuevoVectorTotal; // 15% × vector_total
+    const costosConFactores = costosBase * (1 + (nuevoMargenAplicado / 100));
 
     // Aplicar margen
-    const precioFinal = costosConFactores * (1 + (cotizacionActual.margen_aplicado || 0) / 100);
+    const precioFinal = costosConFactores;
+
+    console.log(`📊 Recálculo Vector:`);
+    console.log(`   Vector Anterior: ${(cotizacionActual.vector_total || 1).toFixed(3)}`);
+    console.log(`   Vector Nuevo: ${nuevoVectorTotal.toFixed(3)} (${nuevoFactorEsfuerzo.toFixed(2)} × ${(cotizacionActual.factor_marca || 1).toFixed(2)})`);
+    console.log(`   Margen Anterior: ${(cotizacionActual.margen_aplicado || 0).toFixed(1)}%`);
+    console.log(`   Margen Nuevo: ${nuevoMargenAplicado.toFixed(1)}%`);
 
     // ✨ ACTUALIZAR cotizacionActual con los nuevos valores
     setCotizacionActual((prev) => {
@@ -679,6 +931,10 @@ const SistemaCotizadorTDV = () => {
         gasto_administracion: promedioAdministracion,
         gasto_ventas: promedioVentas,
         costo_base_total: costosBase,
+        factor_esfuerzo: nuevoFactorEsfuerzo,
+        categoria_esfuerzo: esforzoPromedio,
+        vector_total: nuevoVectorTotal,
+        margen_aplicado: nuevoMargenAplicado,
         precio_final: precioFinal,
       };
     });
@@ -694,6 +950,13 @@ const SistemaCotizadorTDV = () => {
     const codOrdpros = opsSeleccionadas.map((op) => op.cod_ordpro);
     setSelectedOpsCode(codOrdpros);
     setSelectedOpsData(opsSeleccionadas); // ✨ Guardar datos completos para cálculo posterior
+    // 🔍 DEBUG: Mostrar OPs seleccionadas con sus esfuerzo values
+    console.log(`📊 OPs Seleccionadas (${opsSeleccionadas.length}):`, opsSeleccionadas.map(op => ({
+      cod: op.cod_ordpro,
+      esfuerzo: op.esfuerzo_total,
+      prendas: op.prendas_requeridas,
+      cliente: op.cliente
+    })));
     setFormData((prev) => ({
       ...prev,
       cod_ordpros: codOrdpros,
@@ -850,16 +1113,28 @@ const SistemaCotizadorTDV = () => {
   // NOTA: Efecto 2 (cargar tipos cuando cambia familia) fue eliminado
   // Ahora se cargan TODOS los tipos al iniciar (cargarTodosTipos) para que estilos nuevos puedan seleccionar tipo_prenda
 
+  // ✨ Función GENÉRICA para verificar y buscar estilos (funciona para estilo_propio y estilo_cliente)
   const verificarYBuscarEstilo = useCallback(
-    async (codigoEstilo: string, cliente: string, versionCalculo: string) => {
+    async (
+      codigo: string,
+      versionCalculo: string,
+      tipo: 'estilo_propio' | 'estilo_cliente' = 'estilo_propio',
+      cliente?: string
+    ) => {
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
 
-      if (!codigoEstilo || codigoEstilo.length < 5) {
-        setEstilosEncontrados([]);
-        setEsEstiloNuevo(true);
-        setInfoAutoCompletado(null);
+      // Validar longitud mínima según tipo
+      const minLength = tipo === 'estilo_cliente' ? 3 : 5;
+      if (!codigo || codigo.length < minLength) {
+        if (tipo === 'estilo_propio') {
+          setEstilosEncontrados([]);
+          setEsEstiloNuevo(true);
+          setInfoAutoCompletado(null);
+        } else {
+          setInfoAutoCompletadoCliente(null);
+        }
         return;
       }
 
@@ -867,79 +1142,114 @@ const SistemaCotizadorTDV = () => {
       const abortController = new AbortController();
       abortControllerRef.current = abortController;
 
+      // ✨ v2.0: Endpoint genérico que maneja ambos tipos
+      const endpoint = `verificar-estilo/${encodeURIComponent(codigo)}?tipo=${encodeURIComponent(tipo)}&version_calculo=${encodeURIComponent(versionCalculo)}`;
+
       try {
-        // Paso 1: verificación completa
-        const verificacion = await get<any>(
-          `verificar-estilo-completo/${encodeURIComponent(codigoEstilo)}?version_calculo=${encodeURIComponent(
-            versionCalculo,
-          )}`,
-          { signal: abortController.signal },
-        );
+        const verificacion = await get<any>(endpoint, { signal: abortController.signal });
+
         if (!abortController.signal.aborted) {
-          // console.log(
-          //   `🔍 Verificación completa ${codigoEstilo}:`,
-          //   verificacion,
-          // );
-          const esNuevo = verificacion.es_estilo_nuevo;
-          setEsEstiloNuevo(esNuevo);
+          if (tipo === 'estilo_propio') {
+            // Lógica para estilo propio
+            const esNuevo = verificacion.es_estilo_nuevo;
+            setEsEstiloNuevo(esNuevo);
 
-          if (!esNuevo && verificacion.autocompletado?.disponible) {
-            const { tipo_prenda } = verificacion.autocompletado;
-            // NOTA: Ya no se preseteea familia_producto
-            if (tipo_prenda) {
-              // console.log(`🎯 Auto-completando: ${tipo_prenda}`);
-              setFormData((prev) => ({
-                ...prev,
-                tipo_prenda,
-              }));
+            if (!esNuevo && verificacion.autocompletado?.disponible) {
+              const { tipo_prenda, cliente_principal } = verificacion.autocompletado;
+              if (tipo_prenda) {
+                setFormData((prev) => ({
+                  ...prev,
+                  tipo_prenda,
+                  // ✨ v2.0: También auto-completar cliente_marca para estilo_propio
+                  cliente_marca: cliente_principal || prev.cliente_marca,
+                }));
 
-              // ✅ IMPORTANTE: Actualizar debouncedFormData inmediatamente para evitar pérdida de valor
-              // Esto previene que se pierda el tipo_prenda mientras el debounce timer sigue corriendo
-              setDebouncedFormData((prev) => ({
-                ...prev,
-                tipo_prenda,
-              }));
+                setDebouncedFormData((prev) => ({
+                  ...prev,
+                  tipo_prenda,
+                }));
 
-              // Agregar tipo_prenda al array de tipos disponibles si no está ya
-              setTiposDisponibles((prev) => {
-                if (!prev.includes(tipo_prenda)) {
-                  return [...prev, tipo_prenda];
-                }
-                return prev;
-              });
+                setTiposDisponibles((prev) => {
+                  if (!prev.includes(tipo_prenda)) {
+                    return [...prev, tipo_prenda];
+                  }
+                  return prev;
+                });
 
-              setInfoAutoCompletado({
+                setInfoAutoCompletado({
+                  autocompletado_disponible: true,
+                  info_estilo: {
+                    tipo_prenda,
+                    categoria: verificacion.categoria,
+                    volumen_total: verificacion.volumen_historico,
+                  },
+                  campos_sugeridos: { tipo_prenda },
+                });
+              }
+            } else {
+              setInfoAutoCompletado(null);
+            }
+
+            // Buscar estilos similares solo para estilo_propio
+            if (cliente) {
+              const estilos = await get<any[]>(
+                `buscar-estilos/${encodeURIComponent(codigo)}?cliente=${encodeURIComponent(cliente)}&limite=10&version_calculo=${encodeURIComponent(versionCalculo)}`,
+                { signal: abortController.signal },
+              );
+              if (!abortController.signal.aborted) {
+                setEstilosEncontrados(estilos);
+              }
+            }
+          } else {
+            // Lógica para estilo_cliente (v2.0)
+            // ✨ Capturar es_estilo_nuevo del backend
+            const esClienteNuevo = verificacion.es_estilo_nuevo;
+            setEsEstiloClienteNuevo(esClienteNuevo);
+
+            if (verificacion && verificacion.autocompletado?.disponible) {
+              const { tipo_prenda, cliente_principal, familia_producto } = verificacion.autocompletado;
+
+              // Auto-completar tipo_prenda y cliente_marca
+              if (tipo_prenda) {
+                setFormData((prev) => ({
+                  ...prev,
+                  tipo_prenda,
+                  cliente_marca: cliente_principal || prev.cliente_marca, // v2.0: Auto-completa cliente_marca
+                }));
+
+                setTiposDisponibles((prev) => {
+                  if (!prev.includes(tipo_prenda)) {
+                    return [...prev, tipo_prenda];
+                  }
+                  return prev;
+                });
+              }
+
+              setInfoAutoCompletadoCliente({
                 autocompletado_disponible: true,
                 info_estilo: {
                   tipo_prenda,
+                  familia_producto,
                   categoria: verificacion.categoria,
                   volumen_total: verificacion.volumen_historico,
                 },
-                campos_sugeridos: { tipo_prenda },
+                campos_sugeridos: { tipo_prenda, familia_producto },
               });
+            } else {
+              setInfoAutoCompletadoCliente(null);
             }
-          } else {
-            setInfoAutoCompletado(null);
           }
-        }
-
-        // Paso 2: buscar estilos similares
-        const estilos = await get<any[]>(
-          `buscar-estilos/${encodeURIComponent(codigoEstilo)}?cliente=${encodeURIComponent(cliente)}&limite=10&version_calculo=${encodeURIComponent(
-            versionCalculo,
-          )}`,
-          { signal: abortController.signal },
-        );
-        if (!abortController.signal.aborted) {
-          setEstilosEncontrados(estilos);
-          // console.log(`🔍 Estilos similares encontrados: ${estilos.length}`);
         }
       } catch (error: any) {
         if (error.name !== "AbortError") {
-          // console.error("Error en verificación:", error);
-          setEstilosEncontrados([]);
-          setEsEstiloNuevo(true);
-          setInfoAutoCompletado(null);
+          if (tipo === 'estilo_propio') {
+            setEstilosEncontrados([]);
+            setEsEstiloNuevo(true);
+            setInfoAutoCompletado(null);
+          } else {
+            setEsEstiloClienteNuevo(null); // ✨ Limpiar en caso de error
+            setInfoAutoCompletadoCliente(null);
+          }
         }
       } finally {
         if (!abortController.signal.aborted) {
@@ -950,32 +1260,69 @@ const SistemaCotizadorTDV = () => {
     [],
   );
 
-  // ⚡ Handler para buscar estilo manualmente - SINCRONIZA ref local con formData
+  // ✨ Handler para buscar estilo propio
   const onBuscarEstilo = useCallback(() => {
-    const codigoActual = codigoEstiloLocalRef.current.toUpperCase();  // ✅ Transformar aquí
+    const codigoActual = codigoEstiloLocalRef.current.toUpperCase().trim();
     if (codigoActual && codigoActual.length >= 5) {
-      // Marcar como sincronizado para evitar efectos secundarios
       inputSyncedRef.current = true;
-
-      // Sincronizar ref local a formData
       setFormData(prev => ({
         ...prev,
-        codigo_estilo: codigoActual
+        codigo_estilo: codigoActual,
+        estilo_cliente: "" // ✨ Limpiar también en formData
       }));
 
-      // Limpiar resultados previos antes de buscar
       setEstilosEncontrados([]);
       setEsEstiloNuevo(null);
       setInfoAutoCompletado(null);
 
-      // Buscar estilo
+      // ✨ v2.0: Limpiar completamente estilo cliente (valor + visualización + refs)
+      console.log(`🧹 Limpiando Estilo Cliente desde onBuscarEstilo`);
+      estiloClienteInputRef.current = "";
+      estiloClienteLocalRef.current = ""; // ✨ IMPORTANTE: Limpiar también este ref
+      estiloClienteSyncedRef.current = false; // Reset sync flag
+      setEstiloClienteForceRender(""); // ✨ Esto dispara re-render y actualiza externalValue
+      setEsEstiloClienteNuevo(null); // ✨ Limpiar estado de estilo cliente nuevo
+      setInfoAutoCompletadoCliente(null);
+      console.log(`✅ Estilo Cliente limpiado`);
+
       verificarYBuscarEstilo(
         codigoActual,
-        formData.cliente_marca,
         formData.version_calculo,
+        'estilo_propio',
+        formData.cliente_marca
       );
     }
   }, [formData.cliente_marca, formData.version_calculo, verificarYBuscarEstilo]);
+
+  // ✨ Handler para buscar estilo cliente (v2.0)
+  const onBuscarEstiloCliente = useCallback(() => {
+    const estiloClienteActual = estiloClienteInputRef.current.toUpperCase().trim();
+    if (estiloClienteActual && estiloClienteActual.length >= 3) {
+      estiloClienteSyncedRef.current = true;
+      setFormData(prev => ({
+        ...prev,
+        estilo_cliente: estiloClienteActual,
+        codigo_estilo: "" // ✨ Limpiar también en formData
+      }));
+
+      setInfoAutoCompletadoCliente(null);
+
+      // ✨ v2.0: Limpiar completamente estilo propio (valor + visualización)
+      codigoEstiloLocalRef.current = "";
+      inputSyncedRef.current = false; // Reset sync flag
+      setCodigoEstiloForceRender("");
+      setEstilosEncontrados([]);
+      setEsEstiloNuevo(null);
+      setEsEstiloClienteNuevo(null); // ✨ Limpiar estado de estilo cliente nuevo
+      setInfoAutoCompletado(null);
+
+      verificarYBuscarEstilo(
+        estiloClienteActual,
+        formData.version_calculo,
+        'estilo_cliente'
+      );
+    }
+  }, [formData.version_calculo, verificarYBuscarEstilo]);
 
   // cargarOpsReales (POST)
   const cargarOpsReales = useCallback(
@@ -1032,32 +1379,70 @@ const SistemaCotizadorTDV = () => {
   const procesarCotizacion = useCallback(async () => {
     setCargando(true);
     try {
-      // ⚡ Sincronizar codigoEstiloLocal ref a formData antes de procesar (si no está sincronizado)
-      const codigoFinal = codigoEstiloLocalRef.current.toUpperCase() || formData.codigo_estilo;  // ✅ Transformar aquí
+      // ✨ v2.0: Obtener valores actuales de ambos inputs
+      const codigoEstiloActual = codigoEstiloLocalRef.current.toUpperCase().trim();
+      const estiloClienteActual = estiloClienteInputRef.current.toUpperCase().trim();
 
-      if (!inputSyncedRef.current && codigoEstiloLocalRef.current) {
+      // Sincronizar a formData si es necesario
+      if (!inputSyncedRef.current && codigoEstiloActual) {
         setFormData(prev => ({
           ...prev,
-          codigo_estilo: codigoFinal
+          codigo_estilo: codigoEstiloActual
         }));
         inputSyncedRef.current = true;
       }
 
+      if (!estiloClienteSyncedRef.current && estiloClienteActual) {
+        setFormData(prev => ({
+          ...prev,
+          estilo_cliente: estiloClienteActual
+        }));
+        estiloClienteSyncedRef.current = true;
+      }
+
+      // ✨ v2.0: Calcular esfuerzo promedio de OPs seleccionadas
+      let esforzoPromedio = 6; // Default
+      console.log(`🔍 DEBUG COTIZACIÓN:`);
+      console.log(`   selectedOpsCode: ${JSON.stringify(selectedOpsCode)}`);
+      console.log(`   selectedOpsData length: ${selectedOpsData?.length || 0}`);
+      if (selectedOpsData && selectedOpsData.length > 0) {
+        const totalEsfuerzo = selectedOpsData.reduce((sum, op) => sum + (op.esfuerzo_total || 6), 0);
+        esforzoPromedio = Math.round(totalEsfuerzo / selectedOpsData.length);
+        console.log(`✅ Esfuerzo Promedio: ${esforzoPromedio} (${selectedOpsData.length} OPs seleccionadas)`);
+        console.log(`📝 Detalles OPs:`, selectedOpsData.map(op => ({
+          cod: op.cod_ordpro,
+          esfuerzo: op.esfuerzo_total,
+          prendas: op.prendas_requeridas,
+          cliente: op.cliente
+        })));
+      } else {
+        console.log(`⚠️ No hay OPs seleccionadas, usando esfuerzo default: 6`);
+        console.log(`⚠️ selectedOpsCode: ${selectedOpsCode?.length || 0} elementos`);
+      }
+
+      // ✨ v2.0: El payload permite ambos campos (uno u otro será el principal)
       const payload = {
+        estilo_cliente: estiloClienteActual || null, // Puede ser vacío si usa estilo_propio
         cliente_marca: formData.cliente_marca,
         temporada: formData.temporada,
         categoria_lote: formData.categoria_lote,
         familia_producto: formData.familia_producto,
         tipo_prenda: formData.tipo_prenda,
-        codigo_estilo: codigoFinal,
+        codigo_estilo: codigoEstiloActual || null, // Puede ser vacío si usa estilo_cliente
         usuario: formData.usuario,
         version_calculo: formData.version_calculo,
+        esfuerzo_total: selectedOpsCode && selectedOpsCode.length > 0 ? esforzoPromedio : null, // v2.0: Promedio de OPs seleccionadas
         wips_textiles: esEstiloNuevo ? wipsTextiles : null,
         wips_manufactura: esEstiloNuevo ? wipsManufactura : null,
         cod_ordpros: selectedOpsCode && selectedOpsCode.length > 0 ? selectedOpsCode : null,
       };
 
-      // console.log("🚀 Procesando cotización:", payload);
+      // 🚀 DEBUG: Mostrar payload completo con esfuerzo_total
+      console.log(`🚀 Enviando Cotización:`, {
+        ...payload,
+        esfuerzo_total: payload.esfuerzo_total,
+        cod_ordpros_count: payload.cod_ordpros?.length || 0
+      });
 
       const resultado = await post<any>("/cotizar", payload);
       setCotizacionActual(resultado);
@@ -1074,7 +1459,7 @@ const SistemaCotizadorTDV = () => {
     } finally {
       setCargando(false);
     }
-  }, [formData, esEstiloNuevo, wipsTextiles, wipsManufactura, selectedOpsCode, cargarOpsReales]);
+  }, [formData, esEstiloNuevo, wipsTextiles, wipsManufactura, selectedOpsCode, selectedOpsData, cargarOpsReales]);
 
   // ========================================
   // 🎨 COMPONENTES MEMOIZADOS CORREGIDOS
@@ -1421,6 +1806,16 @@ const SistemaCotizadorTDV = () => {
 
         <div className="p-6">
           <div className="grid grid-cols-2 gap-6">
+            {/* v2.0: Estilo Cliente encima de Cliente/Marca - COMPONENTE COMPLETO CON BÚSQUEDA */}
+            <CampoEstiloClienteComponent
+              value={estiloClienteForceRender || estiloClienteLocalRef.current}
+              buscandoEstilo={buscandoEstilo}
+              infoAutoCompletadoCliente={infoAutoCompletadoCliente}
+              esEstiloClienteNuevo={esEstiloClienteNuevo}
+              onChange={handleEstiloClienteChange}
+              onBuscar={onBuscarEstiloCliente}
+            />
+
             <ClienteSelect
               value={formData.cliente_marca}
               clientesDisponibles={clientesDisponibles}
@@ -1436,11 +1831,6 @@ const SistemaCotizadorTDV = () => {
               onChange={handleCodigoEstiloChange}
               onBuscar={onBuscarEstilo}
               onSelectStyle={seleccionarEstiloSimilar}
-            />
-
-            <CategoriaLoteSelect
-              value={formData.categoria_lote}
-              onChange={handleCategoriaLoteChange}
             />
 
             <TipoPrendaSelect
@@ -1501,6 +1891,11 @@ const SistemaCotizadorTDV = () => {
   // ========================================
 
   const PantallaCostosFinales = React.memo(() => {
+    // ✨ Calcular promedio de kg_prenda de las OPs seleccionadas
+    const kgPrendaPromedio = selectedOpsData.length > 0
+      ? selectedOpsData.reduce((sum, op) => sum + (op.kg_prenda || 0), 0) / selectedOpsData.length
+      : 0;
+
     // Memoized componentesAgrupados (misma lógica que en PantallaResultados)
     const componentesAgrupados = useMemo(() => {
       if (!cotizacionActual) return [];
@@ -1575,6 +1970,7 @@ const SistemaCotizadorTDV = () => {
       costosWipCalculados.textil_por_prenda,
       costosWipCalculados.manufactura_por_prenda,
       selectedOpsCode.length,
+      kgPrendaPromedio, // ✨ Agregar a dependencias
     ]);
 
     if (!cotizacionActual) {
@@ -1611,50 +2007,85 @@ const SistemaCotizadorTDV = () => {
                   Componentes de Costo
                 </h3>
                 <div className="space-y-3">
-                  {componentesAgrupados.map((comp, idx) => (
-                    <div key={idx}>
-                      <div className="flex justify-between items-center p-3 rounded-xl bg-orange-50">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className="font-semibold text-red-900">
-                              {comp.nombre}
-                            </span>
-                            <span
-                              className={`px-2 py-1 rounded-full text-xs font-semibold text-white ${
-                                comp.fuente === "wip"
-                                  ? "bg-red-600"
-                                  : comp.fuente === "historico"
-                                    ? "bg-red-500"
-                                    : "bg-gray-500"
-                              }`}
-                            >
-                              {comp.fuente}
-                            </span>
-                            {comp.es_agrupado && (
-                              <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
-                                {comp.badge}
-                              </span>
-                            )}
-                          </div>
+                  {componentesAgrupados.map((comp, idx) => {
+                    // ✨ Función para obtener la descripción correcta según el nombre del componente
+                    const getDescripcion = (nombre: string) => {
+                      if (nombre.includes("Textil")) return "en base a ruta textil";
+                      if (nombre.includes("Manufactura")) return "en base a ruta manufactura";
+                      if (nombre.includes("Materia Prima") || nombre.includes("Avíos"))
+                        return "en base a configuración de inputs para producción";
+                      if (nombre.includes("Indirecto") || nombre.includes("Administración") || nombre.includes("Ventas"))
+                        return "en base a la bolsa anual de gastos y prendas";
+                      return "en base a datos históricos";
+                    };
 
-                          {/* Mostrar solo badge informativo, NO detalles individuales */}
-                          <div className="text-xs text-gray-600 mt-1">
-                            {comp.badge}
+                    return (
+                      <div key={idx} className="grid grid-cols-4 gap-3">
+                        {/* Tarjeta 1: Componente (ocupa 2 columnas) */}
+                        <div className="col-span-2 p-3 rounded-xl bg-orange-50 flex flex-col justify-center">
+                          <div className="font-semibold text-red-900 text-sm mb-1">
+                            {comp.nombre}
+                          </div>
+                          <div className="text-xs text-gray-700">
+                            {getDescripcion(comp.nombre)}
                           </div>
                         </div>
-                        <span className="font-bold text-lg ml-4 text-red-900">
-                          ${comp.costo_unitario.toFixed(2)}
-                        </span>
+
+                        {/* Tarjeta 2: Costo por Prenda */}
+                        <div className="p-3 rounded-xl bg-orange-50 flex flex-col justify-center items-center text-center">
+                          <div className="text-xs font-semibold text-red-900 mb-2">
+                            Costo por Prenda
+                          </div>
+                          <div className="font-bold text-lg text-red-900">
+                            ${comp.costo_unitario.toFixed(2)}
+                          </div>
+                        </div>
+
+                        {/* Tarjeta 3: Costo por Kg (si aplica) */}
+                        <div className="p-3 rounded-xl bg-orange-50 flex flex-col justify-center items-center text-center">
+                          <div className="text-xs font-semibold text-red-900 mb-2">
+                            Costo por Kg
+                          </div>
+                          <div className="font-bold text-lg text-red-900">
+                            {kgPrendaPromedio > 0
+                              ? `$${(comp.costo_unitario / kgPrendaPromedio).toFixed(2)}`
+                              : "N/A"
+                            }
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  <div className="border-t-2 pt-3 mt-4 border-orange-400 grid grid-cols-4 gap-3">
+                    {/* Tarjeta 1: Total Label (ocupa 2 columnas) */}
+                    <div className="col-span-2 p-3 rounded-xl bg-orange-200 flex flex-col justify-center">
+                      <div className="font-bold text-red-900 text-sm">
+                        Costo Base Total
                       </div>
                     </div>
-                  ))}
 
-                  <div className="border-t-2 pt-3 mt-4 border-orange-400">
-                    <div className="flex justify-between items-center font-bold text-lg p-3 rounded-xl bg-orange-200 text-red-900">
-                      <span>Costo Base Total</span>
-                      <span>
+                    {/* Tarjeta 2: Costo por Prenda */}
+                    <div className="p-3 rounded-xl bg-orange-200 flex flex-col justify-center items-center text-center">
+                      <div className="text-xs font-semibold text-red-900 mb-2">
+                        Total por Prenda
+                      </div>
+                      <div className="font-bold text-lg text-red-900">
                         ${(cotizacionActual.costo_base_total || 0).toFixed(2)}
-                      </span>
+                      </div>
+                    </div>
+
+                    {/* Tarjeta 3: Costo por Kg */}
+                    <div className="p-3 rounded-xl bg-orange-200 flex flex-col justify-center items-center text-center">
+                      <div className="text-xs font-semibold text-red-900 mb-2">
+                        Total por Kg
+                      </div>
+                      <div className="font-bold text-lg text-red-900">
+                        {kgPrendaPromedio > 0
+                          ? `$${((cotizacionActual.costo_base_total || 0) / kgPrendaPromedio).toFixed(2)}`
+                          : "N/A"
+                        }
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1666,14 +2097,7 @@ const SistemaCotizadorTDV = () => {
                   Vector de Ajuste
                 </h3>
                 <div className="space-y-3">
-                  <div className="flex justify-between items-center p-3 rounded-xl bg-orange-50">
-                    <span className="font-semibold text-red-900">
-                      Factor Lote ({cotizacionActual.inputs.categoria_lote})
-                    </span>
-                    <span className="font-bold text-red-500">
-                      {(cotizacionActual.factor_lote || 1).toFixed(2)}
-                    </span>
-                  </div>
+                  {/* v2.0: Factor Lote y Factor Estilo eliminados - no se usan en el cálculo */}
                   <div className="flex justify-between items-center p-3 rounded-xl bg-orange-50">
                     <span className="font-semibold text-red-900">
                       Factor Esfuerzo (
@@ -1681,15 +2105,6 @@ const SistemaCotizadorTDV = () => {
                     </span>
                     <span className="font-bold text-red-500">
                       {(cotizacionActual.factor_esfuerzo || 1).toFixed(2)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center p-3 rounded-xl bg-orange-50">
-                    <span className="font-semibold text-red-900">
-                      Factor Estilo (
-                      {cotizacionActual.categoria_estilo || "Nuevo"})
-                    </span>
-                    <span className="font-bold text-red-500">
-                      {(cotizacionActual.factor_estilo || 1).toFixed(2)}
                     </span>
                   </div>
                   <div className="flex justify-between items-center p-3 rounded-xl bg-orange-50">
@@ -1711,14 +2126,14 @@ const SistemaCotizadorTDV = () => {
                   </div>
 
                   <div className="p-4 rounded-xl text-center bg-red-500">
-                    <div className="text-sm text-white/90 mb-1">
-                      Precio Final
+                    <div className="text-sm text-white/90 mb-2">
+                      Precio Final ($ por prenda)
                     </div>
-                    <div className="text-xl font-bold text-white">
-                      ${(cotizacionActual.costo_base_total || 0).toFixed(2)} ×
-                      (1 + 15% ×{" "}
-                      {(cotizacionActual.vector_total || 1).toFixed(3)}) = $
-                      {(cotizacionActual.precio_final || 0).toFixed(2)}
+                    <div className="text-2xl font-bold text-white mb-2">
+                      ${(cotizacionActual.precio_final || 0).toFixed(2)}/prenda
+                    </div>
+                    <div className="text-xs text-white/70">
+                      ${(cotizacionActual.costo_base_total || 0).toFixed(2)} × (1 + 15% × {(cotizacionActual.vector_total || 1).toFixed(3)})
                     </div>
                   </div>
                 </div>
@@ -1846,28 +2261,41 @@ const SistemaCotizadorTDV = () => {
 
             <div className="p-6">
               <OpsSelectionTable
-                codigoEstilo={cotizacionActual.inputs.codigo_estilo || ""}
+                codigoEstilo={cotizacionActual.inputs.estilo_cliente || cotizacionActual.inputs.codigo_estilo || ""}
                 versionCalculo={cotizacionActual.inputs.version_calculo}
                 marca={cotizacionActual.inputs.cliente_marca}
                 tipoPrenda={cotizacionActual.inputs.tipo_prenda}
                 onOpsSelected={handleOpsSelected}
                 opsPreseleccionadas={selectedOpsCode} // ✨ Mantener selecciones
+                tipoEstilo={cotizacionActual.inputs.estilo_cliente ? "estilo_cliente" : "estilo_propio"} // v2.0: Indicar tipo
               />
 
               {selectedOpsCode.length > 0 && (
                 <div className="mt-8 border-t pt-8">
                   <h3 className="text-lg font-bold text-red-900 mb-4">Análisis de Costos por WIP</h3>
-                  <WipDesgloseTable
-                    ref={wipDesgloseTableRef}
-                    {...({
-                      codigoEstilo: formData.codigo_estilo,
-                      versionCalculo: formData.version_calculo,
-                      codOrdpros: selectedOpsCode,
-                      onCostosCalculados: handleCostosWipCalculados,
-                      onError: handleOpsSelected,
-                      wipsPreseleccionados: selectedWipsRef.current, // ✨ Mantener selecciones visualmente desde ref
-                    } as any)}
-                  />
+                  {(() => {
+                    // ✨ Calcular promedio de kg_prenda de las OPs seleccionadas
+                    const kgPrendaPromedio = selectedOpsData.length > 0
+                      ? selectedOpsData.reduce((sum, op) => sum + (op.kg_prenda || 0), 0) / selectedOpsData.length
+                      : 0;
+
+                    return (
+                      <WipDesgloseTable
+                        ref={wipDesgloseTableRef}
+                        {...({
+                          codigoEstilo: formData.codigo_estilo,
+                          versionCalculo: formData.version_calculo,
+                          codOrdpros: selectedOpsCode,
+                          onCostosCalculados: handleCostosWipCalculados,
+                          onError: handleOpsSelected,
+                          wipsPreseleccionados: selectedWipsRef.current, // ✨ Mantener selecciones visualmente desde ref
+                          factoresWip: factoresWip, // ✨ Pasar factores persistentes desde el padre
+                          onFactoresChange: setFactoresWip, // ✨ Callback para actualizar factores en el padre
+                          kgPrendaPromedio: kgPrendaPromedio, // ✨ Promedio de kg/prenda de OPs seleccionadas
+                        } as any)}
+                      />
+                    );
+                  })()}
 
                   {/* ✨ BOTÓN: Calcular Costos Finales */}
                   <div className="mt-6 flex justify-end">

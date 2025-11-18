@@ -97,45 +97,48 @@ class Settings(BaseSettings):
 
 
 # =====================================================================
-# FACTORES DE AJUSTE (BASADOS EN IMGENES PROPORCIONADAS)
+# FACTORES DE AJUSTE (VERSIÓN 2.0 - SIMPLIFICADO A 2 FACTORES)
+# =====================================================================
+# Vector Total = Factor Esfuerzo × Factor Marca
+# Nota: Factor Lote y Factor Estilo han sido removidos
 # =====================================================================
 
 Factores = Dict[str, Dict[str, Any]]
 
 
 class FactoresTDV:
-    """Factores de ajuste basados en anlisis TDV real"""
+    """Factores de ajuste basados en análisis TDV real - Versión 2.0 simplificada"""
 
-    # Rangos de lote (cantidad de prendas)
+    # Rangos de lote (SE MANTIENE SOLO PARA BÚSQUEDA DE OPs, NO PARA VECTOR DE AJUSTE)
     RANGOS_LOTE: Factores = {
         "Micro Lote": {"min": 1, "max": 50, "factor": 1.15},
-        "Lote Pequeo": {"min": 51, "max": 500, "factor": 1.10},
+        "Lote Pequeño": {"min": 51, "max": 500, "factor": 1.10},
         "Lote Mediano": {"min": 501, "max": 1000, "factor": 1.05},
         "Lote Grande": {"min": 1001, "max": 4000, "factor": 1.00},
         "Lote Masivo": {"min": 4001, "max": 999999, "factor": 0.90},
     }
 
-    # Factores de esfuerzo (de imagen 1)
+    # Factores de esfuerzo (única variable relacionada con la complejidad de la prenda)
     FACTORES_ESFUERZO: Factores = {
         "Bajo": {"rango": (0, 5), "factor": 0.90},
         "Medio": {"rango": (6, 6), "factor": 1.00},
         "Alto": {"rango": (7, 10), "factor": 1.15},
     }
 
-    # Factores de estilo (de imagen 2)
+    # Factores de estilo (DEPRECATED en v2.0, SE MANTIENE SOLO PARA COMPATIBILIDAD)
     FACTORES_ESTILO: Factores = {
         "Muy Recurrente": {
-            "descripcion": "Ms de 4,000 prendas fabricadas",
+            "descripcion": "Más de 4,000 prendas fabricadas",
             "factor": 0.95,
         },
         "Recurrente": {
             "descripcion": "Menos de 4,000 prendas fabricadas",
             "factor": 1.00,
         },
-        "Nuevo": {"descripcion": "Estilo que an no ha sido fabricado", "factor": 1.05},
+        "Nuevo": {"descripcion": "Estilo que aún no ha sido fabricado", "factor": 1.05},
     }
 
-    # Factores de marca (de imagen 3)
+    # Factores de marca (única variable relacionada con el cliente)
     FACTORES_MARCA: Dict[str, float] = {
         "LACOSTE": 1.05,
         "GREYSON": 1.05,
@@ -182,7 +185,7 @@ class FactoresTDV:
 
     @classmethod
     def categorizar_lote(cls, cantidad: int) -> tuple[str, float]:
-        """Categoriza lote y retorna nombre y factor"""
+        """Categoriza lote por cantidad de prendas (SOLO para búsqueda, no para vector v2.0)"""
         for categoria, config in cls.RANGOS_LOTE.items():
             if config["min"] <= cantidad <= config["max"]:
                 return categoria, config["factor"]
@@ -199,8 +202,10 @@ class FactoresTDV:
 
     @classmethod
     def obtener_factor_estilo(cls, categoria: str) -> float:
-        """Obtiene factor de estilo"""
-        return cls.FACTORES_ESTILO.get(categoria, {}).get("factor", 1.05)
+        """Obtiene factor de estilo (DEPRECATED en v2.0, solo mantiene compatibilidad)"""
+        # Retorna 1.0 siempre porque v2.0 no usa factor_estilo
+        # Mantiene compatibilidad con código existente
+        return 1.0
 
     @classmethod
     def obtener_factor_marca(cls, cliente: str) -> float:

@@ -1818,6 +1818,79 @@ class TDVQueries:
             return {}
 
     # ========================================
+    # 🧵 FUNCIONES DE HILOS (MATERIA PRIMA DETALLADA)
+    # ========================================
+
+    async def obtener_hilos_para_ops(
+        self,
+        cod_ordpros: List[str],
+        version_calculo: str = "FLUIDA",
+    ) -> List[Dict[str, Any]]:
+        """
+        Obtiene desglose de hilos para OPs seleccionadas desde costo_hilados_detalle_op.
+        Retorna datos: cod_hilado, descripcion_hilo, tipo_hilo, costo_por_prenda_final
+        También calcula frecuencia_ops (en cuántas OPs aparece cada hilo).
+        """
+
+        if not cod_ordpros:
+            logger.warning(" [HILOS-DESGLOSE] No se proporcionaron cod_ordpros")
+            return []
+
+        # ✨ Normalizar version_calculo
+        version_norm = normalize_version_calculo(version_calculo)
+
+        logger.info(f" [HILOS-DESGLOSE] ===== INICIANDO DESGLOSE HILOS =====")
+        logger.info(f" [HILOS-DESGLOSE] OPs: {cod_ordpros}, Version: {version_norm}")
+
+        try:
+            placeholders = ",".join(["%s"] * len(cod_ordpros))
+
+            # ✨ QUERY PARA OBTENER HILOS DE costo_hilados_detalle_op
+            # Nota: costo_hilados_detalle_op NO tiene version_calculo, se filtra solo por op_codigo
+            # GROUP BY (cod_hilado, tipo_hilo) como combinación única - calcula PROMEDIO de costo
+            query = f"""
+            SELECT
+                chdo.cod_hilado,
+                chdo.descripcion_hilo,
+                chdo.tipo_hilo,
+                AVG(chdo.costo_por_prenda_final) as costo_por_prenda_final,
+                COUNT(DISTINCT chdo.op_codigo) as frecuencia_ops
+            FROM {settings.db_schema}.costo_hilados_detalle_op chdo
+            WHERE chdo.op_codigo IN ({placeholders})
+            GROUP BY
+                chdo.cod_hilado,
+                chdo.descripcion_hilo,
+                chdo.tipo_hilo
+            ORDER BY chdo.descripcion_hilo
+            """
+
+            params = list(cod_ordpros)
+
+            logger.info(f" [HILOS-DESGLOSE] Ejecutando query con {len(cod_ordpros)} OPs...")
+            resultados = await self.db.query(query, params)
+
+            logger.info(f" [HILOS-DESGLOSE] ✅ Query completada: {len(resultados)} hilos encontrados")
+
+            # Procesar resultados y convertir a diccionarios
+            hilos_lista = []
+            for row in resultados:
+                hilo_detalle = {
+                    "cod_hilado": row.get("cod_hilado", ""),
+                    "descripcion_hilo": row.get("descripcion_hilo", ""),
+                    "tipo_hilo": row.get("tipo_hilo", ""),
+                    "costo_por_prenda_final": float(row.get("costo_por_prenda_final", 0)) or 0.0,
+                    "frecuencia_ops": int(row.get("frecuencia_ops", 0)) or 0,
+                }
+                hilos_lista.append(hilo_detalle)
+
+            logger.info(f" [HILOS-DESGLOSE] ✅ Retornando {len(hilos_lista)} hilos procesados")
+            return hilos_lista
+
+        except Exception as e:
+            logger.error(f" [HILOS-DESGLOSE] ❌ Error obteniendo hilos: {e}")
+            raise
+
+    # ========================================
     #  FUNCIONES DE WIPS (SIN CAMBIOS - YA USAN FECHAS RELATIVAS)
     # ========================================
 

@@ -78,49 +78,50 @@ class CotizadorTDV:
                 f" Estilo {input_data.codigo_estilo}: categora={categoria_estilo}, volumen={volumen_historico}"
             )
 
-            #  AUTO-COMPLETADO AUTOMTICO
+            #  AUTO-COMPLETADO AUTOMÁTICO (v2.0: tipo_prenda + cliente_marca)
             if info_autocompletado and info_autocompletado.get("encontrado"):
                 logger.info(
-                    f" Aplicando auto-completado para {input_data.codigo_estilo}"
+                    f" Aplicando auto-completado para {input_data.estilo_cliente or input_data.codigo_estilo}"
                 )
+                # Auto-completar familia y tipo de prenda
                 input_data.familia_producto = info_autocompletado.get(
                     "familia_producto", input_data.familia_producto
                 )
                 input_data.tipo_prenda = info_autocompletado.get(
                     "tipo_prenda", input_data.tipo_prenda
                 )
+                # ⭐ v2.0: Auto-completar cliente_marca
+                cliente_encontrado = info_autocompletado.get("cliente_principal")
+                if cliente_encontrado:
+                    input_data.cliente_marca = cliente_encontrado
+                    logger.info(
+                        f" Auto-completado cliente: {cliente_encontrado}"
+                    )
 
             #  DETERMINAR SI ES NUEVO BASADO EN CATEGORA
             es_estilo_nuevo = categoria_estilo == "Nuevo"
             input_data.es_estilo_nuevo = es_estilo_nuevo
 
-            # Categorizar lote
-            categoria_lote, factor_lote = self._categorizar_lote(
-                input_data.categoria_lote
-            )
-
-            # Obtener factor de marca
+            # Obtener factor de marca (ÚNICO factor de cliente)
             factor_marca = factores.obtener_factor_marca(input_data.cliente_marca)
 
-            #  PROCESAR SEGN TIPO DE ESTILO CON LGICA MEJORADA
+            #  PROCESAR SEGÚN TIPO DE ESTILO CON LÓGICA MEJORADA
             if es_estilo_nuevo:
                 logger.info(
                     f"NUEVO Procesando como ESTILO NUEVO: {input_data.codigo_estilo}"
                 )
                 resultado = await self._procesar_estilo_nuevo_mejorado(
-                    input_data, id_cotizacion, categoria_lote, factor_lote, factor_marca
+                    input_data, id_cotizacion, factor_marca, categoria_estilo, volumen_historico
                 )
             else:
                 logger.info(
                     f"RECURRENTE Procesando como ESTILO RECURRENTE: {input_data.codigo_estilo}"
                 )
                 resultado = await self._procesar_estilo_recurrente_mejorado(
-                    input_data, id_cotizacion, categoria_lote, factor_lote, factor_marca
+                    input_data, id_cotizacion, factor_marca, categoria_estilo, volumen_historico
                 )
 
-            #  ENRIQUECER RESPUESTA CON METADATA COMPLETA
-            resultado.categoria_estilo = categoria_estilo
-            resultado.volumen_historico = volumen_historico
+            #  ENRIQUECER RESPUESTA CON METADATA COMPLETA (ya configurado en funciones)
             resultado.version_calculo_usada = input_data.version_calculo
 
             #  AGREGAR RUTA AUTOMTICA PARA ESTILOS NUEVOS
@@ -170,9 +171,12 @@ class CotizadorTDV:
 
         errores = []
 
-        # Validaciones bsicas
-        if not input_data.codigo_estilo or len(input_data.codigo_estilo.strip()) < 3:
-            errores.append("El cdigo de estilo debe tener al menos 3 caracteres")
+        # Validaciones bsicas - v2.0: Aceptar estilo_cliente O codigo_estilo (UNO U OTRO)
+        tiene_codigo_estilo = input_data.codigo_estilo and len(input_data.codigo_estilo.strip()) > 0
+        tiene_estilo_cliente = hasattr(input_data, 'estilo_cliente') and input_data.estilo_cliente and len(input_data.estilo_cliente.strip()) > 0
+
+        if not tiene_codigo_estilo and not tiene_estilo_cliente:
+            errores.append("Se requiere Código de Estilo O Código de Estilo Cliente")
 
         if not input_data.cliente_marca or len(input_data.cliente_marca.strip()) == 0:
             errores.append("El cliente/marca es requerido")
@@ -187,9 +191,8 @@ class CotizadorTDV:
         if not hasattr(input_data, "version_calculo") or not input_data.version_calculo:
             input_data.version_calculo = VersionCalculo.FLUIDO  # Default
 
-        # Validar categora de lote
-        if input_data.categoria_lote not in factores.RANGOS_LOTE:
-            errores.append(f"Categora de lote invlida: {input_data.categoria_lote}")
+        # Nota: categoria_lote ya no se valida ni usa en v2.0
+        # Solo se mantiene para compatibilidad con frontend
 
         # Usar cantidad_prendas del categora_lote si no viene especificada
         if (
@@ -211,7 +214,14 @@ class CotizadorTDV:
             raise ValueError(f"Errores de validacin: {'; '.join(errores)}")
 
         # Limpiar y normalizar datos
-        input_data.codigo_estilo = input_data.codigo_estilo.strip().upper()
+        # v2.0: codigo_estilo puede ser None si se usa estilo_cliente
+        if input_data.codigo_estilo:
+            input_data.codigo_estilo = input_data.codigo_estilo.strip().upper()
+
+        # v2.0: estilo_cliente puede ser None si se usa codigo_estilo
+        if hasattr(input_data, 'estilo_cliente') and input_data.estilo_cliente:
+            input_data.estilo_cliente = input_data.estilo_cliente.strip().upper()
+
         input_data.cliente_marca = input_data.cliente_marca.strip()
         # NOTA: familia_producto y temporada ahora son opcionales
         if input_data.familia_producto:
@@ -221,13 +231,18 @@ class CotizadorTDV:
         if input_data.temporada:
             input_data.temporada = input_data.temporada.strip()
 
-        logger.info(f" Validacin completa exitosa para {input_data.codigo_estilo}")
+        logger.info(f" Validacin completa exitosa para {input_data.estilo_cliente or input_data.codigo_estilo}")
 
     async def _determinar_categoria_estilo_completa(
         self, input_data: CotizacionInput
     ) -> Tuple[TipoEstilo, int, Optional[Dict]]:
         """
-         FUNCIN COMPLETAMENTE CORREGIDA: Determina categora con auto-completado
+         FUNCIÓN COMPLETAMENTE CORREGIDA v2.0: Determina categoría con auto-completado
+
+        Flujo:
+        1. Si estilo_cliente → buscar con obtener_info_detallada_estilo_cliente
+        2. Si codigo_estilo → buscar con obtener_info_detallada_estilo (v1.0)
+        3. Auto-completado: tipo_prenda + cliente_marca
 
         Returns:
             Tuple[categoria, volumen_historico, info_autocompletado]
@@ -237,30 +252,31 @@ class CotizadorTDV:
         volumen_historico = 0
         info_autocompletado = None
 
-        if input_data.codigo_estilo:
-            try:
-                #  USAR NUEVA FUNCIN DE INFORMACIN DETALLADA
-                # Convertir enum a string y normalizar (FLUIDO → FLUIDA)
-                from .database import normalize_version_calculo
-                version_str = (
-                    input_data.version_calculo.value
-                    if hasattr(input_data.version_calculo, 'value')
-                    else str(input_data.version_calculo)
-                )
-                version_normalizada = normalize_version_calculo(version_str)
+        # Convertir enum a string y normalizar (FLUIDO → FLUIDA)
+        from .database import normalize_version_calculo
+        version_str = (
+            input_data.version_calculo.value
+            if hasattr(input_data.version_calculo, 'value')
+            else str(input_data.version_calculo)
+        )
+        version_normalizada = normalize_version_calculo(version_str)
 
-                logger.info(f" [UTILS] Version input: {input_data.version_calculo} → string: {version_str} → normalizada: {version_normalizada}")
+        logger.info(f" [UTILS] Version input: {input_data.version_calculo} → string: {version_str} → normalizada: {version_normalizada}")
 
-                info_detallada = await tdv_queries.obtener_info_detallada_estilo(
-                    input_data.codigo_estilo, version_normalizada
+        try:
+            # v2.0: PRIMERO intentar buscar por estilo_cliente (nuevo flujo)
+            if input_data.estilo_cliente:
+                logger.info(f" Buscando por ESTILO_CLIENTE: {input_data.estilo_cliente}")
+
+                info_detallada = await tdv_queries.obtener_info_detallada_estilo_cliente(
+                    input_data.estilo_cliente, version_normalizada
                 )
 
                 if info_detallada.get("encontrado", False):
-                    # Es un estilo recurrente con informacin completa
                     volumen_total = info_detallada.get("volumen_total", 0)
                     volumen_historico = volumen_total
 
-                    # Categorizar segn volumen
+                    # Categorizar según volumen
                     if volumen_total >= 4000:
                         categoria_estilo = TipoEstilo.MUY_RECURRENTE
                     elif volumen_total > 0:
@@ -268,7 +284,51 @@ class CotizadorTDV:
                     else:
                         categoria_estilo = TipoEstilo.NUEVO
 
-                    # Informacin para auto-completado
+                    # Información para auto-completado v2.0: incluir cliente_principal
+                    info_autocompletado = {
+                        "encontrado": True,
+                        "familia_producto": info_detallada.get("familia_producto"),
+                        "tipo_prenda": info_detallada.get("tipo_prenda"),
+                        "cliente_principal": info_detallada.get("cliente_principal"),  # ⭐ Se auto-completa
+                        "volumen_total": volumen_total,
+                        "categoria": categoria_estilo,
+                        "fuente": info_detallada.get("fuente", "estilo_cliente"),
+                        "total_ops": info_detallada.get("total_ops", 0),
+                        "esfuerzo_promedio": info_detallada.get("esfuerzo_promedio", 6),
+                    }
+
+                    logger.info(
+                        f" Estilo Cliente {input_data.estilo_cliente} ENCONTRADO: volumen={volumen_total}, "
+                        f"categoría={categoria_estilo}, cliente={info_detallada.get('cliente_principal')}"
+                    )
+                else:
+                    # No encontrado por estilo_cliente, es nuevo
+                    categoria_estilo = TipoEstilo.NUEVO
+                    logger.info(
+                        f" Estilo Cliente {input_data.estilo_cliente} NO ENCONTRADO: categoría=Nuevo"
+                    )
+
+            # v1.0: FALLBACK - Si no hay estilo_cliente, usar codigo_estilo (compatibilidad hacia atrás)
+            elif input_data.codigo_estilo:
+                logger.info(f" Buscando por CODIGO_ESTILO (v1.0): {input_data.codigo_estilo}")
+
+                info_detallada = await tdv_queries.obtener_info_detallada_estilo(
+                    input_data.codigo_estilo, version_normalizada
+                )
+
+                if info_detallada.get("encontrado", False):
+                    volumen_total = info_detallada.get("volumen_total", 0)
+                    volumen_historico = volumen_total
+
+                    # Categorizar según volumen
+                    if volumen_total >= 4000:
+                        categoria_estilo = TipoEstilo.MUY_RECURRENTE
+                    elif volumen_total > 0:
+                        categoria_estilo = TipoEstilo.RECURRENTE
+                    else:
+                        categoria_estilo = TipoEstilo.NUEVO
+
+                    # Información para auto-completado
                     info_autocompletado = {
                         "encontrado": True,
                         "familia_producto": info_detallada.get("familia_producto"),
@@ -283,20 +343,20 @@ class CotizadorTDV:
 
                     logger.info(
                         f" Estilo {input_data.codigo_estilo} ENCONTRADO: volumen={volumen_total}, "
-                        f"categora={categoria_estilo}, fuente={info_detallada.get('fuente')}"
+                        f"categoría={categoria_estilo}, fuente={info_detallada.get('fuente')}"
                     )
                 else:
                     # No encontrado, es nuevo
                     categoria_estilo = TipoEstilo.NUEVO
                     logger.info(
-                        f" Estilo {input_data.codigo_estilo} NO ENCONTRADO: categora=Nuevo"
+                        f" Estilo {input_data.codigo_estilo} NO ENCONTRADO: categoría=Nuevo"
                     )
 
-            except Exception as e:
-                logger.error(
-                    f" Error determinando categora estilo {input_data.codigo_estilo}: {e}"
-                )
-                categoria_estilo = TipoEstilo.NUEVO  # Asumir nuevo en caso de error
+        except Exception as e:
+            logger.error(
+                f" Error determinando categoría estilo: {e}"
+            )
+            categoria_estilo = TipoEstilo.NUEVO  # Asumir nuevo en caso de error
 
         return categoria_estilo, volumen_historico, info_autocompletado
 
@@ -384,30 +444,44 @@ class CotizadorTDV:
         self,
         input_data: CotizacionInput,
         id_cotizacion: str,
-        categoria_lote: str,
-        factor_lote: float,
         factor_marca: float,
+        categoria_estilo: TipoEstilo,
+        volumen_historico: int,
     ) -> CotizacionResponse:
         """
-         FUNCIN COMPLETAMENTE CORREGIDA: Procesa estilos recurrentes
-        Usa MTODO NICO COORDINADO:
-        - Costos directos (4): del histrico especfico del estilo
+         FUNCIÓN COMPLETAMENTE CORREGIDA: Procesa estilos recurrentes
+        Usa MÉTODO ÚNICO COORDINADO:
+        - Costos directos (4): del histórico específico del estilo
         - Gastos indirectos (3): MODA + filtrado (obtener_gastos_indirectos_formula)
+
+        Vector Total (v2.0): factor_esfuerzo × factor_marca
+        (Sin factor_lote ni factor_estilo - simplificado a 2 factores)
         """
 
         logger.info(
             f" PROCESANDO estilo RECURRENTE: {input_data.codigo_estilo} ({input_data.version_calculo})"
         )
 
-        #  ESTRATEGIA CORREGIDA: SEPARAR COSTOS DIRECTOS DE INDIRECTOS
+        #  ESTRATEGIA CORREGIDA: SEPARAR COSTOS DIRECTOS DE INDIRECTOS (v2.0)
         try:
-            # Costos DIRECTOS (4): histrico del estilo especfico
-            costos_hist = await tdv_queries.buscar_costos_estilo_especifico(
-                input_data.codigo_estilo,
-                meses=24,
-                version_calculo=input_data.version_calculo,
-            )
-            metodo_usado_directos = f"historico_especifico_{input_data.codigo_estilo}"
+            # Costos DIRECTOS (4): v2.0 - primero intentar por estilo_cliente, si no usar codigo_estilo
+            if input_data.estilo_cliente:
+                logger.info(f" Buscando costos por ESTILO_CLIENTE: {input_data.estilo_cliente}")
+                costos_hist = await tdv_queries.buscar_costos_estilo_cliente(
+                    input_data.estilo_cliente,
+                    meses=24,
+                    version_calculo=input_data.version_calculo,
+                )
+                metodo_usado_directos = f"historico_estilo_cliente_{input_data.estilo_cliente}"
+            else:
+                logger.info(f" Buscando costos por CODIGO_ESTILO: {input_data.codigo_estilo}")
+                costos_hist = await tdv_queries.buscar_costos_estilo_especifico(
+                    input_data.codigo_estilo,
+                    meses=24,
+                    version_calculo=input_data.version_calculo,
+                )
+                metodo_usado_directos = f"historico_especifico_{input_data.codigo_estilo}"
+
             logger.info(
                 f" Costos directos obtenidos: {costos_hist.get('registros_encontrados', 0)} registros"
             )
@@ -627,25 +701,31 @@ class CotizadorTDV:
                 f" Estilo {input_data.codigo_estilo} recurrente pero faltan: {componentes_faltantes}"
             )
 
-        #  CALCULAR TOTALES Y FACTORES
+        #  CALCULAR TOTALES Y FACTORES (v2.0 - 2 FACTORES SOLAMENTE)
         costo_base_total = sum(costos_validados.values())
 
-        # Determinar esfuerzo (usar histrico si disponible)
-        esfuerzo_historico = int(costos_hist.get("esfuerzo_promedio", 6))
-        if esfuerzo_historico < 1 or esfuerzo_historico > 10:
-            esfuerzo_historico = 6  # Fallback seguro
+        # Determinar esfuerzo - v2.0: Prioritize OPs seleccionadas sobre historial
+        # Si el usuario envió esfuerzo_total (promedio de OPs seleccionadas), usarlo
+        logger.info(f" [ESFUERZO v2.0] input_data.esfuerzo_total: {input_data.esfuerzo_total}")
+        logger.info(f" [ESFUERZO v2.0] costos_hist.esfuerzo_promedio: {costos_hist.get('esfuerzo_promedio', 'N/A')}")
 
-        _, factor_esfuerzo = factores.obtener_factor_esfuerzo(esfuerzo_historico)
+        if input_data.esfuerzo_total:
+            esfuerzo_utilizado = int(input_data.esfuerzo_total)
+            logger.info(f" [ESFUERZO v2.0] ✅ Usando esfuerzo de OPs seleccionadas: {esfuerzo_utilizado}")
+        else:
+            # Fallback: usar promedio histórico
+            esfuerzo_utilizado = int(costos_hist.get("esfuerzo_promedio", 6))
+            logger.info(f" [ESFUERZO v2.0] ⚠️ Usando esfuerzo histórico (default): {esfuerzo_utilizado}")
 
-        # Determinar categora estilo para factor
-        volumen = await tdv_queries.obtener_volumen_historico_estilo(
-            input_data.codigo_estilo, input_data.version_calculo
-        )
-        categoria_estilo = "Muy Recurrente" if volumen >= 4000 else "Recurrente"
-        factor_estilo = factores.obtener_factor_estilo(categoria_estilo)
+        # Validar rango
+        if esfuerzo_utilizado < 1 or esfuerzo_utilizado > 10:
+            esfuerzo_utilizado = 6  # Fallback seguro
 
-        # Vector total y precio final
-        vector_total = factor_lote * factor_esfuerzo * factor_estilo * factor_marca
+        _, factor_esfuerzo = factores.obtener_factor_esfuerzo(esfuerzo_utilizado)
+
+        # Vector total (v2.0): Solo factor_esfuerzo × factor_marca
+        # Nota: factor_lote y factor_estilo fueron eliminados
+        vector_total = factor_esfuerzo * factor_marca
         precio_final = costo_base_total * (1 + 0.15 * vector_total)
         margen_aplicado = 15 * vector_total
 
@@ -680,8 +760,7 @@ class CotizadorTDV:
             id_cotizacion=id_cotizacion,
             fecha_cotizacion=datetime.now(),
             inputs=input_data,
-            categoria_lote=categoria_lote,
-            categoria_esfuerzo=esfuerzo_historico,
+            categoria_esfuerzo=esfuerzo_utilizado,  # v2.0: Usar esfuerzo de OPs seleccionadas o histórico
             categoria_estilo=categoria_estilo,
             factor_marca=factor_marca,
             componentes=componentes,
@@ -693,9 +772,7 @@ class CotizadorTDV:
             gasto_administracion=costos_validados["gasto_administracion"],
             gasto_ventas=costos_validados["gasto_ventas"],
             costo_base_total=costo_base_total,
-            factor_lote=factor_lote,
             factor_esfuerzo=factor_esfuerzo,
-            factor_estilo=factor_estilo,
             vector_total=vector_total,
             precio_final=precio_final,
             margen_aplicado=margen_aplicado,
@@ -708,10 +785,10 @@ class CotizadorTDV:
                 "precision_estimada", 0.95
             ),
             version_calculo_usada=input_data.version_calculo,
-            volumen_historico=volumen,
+            volumen_historico=volumen_historico,
             metadatos_adicionales={
                 "estrategia_costos": "coordinado_directo+moda",
-                "esfuerzo_historico": esfuerzo_historico,
+                "esfuerzo_utilizado": esfuerzo_utilizado,  # v2.0: Puede venir de OPs o historial
                 "ajustes_aplicados": costos_hist.get("total_ajustados", 0),
                 "fecha_mas_reciente": costos_hist.get("fecha_mas_reciente"),
                 "fuente_datos_directos": "historico_especifico",
@@ -726,12 +803,15 @@ class CotizadorTDV:
         self,
         input_data: CotizacionInput,
         id_cotizacion: str,
-        categoria_lote: str,
-        factor_lote: float,
         factor_marca: float,
+        categoria_estilo: TipoEstilo,
+        volumen_historico: int,
     ) -> CotizacionResponse:
         """
-         FUNCIN COMPLETAMENTE CORREGIDA: Procesa estilos nuevos con WIPs y ruta automtica
+         FUNCIÓN COMPLETAMENTE CORREGIDA: Procesa estilos nuevos con WIPs y ruta automática
+
+        Vector Total (v2.0): factor_esfuerzo × factor_marca
+        (Sin factor_lote ni factor_estilo - simplificado a 2 factores)
         """
 
         logger.info(
@@ -801,15 +881,22 @@ class CotizadorTDV:
             costo_textil + costo_manufactura + sum(costos_complementarios.values())
         )
 
-        #  FACTORES PARA ESTILOS NUEVOS
-        esfuerzo_estimado = 7  # Default conservador para nuevos
+        #  FACTORES PARA ESTILOS NUEVOS (v2.0 - 2 FACTORES SOLAMENTE)
+        # v2.0: Usar esfuerzo de OPs seleccionadas si está disponible
+        logger.info(f" [ESFUERZO v2.0] Estilo NUEVO - input_data.esfuerzo_total: {getattr(input_data, 'esfuerzo_total', 'N/A')}")
+
         if hasattr(input_data, "esfuerzo_total") and input_data.esfuerzo_total:
             esfuerzo_estimado = max(1, min(10, int(input_data.esfuerzo_total)))
+            logger.info(f" [ESFUERZO v2.0] Estilo NUEVO - ✅ Usando esfuerzo de OPs seleccionadas: {esfuerzo_estimado}")
+        else:
+            esfuerzo_estimado = 7  # Default conservador para nuevos sin OPs seleccionadas
+            logger.info(f" [ESFUERZO v2.0] Estilo NUEVO - ⚠️ Usando esfuerzo default: {esfuerzo_estimado}")
 
         _, factor_esfuerzo = factores.obtener_factor_esfuerzo(esfuerzo_estimado)
-        factor_estilo = factores.obtener_factor_estilo("Nuevo")
 
-        vector_total = factor_lote * factor_esfuerzo * factor_estilo * factor_marca
+        # Vector total (v2.0): Solo factor_esfuerzo × factor_marca
+        # Nota: factor_lote y factor_estilo fueron eliminados
+        vector_total = factor_esfuerzo * factor_marca
         precio_final = costo_base_total * (1 + 0.15 * vector_total)
         margen_aplicado = 15 * vector_total
 
@@ -847,9 +934,8 @@ class CotizadorTDV:
             id_cotizacion=id_cotizacion,
             fecha_cotizacion=datetime.now(),
             inputs=input_data,
-            categoria_lote=categoria_lote,
             categoria_esfuerzo=esfuerzo_estimado,
-            categoria_estilo="Nuevo",
+            categoria_estilo=categoria_estilo,
             factor_marca=factor_marca,
             componentes=componentes,
             costo_textil=costo_textil,
@@ -860,9 +946,7 @@ class CotizadorTDV:
             gasto_administracion=costos_complementarios.get("gasto_administracion", 0),
             gasto_ventas=costos_complementarios.get("gasto_ventas", 0),
             costo_base_total=costo_base_total,
-            factor_lote=factor_lote,
             factor_esfuerzo=factor_esfuerzo,
-            factor_estilo=factor_estilo,
             vector_total=vector_total,
             precio_final=precio_final,
             margen_aplicado=margen_aplicado,
@@ -873,7 +957,7 @@ class CotizadorTDV:
             registros_encontrados=len(costos_wips),
             precision_estimada=0.90,
             version_calculo_usada=input_data.version_calculo,
-            volumen_historico=0,
+            volumen_historico=volumen_historico,
             configuracion_wips=configuracion_wips,
             metadatos_adicionales={
                 "estrategia_costos": "wips_configurados",
@@ -1098,13 +1182,6 @@ class CotizadorTDV:
                 analisis_competitividad=[],
             )
 
-    def _categorizar_lote(self, categoria_input: str) -> Tuple[str, float]:
-        """Convierte categora de lote del frontend a factor"""
-        for categoria, config in factores.RANGOS_LOTE.items():
-            if categoria == categoria_input:
-                return categoria, config["factor"]
-        return "Lote Mediano", 1.05  # Default seguro
-
     def _generar_id_cotizacion(self) -> str:
         """Genera ID nico para cotizacin"""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -1179,9 +1256,7 @@ class CotizadorTDV:
                 f"[COTIZACION RAPIDA] Promedios 7 componentes - Textil: ${costo_textil_promedio:.4f}, Manufactura: ${costo_manufactura_promedio:.4f}, Avíos: ${costo_avios_promedio:.4f}, Materia Prima: ${costo_materia_prima_promedio:.4f}"
             )
 
-            # ✨ Categorías y factores
-            categoria_lote, factor_lote = self._categorizar_lote(input_data.categoria_lote)
-
+            # ✨ FACTORES (v2.0 - Solo 2 factores)
             # Esfuerzo: desde input_data si existe, sino usar default 6
             esfuerzo_total = input_data.esfuerzo_total if input_data.esfuerzo_total else 6
             # Desempaqueta correctamente la tupla en dos variables distintas
@@ -1196,21 +1271,14 @@ class CotizadorTDV:
 
             # Categoría de estilo: basada en la presencia de OPs (si hay OPs = recurrente)
             categoria_estilo = TipoEstilo.RECURRENTE
-            factor_estilo = factores.obtener_factor_estilo("Recurrente")
 
-            # DEBUG: Log detallado de cada factor ANTES de multiplicar
-            logger.info(f"[FACTORES] lote: {factor_lote} ({type(factor_lote).__name__}) | esfuerzo: {factor_esfuerzo} ({type(factor_esfuerzo).__name__}) | estilo: {factor_estilo} ({type(factor_estilo).__name__}) | marca: {factor_marca} ({type(factor_marca).__name__})")
+            # DEBUG: Log detallado de cada factor ANTES de multiplicar (v2.0)
+            logger.info(f"[FACTORES v2.0] esfuerzo: {factor_esfuerzo} ({type(factor_esfuerzo).__name__}) | marca: {factor_marca} ({type(factor_marca).__name__})")
 
             # Validar tipos antes de operación matemática
-            if not isinstance(factor_lote, (int, float)):
-                logger.error(f"[ERROR TIPO] factor_lote NO es número: {factor_lote} (type: {type(factor_lote)})")
-                raise TypeError(f"factor_lote debe ser float, obtuvo {type(factor_lote)}: {factor_lote}")
             if not isinstance(factor_esfuerzo, (int, float)):
                 logger.error(f"[ERROR TIPO] factor_esfuerzo NO es número: {factor_esfuerzo} (type: {type(factor_esfuerzo)})")
                 raise TypeError(f"factor_esfuerzo debe ser float, obtuvo {type(factor_esfuerzo)}: {factor_esfuerzo}")
-            if not isinstance(factor_estilo, (int, float)):
-                logger.error(f"[ERROR TIPO] factor_estilo NO es número: {factor_estilo} (type: {type(factor_estilo)})")
-                raise TypeError(f"factor_estilo debe ser float, obtuvo {type(factor_estilo)}: {factor_estilo}")
             if not isinstance(factor_marca, (int, float)):
                 logger.error(f"[ERROR TIPO] factor_marca NO es número: {factor_marca} (type: {type(factor_marca)})")
                 raise TypeError(f"factor_marca debe ser float, obtuvo {type(factor_marca)}: {factor_marca}")
@@ -1220,10 +1288,10 @@ class CotizadorTDV:
                          costo_materia_prima_promedio + costo_indirecto_promedio +
                          gasto_admin_promedio + gasto_ventas_promedio)
 
-            # Vector total de factores
-            logger.info(f"[MULTIPLICACION] Iniciando: {factor_lote} * {factor_esfuerzo} * {factor_estilo} * {factor_marca}")
-            vector_total = factor_lote * factor_esfuerzo * factor_estilo * factor_marca
-            logger.info(f"[MULTIPLICACION] Resultado: {vector_total}")
+            # Vector total de factores (v2.0): Solo factor_esfuerzo × factor_marca
+            logger.info(f"[MULTIPLICACION v2.0] Iniciando: {factor_esfuerzo} * {factor_marca}")
+            vector_total = factor_esfuerzo * factor_marca
+            logger.info(f"[MULTIPLICACION v2.0] Resultado: {vector_total}")
 
             # Precio final con margen del 15%
             precio_final = costo_base * (1 + 0.15 * vector_total)
@@ -1285,7 +1353,6 @@ class CotizadorTDV:
                 id_cotizacion=id_cotizacion,
                 fecha_cotizacion=datetime.now(),
                 inputs=input_data,
-                categoria_lote=categoria_lote,
                 categoria_esfuerzo=categoria_esfuerzo,
                 categoria_estilo=categoria_estilo,
                 factor_marca=factor_marca,
@@ -1298,9 +1365,7 @@ class CotizadorTDV:
                 gasto_administracion=gasto_admin_promedio,
                 gasto_ventas=gasto_ventas_promedio,
                 costo_base_total=costo_base,
-                factor_lote=factor_lote,
                 factor_esfuerzo=factor_esfuerzo,
-                factor_estilo=factor_estilo,
                 vector_total=vector_total,
                 precio_final=precio_final,
                 margen_aplicado=margen_aplicado,
@@ -1308,7 +1373,7 @@ class CotizadorTDV:
                     f"✓ {len(input_data.cod_ordpros)} OPs seleccionadas procesadas",
                     f"✓ 7 componentes de costo calculados correctamente",
                     f"✓ Promedios ponderados aplicados",
-                    f"✓ Factores de ajuste aplicados: Lote({factor_lote:.2f}) × Esfuerzo({factor_esfuerzo:.2f}) × Estilo({factor_estilo:.2f}) × Marca({factor_marca:.2f})",
+                    f"✓ Factores de ajuste aplicados (v2.0): Esfuerzo({factor_esfuerzo:.2f}) × Marca({factor_marca:.2f})",
                     f"✓ Margen del 15% aplicado con vector total: {vector_total:.4f}",
                 ],
                 alertas=[

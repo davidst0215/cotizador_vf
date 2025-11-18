@@ -18,9 +18,11 @@ import {
   RefreshCw,
   Database,
   Search,
+  Layers,
 } from "lucide-react";
 import { OpsSelectionTable } from "./OpsSelectionTable";
 import { WipDesgloseTable, WipDesgloseTableRef } from "./WipDesgloseTable";
+import { HilosDesgloseTable, HilosDesgloseTableRef } from "./HilosDesgloseTable";
 
 // Constantes del sistema
 const CATEGORIAS_LOTE = {
@@ -634,6 +636,7 @@ const SistemaCotizadorTDV = () => {
   const formDataRef = useRef<FormData | null>(null); // ✨ Mantiene formData actual sin affecting dependencies
   const wipDesgloseTableRef = useRef<WipDesgloseTableRef>(null); // ✨ Ref para acceder a WIPs seleccionados
   const selectedWipsRef = useRef<string[]>([]); // ✨ Mantener WIPs seleccionados en ref para persistencia visual
+  const hilosDesgloseTableRef = useRef<HilosDesgloseTableRef>(null); // ✨ Ref para acceder a Hilos seleccionados
 
   // Estados para costos calculados del WIP (para sobrescribir backend values)
   const [costosWipCalculados, setCostosWipCalculados] = useState<{
@@ -646,6 +649,25 @@ const SistemaCotizadorTDV = () => {
 
   // ✨ Estado para factores de ajuste WIP - PERSISTENTE entre pestañas
   const [factoresWip, setFactoresWip] = useState<Record<string, number>>({});
+
+  // ✨ Estados para costos de materiales - sincronizados desde desgloses
+  const [costoHilosPorPrenda, setCostoHilosPorPrenda] = useState<number>(0);
+  const [costoTelasPorPrenda, setCostoTelasPorPrenda] = useState<number>(0);
+  const [costoAviosPorPrenda, setCostoAviosPorPrenda] = useState<number>(0);
+
+  // ✨ Estados para guardar costos calculados de materiales (para usar en Costos Finales)
+  const [costosMaterialesFinales, setCostosMaterialesFinales] = useState<{
+    costo_materia_prima: number;
+    costo_avios: number;
+  } | null>(null);
+
+  // ✨ useEffect para sincronizar costos desde HilosDesgloseTable - se actualiza continuamente
+  useEffect(() => {
+    if (hilosDesgloseTableRef.current && pestanaActiva === "materiales") {
+      const totalHilos = hilosDesgloseTableRef.current.getTotalCostoHilos();
+      setCostoHilosPorPrenda(totalHilos);
+    }
+  }, [pestanaActiva]); // Se actualiza cuando entra a materiales
 
   // Estados para formulario - separados para evitar pérdida de foco
   const [formData, setFormData] = useState<FormData>({
@@ -1920,16 +1942,16 @@ const SistemaCotizadorTDV = () => {
         },
         {
           nombre: "Costo Materia Prima",
-          costo_unitario: cotizacionActual.costo_materia_prima,
-          fuente: "ultimo_costo",
-          badge: "último costo",
+          costo_unitario: costosMaterialesFinales?.costo_materia_prima ?? cotizacionActual.costo_materia_prima,
+          fuente: costosMaterialesFinales ? "configurado" : "ultimo_costo",
+          badge: costosMaterialesFinales ? "hilos + telas" : "último costo",
           es_agrupado: false,
         },
         {
           nombre: "Costo Avíos",
-          costo_unitario: cotizacionActual.costo_avios,
-          fuente: "ultimo_costo",
-          badge: "último costo",
+          costo_unitario: costosMaterialesFinales?.costo_avios ?? cotizacionActual.costo_avios,
+          fuente: costosMaterialesFinales ? "configurado" : "ultimo_costo",
+          badge: costosMaterialesFinales ? "configurado" : "último costo",
           es_agrupado: false,
         },
         {
@@ -1963,6 +1985,7 @@ const SistemaCotizadorTDV = () => {
       costosWipCalculados.manufactura_por_prenda,
       selectedOpsCode.length,
       kgPrendaPromedio, // ✨ Agregar a dependencias
+      costosMaterialesFinales, // ✨ Actualizar cuando cambian los costos de materiales
     ]);
 
     if (!cotizacionActual) {
@@ -2063,7 +2086,7 @@ const SistemaCotizadorTDV = () => {
                         Total por Prenda
                       </div>
                       <div className="font-bold text-lg text-red-900">
-                        ${(cotizacionActual.costo_base_total || 0).toFixed(2)}
+                        ${componentesAgrupados.reduce((sum, comp) => sum + comp.costo_unitario, 0).toFixed(2)}
                       </div>
                     </div>
 
@@ -2074,7 +2097,7 @@ const SistemaCotizadorTDV = () => {
                       </div>
                       <div className="font-bold text-lg text-red-900">
                         {kgPrendaPromedio > 0
-                          ? `$${((cotizacionActual.costo_base_total || 0) / kgPrendaPromedio).toFixed(2)}`
+                          ? `$${(componentesAgrupados.reduce((sum, comp) => sum + comp.costo_unitario, 0) / kgPrendaPromedio).toFixed(2)}`
                           : "N/A"
                         }
                       </div>
@@ -2289,13 +2312,21 @@ const SistemaCotizadorTDV = () => {
                     );
                   })()}
 
-                  {/* ✨ BOTÓN: Calcular Costos Finales */}
-                  <div className="mt-6 flex justify-end">
+                  {/* ✨ BOTÓN: Ir a Análisis de Materiales */}
+                  <div className="mt-6 flex justify-end gap-4">
                     <button
-                      onClick={handleCalcularCostosFinales}
-                      className="px-8 py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-colors"
+                      onClick={() => {
+                        // Guardar selección de WIPs antes de navegar
+                        if (wipDesgloseTableRef.current) {
+                          const wipsSeleccionados = wipDesgloseTableRef.current.getSelectedWipsIds();
+                          selectedWipsRef.current = wipsSeleccionados;
+                        }
+                        setPestanaActiva("materiales");
+                      }}
+                      className="px-8 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors flex items-center gap-2"
                     >
-                      💰 Calcular Costos Finales
+                      <Layers className="h-5 w-5" />
+                      Continuar a Análisis de Materiales
                     </button>
                   </div>
                 </div>
@@ -2308,6 +2339,73 @@ const SistemaCotizadorTDV = () => {
   });
 
   PantallaResultados.displayName = "PantallaResultados";
+
+  // ========================================
+  // 📊 PANTALLA DE RESULTADOS DE MATERIALES
+  // ========================================
+  const PantallaMateriales = React.memo(() => {
+    return (
+      <div className="space-y-8">
+        {/* Análisis de Materiales */}
+        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
+          <h2 className="text-2xl font-bold text-red-800 mb-6">
+            Análisis de Materiales
+          </h2>
+
+          {/* Desgloses */}
+          <div className="space-y-6">
+            <div>
+              <h3 className="font-bold text-lg text-red-700 mb-4">
+                Desglose de Hilos
+              </h3>
+              <HilosDesgloseTable
+                ref={hilosDesgloseTableRef}
+                versionCalculo={formData.version_calculo}
+                codOrdpros={selectedOpsCode}
+                onError={(errorMsg) => console.error("Error en hilos:", errorMsg)}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Botón de Calcular Costos Finales - Aquí después de Materiales */}
+        <div className="flex justify-end gap-4">
+          <button
+            onClick={async () => {
+              // ✨ Obtener totales de las tablas de desgloses
+              const totalHilos = hilosDesgloseTableRef.current?.getTotalCostoHilos() || 0;
+
+              // Guardar costos de materiales calculados
+              setCostosMaterialesFinales({
+                costo_materia_prima: totalHilos, // Por ahora solo hilos, pendiente telas
+                costo_avios: 0, // Pendiente tabla de avíos
+              });
+
+              await procesarCotizacion();
+              // Navegar a Costos Finales después de procesar
+              setTimeout(() => setPestanaActiva("costos"), 500);
+            }}
+            disabled={cargando || !selectedOpsCode || selectedOpsCode.length === 0}
+            className="group relative px-12 py-4 font-bold text-white rounded-2xl shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105 bg-gradient-to-r from-yellow-600 via-yellow-500 to-yellow-400"
+          >
+            {cargando ? (
+              <div className="flex items-center gap-3">
+                <RefreshCw className="h-6 w-6 animate-spin" />
+                <span className="text-lg">Calculando...</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">💰</span>
+                <span className="text-lg">Calcular Costos Finales</span>
+              </div>
+            )}
+          </button>
+        </div>
+      </div>
+    );
+  });
+
+  PantallaMateriales.displayName = "PantallaMateriales";
 
   // ========================================
   // 🎨 RENDER PRINCIPAL
@@ -2338,7 +2436,7 @@ const SistemaCotizadorTDV = () => {
 
             <button
               onClick={() => setPestanaActiva("resultados")}
-              disabled={!cotizacionActual}
+              disabled={!selectedOpsCode || selectedOpsCode.length === 0}
               className={`px-8 py-4 font-bold transition-all duration-300 flex items-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed ${
                 pestanaActiva === "resultados"
                   ? "text-white shadow-lg"
@@ -2351,7 +2449,25 @@ const SistemaCotizadorTDV = () => {
               }}
             >
               <BarChart3 className="h-5 w-5" />
-              Resultados
+              Resultados de Procesos
+            </button>
+
+            <button
+              onClick={() => setPestanaActiva("materiales")}
+              disabled={!selectedOpsCode || selectedOpsCode.length === 0}
+              className={`px-8 py-4 font-bold transition-all duration-300 flex items-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed ${
+                pestanaActiva === "materiales"
+                  ? "text-white shadow-lg"
+                  : "hover:shadow-md"
+              }`}
+              style={{
+                backgroundColor:
+                  pestanaActiva === "materiales" ? "#821417" : "transparent",
+                color: pestanaActiva === "materiales" ? "white" : "#bd4c42",
+              }}
+            >
+              <Layers className="h-5 w-5" />
+              Resultados de Materiales
             </button>
 
             <button
@@ -2412,6 +2528,7 @@ const SistemaCotizadorTDV = () => {
         {/* Contenido principal */}
         {pestanaActiva === "formulario" && <FormularioPrincipal />}
         {pestanaActiva === "resultados" && <PantallaResultados />}
+        {pestanaActiva === "materiales" && <PantallaMateriales />}
         {pestanaActiva === "costos" && <PantallaCostosFinales />}
       </div>
     </div>

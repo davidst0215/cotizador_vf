@@ -331,6 +331,148 @@ async def verificar_estilo_completo_con_autocompletado(
         )
 
 
+# ✨ v2.0: ENDPOINT GENÉRICO para ambos tipos de búsqueda (estilo_propio y estilo_cliente)
+@app.get("/verificar-estilo/{codigo}", tags=["Bsqueda"])
+async def verificar_estilo_generico(
+    codigo: str,
+    tipo: str = "estilo_propio",  # "estilo_propio" o "estilo_cliente"
+    version_calculo: Optional[str] = None,
+):
+    """
+    [v2.0] ENDPOINT GENÉRICO: Verifica estilo (propio o cliente) con auto-completado
+
+    Parámetros:
+    - codigo: Código del estilo a buscar
+    - tipo: "estilo_propio" o "estilo_cliente" (default: estilo_propio)
+    - version_calculo: Versión de cálculo (FLUIDA, FLUIDO, truncado, etc)
+
+    Retorna información de auto-completado para ambos tipos
+    """
+    try:
+        # Normalizar version_calculo
+        version_calculo_normalizada = normalize_version_calculo(version_calculo)
+
+        logger.info(f"🔍 [v2.0] Verificando {tipo}: {codigo}, version: {version_calculo_normalizada}")
+
+        # Inicializar variables
+        info_detallada = None
+        autocompletado_disponible = False
+        campos_sugeridos = {}
+        volumen_historico = 0
+        categoria = "Nuevo"
+        existe = False
+
+        # RAMA 1: Buscar por ESTILO_PROPIO
+        if tipo == "estilo_propio":
+            # PASO 1: Verificación básica
+            existe = await tdv_queries.verificar_estilo_existente(
+                codigo, version_calculo_normalizada
+            )
+            es_nuevo = not existe
+
+            # PASO 2: Información detallada si existe
+            if not es_nuevo:
+                try:
+                    info_detallada = await tdv_queries.obtener_info_detallada_estilo(
+                        codigo, version_calculo_normalizada
+                    )
+
+                    if info_detallada.get("encontrado", False):
+                        autocompletado_disponible = True
+                        campos_sugeridos = {
+                            "familia_producto": info_detallada.get("familia_producto"),
+                            "tipo_prenda": info_detallada.get("tipo_prenda"),
+                            "cliente_principal": info_detallada.get("cliente_principal"),  # ✨ v2.0: Auto-completar cliente
+                        }
+                        logger.info(f"✅ Auto-completado encontrado para {codigo}: {campos_sugeridos}")
+
+                except Exception as e:
+                    logger.warning(f"[WARN] Error obteniendo info para {codigo}: {e}")
+                    info_detallada = None
+
+            # PASO 3: Volumen y categorización
+            if not es_nuevo and info_detallada and info_detallada.get("encontrado"):
+                volumen_historico = info_detallada.get("volumen_total", 0)
+                categoria = info_detallada.get("categoria", "Recurrente")
+            elif not es_nuevo:
+                try:
+                    volumen_historico = await tdv_queries.obtener_volumen_historico_estilo(
+                        codigo, version_calculo_normalizada
+                    )
+                    categoria = (
+                        "Muy Recurrente"
+                        if volumen_historico >= 4000
+                        else "Recurrente"
+                        if volumen_historico > 0
+                        else "Nuevo"
+                    )
+                except pyodbc.Error:
+                    volumen_historico = 0
+                    categoria = "Nuevo"
+
+        # RAMA 2: Buscar por ESTILO_CLIENTE (v2.0)
+        elif tipo == "estilo_cliente":
+            try:
+                # Obtener información del estilo_cliente
+                info_detallada = await tdv_queries.obtener_info_detallada_estilo_cliente(
+                    codigo, version_calculo_normalizada
+                )
+
+                if info_detallada and info_detallada.get("encontrado", False):
+                    existe = True
+                    autocompletado_disponible = True
+                    campos_sugeridos = {
+                        "familia_producto": info_detallada.get("familia_producto"),
+                        "tipo_prenda": info_detallada.get("tipo_prenda"),
+                        "cliente_principal": info_detallada.get("cliente_principal"),
+                    }
+                    logger.info(f"✅ [v2.0] Auto-completado encontrado para {codigo}: {campos_sugeridos}")
+
+                    # Obtener volumen histórico
+                    volumen_historico = await tdv_queries.obtener_volumen_historico_estilo_cliente(
+                        codigo, version_calculo_normalizada
+                    )
+
+                    categoria = (
+                        "Muy Recurrente"
+                        if volumen_historico >= 4000
+                        else "Recurrente"
+                        if volumen_historico > 0
+                        else "Nuevo"
+                    )
+            except Exception as e:
+                logger.warning(f"[WARN] Error obteniendo info estilo_cliente {codigo}: {e}")
+                info_detallada = None
+
+        # PASO 4: Respuesta estructurada (igual para ambos tipos)
+        respuesta = {
+            "codigo": codigo,
+            "tipo": tipo,
+            "existe_en_bd": existe,
+            "es_estilo_nuevo": categoria == "Nuevo",
+            "categoria": categoria,
+            "volumen_historico": volumen_historico,
+            "version_calculo": version_calculo_normalizada,
+            "autocompletado": {
+                "disponible": autocompletado_disponible,
+                "familia_producto": campos_sugeridos.get("familia_producto"),
+                "tipo_prenda": campos_sugeridos.get("tipo_prenda"),
+                "cliente_principal": campos_sugeridos.get("cliente_principal"),
+            },
+            "info_detallada": info_detallada,
+            "timestamp": datetime.now().isoformat(),
+        }
+
+        logger.info(f"✅ Verificación {tipo} {codigo} completada: existe={existe}")
+        return respuesta
+
+    except Exception as e:
+        logger.error(f"❌ [ERROR] Error verificando {tipo} {codigo}: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Error verificando {tipo}: {str(e)}"
+        )
+
+
 @app.post("/ops-utilizadas-cotizacion", tags=["Anlisis"])
 async def obtener_ops_utilizadas_cotizacion(input_data: CotizacionInput):
     """
@@ -631,9 +773,6 @@ async def buscar_estilos_similares(
         # Normalizar version_calculo (acepta FLUIDO, FLUIDA, truncado, etc)
         version_calculo_normalizada = normalize_version_calculo(version_calculo)
 
-        if len(codigo_estilo) < 3:
-            return []
-
         logger.info(
             f" Buscando estilos similares: {codigo_estilo} para {cliente or 'cualquier cliente'} ({version_calculo})"
         )
@@ -721,39 +860,50 @@ async def obtener_ops_detalladas(
     meses: int = 12,
     marca: Optional[str] = None,
     tipo_prenda: Optional[str] = None,
+    tipo_estilo: str = "estilo_propio",  # v2.0: "estilo_propio" o "estilo_cliente"
 ):
     """
     Obtiene lista detallada de OPs para un estilo sin aplicar factor de seguridad.
     Retorna todos los datos unitarios para mostrar en tabla interactiva.
 
+    v2.0: Soporta búsqueda por estilo_propio o estilo_cliente
     FALLBACK INTEGRADO:
-    1. Primero intenta buscar por código_estilo
-    2. Si no encuentra OPs y marca + tipo_prenda están disponibles, intenta buscar por esos
-    3. Si tampoco encuentra, retorna es_estilo_nuevo = true
+    1. Primero intenta buscar por tipo_estilo especificado
+    2. Si no encuentra y tipo_estilo="estilo_cliente", intenta por estilo_propio
+    3. Si no encuentra OPs y marca + tipo_prenda están disponibles, intenta buscar por esos
+    4. Si tampoco encuentra, retorna es_estilo_nuevo = true
     """
-    logger.info(f" [LLAMADA] obtener_ops_detalladas - estilo={codigo_estilo}, marca={marca}, tipo_prenda={tipo_prenda}, version={version_calculo}")
+    logger.info(f" [LLAMADA] obtener_ops_detalladas - estilo={codigo_estilo}, tipo_estilo={tipo_estilo}, marca={marca}, tipo_prenda={tipo_prenda}, version={version_calculo}")
     try:
         # Normalizar version_calculo (acepta FLUIDO, FLUIDA, truncado, etc)
         version_normalizada = normalize_version_calculo(version_calculo)
 
-        # Paso 1: Intentar búsqueda por código_estilo
+        # Paso 1: Intentar búsqueda con tipo_estilo especificado
         ops_detalladas = await tdv_queries.obtener_ops_detalladas_para_tabla(
-            codigo_estilo, meses, version_normalizada
+            codigo_estilo, meses, version_normalizada, tipo_estilo
         )
 
-        # Paso 2: Si no hay OPs y tenemos marca+tipo_prenda, intentar búsqueda alternativa
+        # Paso 2: v2.0 - Si no encontró por estilo_cliente, intentar por estilo_propio como fallback
+        if len(ops_detalladas) == 0 and tipo_estilo == "estilo_cliente":
+            logger.info(f" [ENDPOINT] No hay OPs por estilo_cliente {codigo_estilo}, intentando fallback por estilo_propio...")
+            ops_detalladas = await tdv_queries.obtener_ops_detalladas_para_tabla(
+                codigo_estilo, meses, version_normalizada, "estilo_propio"
+            )
+            logger.info(f" [ENDPOINT] Fallback estilo_propio retornó {len(ops_detalladas)} OPs")
+
+        # Paso 3: Si no hay OPs y tenemos marca+tipo_prenda, intentar búsqueda alternativa
         if len(ops_detalladas) == 0 and marca and tipo_prenda:
-            logger.info(f" [ENDPOINT] No hay OPs por codigo_estilo {codigo_estilo}, intentando por marca+tipo_prenda...")
+            logger.info(f" [ENDPOINT] No hay OPs por estilo, intentando por marca+tipo_prenda...")
             logger.info(f" [ENDPOINT] marca='{marca}', tipo_prenda='{tipo_prenda}', version='{version_normalizada}'")
             ops_detalladas = await tdv_queries.obtener_ops_estilo_nuevo(
                 marca, tipo_prenda, meses, version_normalizada
             )
-            logger.info(f" [ENDPOINT] Fallback retornó {len(ops_detalladas)} OPs")
+            logger.info(f" [ENDPOINT] Fallback marca+tipo_prenda retornó {len(ops_detalladas)} OPs")
 
         es_estilo_nuevo = len(ops_detalladas) == 0
 
         logger.info(
-            f" OPs obtenidas para {codigo_estilo}: {len(ops_detalladas)} registros, es_nuevo={es_estilo_nuevo}"
+            f" OPs obtenidas para {codigo_estilo} ({tipo_estilo}): {len(ops_detalladas)} registros, es_nuevo={es_estilo_nuevo}"
         )
 
         return {
@@ -771,26 +921,85 @@ async def obtener_ops_detalladas(
         )
 
 
-@app.get("/debug-estilo/{estilo}", tags=["Debug"])
-async def debug_estilo(estilo: str):
-    """Debug: Verificar qué valores de estilo_propio existen para un estilo"""
+@app.get("/obtener-hilos-detalladas", tags=["Bsqueda"])
+async def obtener_hilos_detalladas(
+    version_calculo: Optional[str] = None,
+    cod_ordpros: Optional[str] = None,  # Formato: "OP1,OP2,OP3"
+):
+    """
+    Obtiene lista detallada de hilos para las OPs seleccionadas.
+    Retorna todos los hilos usados en esas OPs con sus costos.
+
+    También calcula la frecuencia de uso (en cuántas OPs aparece cada hilo).
+    """
+    logger.info(f" [LLAMADA] obtener_hilos_detalladas - version={version_calculo}, ops={cod_ordpros}")
     try:
-        # Buscar exactamente
+        # Normalizar version_calculo
+        version_normalizada = normalize_version_calculo(version_calculo)
+
+        # Parsear OPs
+        if not cod_ordpros:
+            return {
+                "codigo_estilo": "N/A",
+                "version_calculo": version_normalizada,
+                "total_ops": 0,
+                "hilos_encontrados": 0,
+                "hilos": [],
+            }
+
+        ops_list = [op.strip() for op in cod_ordpros.split(",") if op.strip()]
+        total_ops = len(ops_list)
+
+        # Obtener hilos de costo_hilados_detalle_op para todas las OPs
+        try:
+            hilos_detallados = await tdv_queries.obtener_hilos_para_ops(
+                ops_list, version_normalizada
+            )
+        except Exception as e:
+            logger.warning(f"Error obteniendo hilos: {e}")
+            hilos_detallados = []
+
+        logger.info(
+            f" Hilos obtenidos para OPs: {len(hilos_detallados)} registros"
+        )
+
+        return {
+            "codigo_estilo": "N/A",
+            "version_calculo": version_normalizada,
+            "total_ops": total_ops,
+            "hilos_encontrados": len(hilos_detallados),
+            "hilos": hilos_detallados,
+        }
+
+    except Exception as e:
+        logger.error(f"Error obteniendo hilos detallados: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Error obteniendo hilos: {str(e)}"
+        )
+
+
+@app.get("/debug-estilo/{estilo}", tags=["Debug"])
+async def debug_estilo(estilo: str, tipo_estilo: str = "estilo_propio"):
+    """Debug: Verificar qué valores de estilo_propio o estilo_cliente existen"""
+    try:
+        columna = "estilo_cliente" if tipo_estilo == "estilo_cliente" else "estilo_propio"
+
+        # Buscar exactamente (con TRIM para eliminar espacios)
         query_exacto = f"""
         SELECT COUNT(*) as total, COUNT(DISTINCT cod_ordpro) as ops_dist
         FROM {settings.db_schema}.costo_op_detalle
-        WHERE estilo_propio::text = '{estilo}'
+        WHERE TRIM({columna}::text) = %s
         AND version_calculo = 'FLUIDA'
         """
-        result_exact = await tdv_queries.db.query(query_exacto)
+        result_exact = await tdv_queries.db.query(query_exacto, (estilo.strip(),))
 
         # Ver similares
         query_similares = f"""
-        SELECT DISTINCT estilo_propio, COUNT(*) as cantidad
+        SELECT DISTINCT {columna}, COUNT(*) as cantidad
         FROM {settings.db_schema}.costo_op_detalle
-        WHERE estilo_propio::text LIKE '%{estilo}%'
+        WHERE {columna}::text LIKE '%{estilo}%'
         AND version_calculo = 'FLUIDA'
-        GROUP BY estilo_propio
+        GROUP BY {columna}
         ORDER BY cantidad DESC
         LIMIT 10
         """
@@ -798,13 +1007,14 @@ async def debug_estilo(estilo: str):
 
         return {
             "estilo_buscado": estilo,
+            "tipo_busqueda": tipo_estilo,
             "busqueda_exacta": {
                 "total_registros": result_exact[0]['total'] if result_exact else 0,
                 "ops_distintas": result_exact[0]['ops_dist'] if result_exact else 0
             },
             "similares_encontrados": [
                 {
-                    "estilo_propio": row['estilo_propio'],
+                    "estilo": row[columna],
                     "cantidad": row['cantidad']
                 } for row in result_sim
             ]

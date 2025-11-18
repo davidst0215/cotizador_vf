@@ -20,7 +20,9 @@
       "Bash(nul)",
       "Bash(timeout /t 2 /nobreak)",
       "Bash(netstat:*)",
-      "Bash(findstr:*)"
+      "Bash(findstr:*)",
+      "Bash(python debug_estilo_18420.py:*)",
+      "Bash(debug_output.txt)"
     ],
     "deny": [],
     "ask": []

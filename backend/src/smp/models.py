@@ -70,7 +70,12 @@ class WipConfiguracion(BaseModel):
 
 
 class CotizacionInput(BaseModel):
-    """ MODELO PRINCIPAL CORREGIDO: Input para cotizacin (alineado con frontend)"""
+    """ MODELO PRINCIPAL CORREGIDO v2.0: Input para cotización (alineado con frontend)"""
+
+    # Nuevo campo v2.0: Código de Estilo Cliente (reemplaza categoria_lote)
+    estilo_cliente: Optional[str] = Field(
+        None, max_length=100, description="Código de Estilo Cliente (búsqueda principal v2.0)"
+    )
 
     # Campos exactos del frontend
     cliente_marca: str = Field(
@@ -78,15 +83,18 @@ class CotizacionInput(BaseModel):
     )
     # NOTA: temporada y familia_producto ahora son OPCIONALES (no se usan en la UI)
     temporada: Optional[str] = Field(None, max_length=50, description="Temporada (opcional)")
-    categoria_lote: str = Field(..., description="Categora del lote")
+
+    # DEPRECATED v2.0: categoria_lote se mantiene para compatibilidad hacia atrás
+    categoria_lote: Optional[str] = Field(None, description="Categoría del lote (DEPRECATED v2.0)")
+
     familia_producto: Optional[str] = Field(
         None, max_length=100, description="Familia de producto (opcional)"
     )
     tipo_prenda: str = Field(
         ..., min_length=1, max_length=100, description="Tipo de prenda"
     )
-    codigo_estilo: str = Field(
-        ..., min_length=1, max_length=50, description="Cdigo del estilo"
+    codigo_estilo: Optional[str] = Field(
+        None, max_length=50, description="Código del estilo (DEPRECATED v2.0, usa estilo_cliente)"
     )
     usuario: str = Field(
         default="Sistema", max_length=100, description="Usuario que cotiza"
@@ -124,17 +132,21 @@ class CotizacionInput(BaseModel):
         None, description="WIPs manufactura seleccionadas"
     )
 
-    @field_validator("categoria_lote")
+    @field_validator("categoria_lote", mode="before")
     def validar_categoria_lote(cls, v):
+        """Validador DEPRECATED v2.0: Solo valida si se proporciona"""
+        if v is None:
+            return v  # Permitir None en v2.0
+
         categorias_validas = [
             "Micro Lote",
-            "Lote Pequeo",
+            "Lote Pequeño",
             "Lote Mediano",
             "Lote Grande",
             "Lote Masivo",
         ]
         if v not in categorias_validas:
-            raise ValueError(f"Categora debe ser una de: {categorias_validas}")
+            raise ValueError(f"Categoría debe ser una de: {categorias_validas}")
         return v
 
     @field_validator("version_calculo", mode="before")
@@ -448,10 +460,10 @@ class CotizacionResponse(BaseModel):
     # Inputs procesados (incluye version_calculo)
     inputs: CotizacionInput = Field(..., description="Datos de entrada")
 
-    # Categorizacin automtica
-    categoria_lote: str = Field(..., description="Categora del lote determinada")
+    # Categorizacin automática (v2.0: categoria_lote ya no se usa)
+    categoria_lote: Optional[str] = Field(None, description="Categora del lote determinada (v1.0 - deprecated)")
     categoria_esfuerzo: Optional[int] = Field(None, description="Nivel de esfuerzo")
-    categoria_estilo: TipoEstilo = Field(..., description="Categora del estilo")
+    categoria_estilo: Optional[TipoEstilo] = Field(None, description="Categora del estilo")
     factor_marca: float = Field(..., description="Factor aplicado por marca")
 
     # Componentes de costo
@@ -473,10 +485,10 @@ class CotizacionResponse(BaseModel):
     gasto_ventas: float = Field(..., description="Gasto ventas unitario")
     costo_base_total: float = Field(..., description="Costo base total unitario")
 
-    # Vector de ajuste
-    factor_lote: float = Field(..., description="Factor de lote aplicado")
+    # Vector de ajuste (v2.0: Solo 2 factores - esfuerzo y marca)
+    factor_lote: Optional[float] = Field(None, description="Factor de lote aplicado (v1.0 - deprecated)")
     factor_esfuerzo: float = Field(..., description="Factor de esfuerzo aplicado")
-    factor_estilo: float = Field(..., description="Factor de estilo aplicado")
+    factor_estilo: Optional[float] = Field(None, description="Factor de estilo aplicado (v1.0 - deprecated)")
     vector_total: float = Field(..., description="Vector total de ajuste")
 
     # Resultado final
@@ -537,9 +549,9 @@ class HealthCheck(BaseModel):
 class ConfiguracionResponse(BaseModel):
     """Respuesta de configuracin del sistema"""
 
-    rangos_lote: Dict[str, Any] = Field(..., description="Rangos de lote")
+    rangos_lote: Optional[Dict[str, Any]] = Field(None, description="Rangos de lote (v1.0 - deprecated)")
     factores_esfuerzo: Dict[str, Any] = Field(..., description="Factores de esfuerzo")
-    factores_estilo: Dict[str, Any] = Field(..., description="Factores de estilo")
+    factores_estilo: Optional[Dict[str, Any]] = Field(None, description="Factores de estilo (v1.0 - deprecated)")
     factores_marca: Dict[str, float] = Field(..., description="Factores de marca")
     wips_disponibles: Dict[str, List[str]] = Field(..., description="WIPs disponibles")
     rangos_seguridad: Dict[str, Any] = Field(..., description="Rangos de seguridad")

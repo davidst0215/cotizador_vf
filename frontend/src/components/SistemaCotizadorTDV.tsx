@@ -583,6 +583,8 @@ interface ResultadoCotizacion {
   costo_manufactura: number;
   costo_avios: number;
   costo_materia_prima: number;
+  costo_hilos_materia_prima?: number; // ✨ Materia Prima Hilos (separado)
+  costo_telas_compradas?: number; // ✨ Tela Comprada (separado)
   costo_indirecto_fijo: number;
   gasto_administracion: number;
   gasto_ventas: number;
@@ -663,6 +665,8 @@ const SistemaCotizadorTDV = () => {
   const [costosMaterialesFinales, setCostosMaterialesFinales] = useState<{
     costo_materia_prima: number;
     costo_avios: number;
+    costo_hilos_materia_prima?: number;
+    costo_telas_compradas?: number;
   } | null>(null);
 
   // ✨ useEffect para sincronizar costos desde HilosDesgloseTable - se actualiza continuamente
@@ -1453,6 +1457,10 @@ const SistemaCotizadorTDV = () => {
         wips_textiles: esEstiloNuevo ? wipsTextiles : null,
         wips_manufactura: esEstiloNuevo ? wipsManufactura : null,
         cod_ordpros: selectedOpsCode && selectedOpsCode.length > 0 ? selectedOpsCode : null,
+        // ✨ Agregar costos de materiales configurados (hilos y telas separados)
+        costo_hilos_materia_prima: costosMaterialesFinales?.costo_hilos_materia_prima ?? null,
+        costo_telas_compradas: costosMaterialesFinales?.costo_telas_compradas ?? null,
+        costo_avios: costosMaterialesFinales?.costo_avios ?? null,
       };
 
       // 🚀 DEBUG: Mostrar payload completo con esfuerzo_total
@@ -1477,7 +1485,7 @@ const SistemaCotizadorTDV = () => {
     } finally {
       setCargando(false);
     }
-  }, [formData, esEstiloNuevo, wipsTextiles, wipsManufactura, selectedOpsCode, selectedOpsData, cargarOpsReales]);
+  }, [formData, esEstiloNuevo, wipsTextiles, wipsManufactura, selectedOpsCode, selectedOpsData, cargarOpsReales, costosMaterialesFinales]);
 
   // ========================================
   // 🎨 COMPONENTES MEMOIZADOS CORREGIDOS
@@ -1945,10 +1953,17 @@ const SistemaCotizadorTDV = () => {
           es_agrupado: false,
         },
         {
-          nombre: "Costo Materia Prima",
-          costo_unitario: costosMaterialesFinales?.costo_materia_prima ?? cotizacionActual.costo_materia_prima,
-          fuente: costosMaterialesFinales ? "configurado" : "ultimo_costo",
-          badge: costosMaterialesFinales ? "hilos + telas" : "último costo",
+          nombre: "Costo Materia Prima (Hilos)",
+          costo_unitario: costosMaterialesFinales?.costo_hilos_materia_prima ?? cotizacionActual.costo_hilos_materia_prima ?? cotizacionActual.costo_materia_prima,
+          fuente: costosMaterialesFinales || cotizacionActual.costo_hilos_materia_prima ? "configurado" : "ultimo_costo",
+          badge: costosMaterialesFinales || cotizacionActual.costo_hilos_materia_prima ? "hilos" : "último costo",
+          es_agrupado: false,
+        },
+        {
+          nombre: "Costo Tela Comprada",
+          costo_unitario: costosMaterialesFinales?.costo_telas_compradas ?? cotizacionActual.costo_telas_compradas ?? 0,
+          fuente: costosMaterialesFinales || cotizacionActual.costo_telas_compradas ? "configurado" : "ultimo_costo",
+          badge: costosMaterialesFinales || cotizacionActual.costo_telas_compradas ? "telas" : "sin datos",
           es_agrupado: false,
         },
         {
@@ -2031,7 +2046,7 @@ const SistemaCotizadorTDV = () => {
                     const getDescripcion = (nombre: string) => {
                       if (nombre.includes("Textil")) return "en base a ruta textil";
                       if (nombre.includes("Manufactura")) return "en base a ruta manufactura";
-                      if (nombre.includes("Materia Prima") || nombre.includes("Avíos"))
+                      if (nombre.includes("Materia Prima") || nombre.includes("Avíos") || nombre.includes("Tela"))
                         return "en base a configuración de inputs para producción";
                       if (nombre.includes("Indirecto") || nombre.includes("Administración") || nombre.includes("Ventas"))
                         return "en base a la bolsa anual de gastos y prendas";
@@ -2414,10 +2429,30 @@ const SistemaCotizadorTDV = () => {
               const totalAvios = aviosDesgloseTableRef.current?.getTotalCostoAvios() || 0;
               const totalTelas = telasDesgloseTableRef.current?.getTotalCostoTelas() || 0;
 
-              // Guardar costos de materiales calculados
-              setCostosMaterialesFinales({
-                costo_materia_prima: totalHilos + totalTelas, // Hilos + Telas
+              // Guardar costos de materiales calculados - SEPARADO hilos y telas
+              const costosMateriales = {
+                costo_materia_prima: totalHilos + totalTelas, // Hilos + Telas (para compatibilidad)
                 costo_avios: totalAvios,
+                costo_hilos_materia_prima: totalHilos, // ✨ Materia Prima Hilos
+                costo_telas_compradas: totalTelas, // ✨ Materia de Tela Comprada
+              };
+              setCostosMaterialesFinales(costosMateriales);
+
+              // ✨ Actualizar también cotizacionActual con los nuevos costos separados
+              setCotizacionActual((prev) => {
+                if (!prev) return prev;
+                return {
+                  ...prev,
+                  costo_materia_prima: totalHilos + totalTelas,
+                  costo_avios: totalAvios,
+                  // ✨ Agregar campos separados para visualización en desglose
+                  ...(costosMateriales.costo_hilos_materia_prima !== undefined && {
+                    costo_hilos_materia_prima: costosMateriales.costo_hilos_materia_prima,
+                  }),
+                  ...(costosMateriales.costo_telas_compradas !== undefined && {
+                    costo_telas_compradas: costosMateriales.costo_telas_compradas,
+                  }),
+                };
               });
 
               await procesarCotizacion();

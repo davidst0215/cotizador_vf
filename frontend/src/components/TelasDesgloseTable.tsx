@@ -69,6 +69,17 @@ const TelasDesgloseTableComponent = forwardRef<TelasDesgloseTableRef, TelasDesgl
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [busqueda, setBusqueda] = useState<string>("");
 
+  // ✨ 3 Modos de configuración
+  const [modo, setModo] = useState<"detallado" | "monto_fijo" | "automatico">("automatico");
+
+  // Estado para Modo Detallado (costos directos)
+  const [costosDetalladoLocal, setCostosDetalladoLocal] = useState<Record<string, number>>({}); // (tela_codigo) -> costo directo
+  const [costosDetalladoInputLocal, setCostosDetalladoInputLocal] = useState<Record<string, string>>({}); // (tela_codigo) -> costo (para typing)
+
+  // Estado para Modo Monto Fijo
+  const [montoFijoGlobal, setMontoFijoGlobal] = useState<number>(0);
+  const [montoFijoInput, setMontoFijoInput] = useState<string>("");
+
   // ✨ Ref para almacenar factoreTelaLocal sin crear dependencias
   const factoreTelaRef = useRef<Record<string, number>>(factoreTelaLocal);
 
@@ -123,9 +134,14 @@ const TelasDesgloseTableComponent = forwardRef<TelasDesgloseTableRef, TelasDesgl
         setTotalOps(data.total_ops || 0);
         setFechaCorrida(data.fecha_corrida || "");
 
-        // Inicializar factores en 1.0 para todas las telas
+        // ✨ Deduplicar telas por código
+        const telasUnicas = Array.from(
+          new Map((data.telas || []).map(t => [t.tela_codigo, t])).values()
+        );
+
+        // Inicializar factores en 1.0 para todas las telas únicas
         const factoresIniciales: Record<string, number> = {};
-        (data.telas || []).forEach((tela) => {
+        telasUnicas.forEach((tela) => {
           const clave = tela.tela_codigo;
           factoresIniciales[clave] = 1.0;
         });
@@ -133,7 +149,7 @@ const TelasDesgloseTableComponent = forwardRef<TelasDesgloseTableRef, TelasDesgl
 
         // Si no hay preseleccionadas, seleccionar todas por defecto
         if (telasPreseleccionadas.length === 0) {
-          setSelectedTelas(new Set(data.telas.map((t) => t.tela_codigo)));
+          setSelectedTelas(new Set(telasUnicas.map((t) => t.tela_codigo)));
         }
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : "Error desconocido";
@@ -160,7 +176,9 @@ const TelasDesgloseTableComponent = forwardRef<TelasDesgloseTableRef, TelasDesgl
   }, []);
 
   const toggleSelectAll = useCallback(() => {
-    if (selectedTelas.size === telasData.length) {
+    // ✨ Usar telasUnicas para contar correctamente
+    const uniqueCodesCount = new Set(telasData.map(t => t.tela_codigo)).size;
+    if (selectedTelas.size === uniqueCodesCount) {
       setSelectedTelas(new Set());
     } else {
       setSelectedTelas(new Set(telasData.map((t) => t.tela_codigo)));
@@ -184,17 +202,57 @@ const TelasDesgloseTableComponent = forwardRef<TelasDesgloseTableRef, TelasDesgl
     }
   }, []);
 
-  // ✨ Telas con factor y costos ajustados - cálculo en cascada
-  const telasConFactor: TelaConFactor[] = telasData.map((tela) => {
+  // ✨ Actualizar costo detallado
+  const handleCostoDetalladoChange = useCallback((clave: string, value: string) => {
+    setCostosDetalladoInputLocal((prev) => ({
+      ...prev,
+      [clave]: value,
+    }));
+
+    const numValue = parseFloat(value);
+    if (!isNaN(numValue) && numValue >= 0) {
+      setCostosDetalladoLocal((prev) => ({
+        ...prev,
+        [clave]: numValue,
+      }));
+    }
+  }, []);
+
+  // ✨ Actualizar monto fijo global
+  const handleMontoFijoChange = useCallback((value: string) => {
+    setMontoFijoInput(value);
+    const numValue = parseFloat(value);
+    if (!isNaN(numValue) && numValue >= 0) {
+      setMontoFijoGlobal(numValue);
+    }
+  }, []);
+
+  // ✨ Deduplicar telas por tela_codigo (mantener solo el primer registro de cada código)
+  const telasUnicas: Tela[] = Array.from(
+    new Map(telasData.map(t => [t.tela_codigo, t])).values()
+  );
+
+  // ✨ Telas con factor y costos ajustados - cálculo en cascada según modo
+  const telasConFactor: TelaConFactor[] = telasUnicas.map((tela) => {
     const clave = tela.tela_codigo;
-    const factor = factoreTelaLocal[clave] || 1.0;
 
-    // Cálculo en cascada:
-    // 1. precio_por_kg_ajustado = precio_por_kg × factor
-    const precio_por_kg_ajustado = tela.precio_por_kg_real * factor;
+    let factor = 1.0;
+    let precio_por_kg_ajustado = tela.precio_por_kg_real;
+    let costo_por_prenda_ajustado = tela.costo_por_prenda;
 
-    // 2. costo_por_prenda_ajustado = precio_por_kg_ajustado × kg_por_prenda
-    const costo_por_prenda_ajustado = precio_por_kg_ajustado * tela.kg_por_prenda;
+    if (modo === "automatico") {
+      factor = factoreTelaLocal[clave] || 1.0;
+      precio_por_kg_ajustado = tela.precio_por_kg_real * factor;
+      costo_por_prenda_ajustado = precio_por_kg_ajustado * tela.kg_por_prenda;
+    } else if (modo === "detallado") {
+      costo_por_prenda_ajustado = costosDetalladoLocal[clave] ?? tela.costo_por_prenda;
+      factor = 1.0;
+      precio_por_kg_ajustado = tela.precio_por_kg_real;
+    } else if (modo === "monto_fijo") {
+      costo_por_prenda_ajustado = montoFijoGlobal;
+      factor = 1.0;
+      precio_por_kg_ajustado = tela.precio_por_kg_real;
+    }
 
     return {
       ...tela,
@@ -229,6 +287,22 @@ const TelasDesgloseTableComponent = forwardRef<TelasDesgloseTableRef, TelasDesgl
       : (bValue as number) - (aValue as number);
   });
 
+  // ✨ Calcular total según el modo
+  let totalCostoTelas = 0;
+  if (modo === "automatico") {
+    totalCostoTelas = telasData.length > 0
+      ? telasConFactor
+          .filter((t) => selectedTelas.has(t.tela_codigo))
+          .reduce((sum, t) => sum + t.costo_por_prenda_ajustado, 0)
+      : 0;
+  } else if (modo === "detallado") {
+    totalCostoTelas = Array.from(selectedTelas).reduce((sum, codigo) => {
+      return sum + (costosDetalladoLocal[codigo] || 0);
+    }, 0);
+  } else if (modo === "monto_fijo") {
+    totalCostoTelas = montoFijoGlobal; // Monto total, no por prenda
+  }
+
   // ✨ Exponer métodos al componente padre
   useImperativeHandle(
     ref,
@@ -237,12 +311,10 @@ const TelasDesgloseTableComponent = forwardRef<TelasDesgloseTableRef, TelasDesgl
         return telasConFactor.filter((tela) => selectedTelas.has(tela.tela_codigo));
       },
       getTotalCostoTelas: () => {
-        return telasConFactor
-          .filter((tela) => selectedTelas.has(tela.tela_codigo))
-          .reduce((sum, tela) => sum + tela.costo_por_prenda_ajustado, 0);
+        return totalCostoTelas;
       },
     }),
-    [telasConFactor, selectedTelas]
+    [telasConFactor, selectedTelas, totalCostoTelas]
   );
 
   const handleSort = (field: typeof sortField) => {
@@ -276,112 +348,249 @@ const TelasDesgloseTableComponent = forwardRef<TelasDesgloseTableRef, TelasDesgl
 
   return (
     <div className="space-y-4">
-      {/* Búsqueda */}
-      <div className="flex items-center gap-2 mb-4">
-        <input
-          type="text"
-          placeholder="Buscar por código o nombre de tela..."
-          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm"
-          value={busqueda}
-          onChange={(e) => setBusqueda(e.target.value)}
-        />
-        <span className="text-sm text-gray-600">
-          {telasFiltradas.length} de {telasData.length}
-        </span>
-      </div>
+      <div className="bg-white p-4 rounded-lg border border-gray-200">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-semibold text-gray-700">
+            {telasFiltradas.length} Telas disponibles • {selectedTelas.size} seleccionadas
+            {fechaCorrida && <span className="ml-4 text-xs text-gray-500">Última fecha: {fechaCorrida}</span>}
+          </h3>
+        </div>
 
-      {/* Tabla */}
-      <div className="overflow-x-auto border border-gray-300 rounded-lg">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-100 border-b border-gray-300">
-            <tr>
-              <th className="p-2 text-left">
-                <input
-                  type="checkbox"
-                  checked={selectedTelas.size === telasData.length && telasData.length > 0}
-                  onChange={toggleSelectAll}
-                  className="cursor-pointer"
-                />
-              </th>
-              <th
-                className="p-2 text-left cursor-pointer hover:bg-gray-200"
-                onClick={() => handleSort("tela_descripcion")}
-              >
-                <div className="flex items-center gap-1">
-                  Nombre de Tela
-                  {sortField === "tela_descripcion" && (
-                    sortDirection === "asc" ? <ChevronUp size={14} /> : <ChevronDown size={14} />
-                  )}
-                </div>
-              </th>
-              <th className="p-2 text-left">Código de Tela</th>
-              <th className="p-2 text-right">kg/prenda</th>
-              <th
-                className="p-2 text-right cursor-pointer hover:bg-gray-200"
-                onClick={() => handleSort("precio_por_kg_real")}
-              >
-                <div className="flex items-center justify-end gap-1">
-                  Precio/kg
-                  {sortField === "precio_por_kg_real" && (
-                    sortDirection === "asc" ? <ChevronUp size={14} /> : <ChevronDown size={14} />
-                  )}
-                </div>
-              </th>
-              <th className="p-2 text-right">Factor</th>
-              <th className="p-2 text-right">Precio/kg Ajustado</th>
-              <th className="p-2 text-right">Costo/prenda</th>
-              <th
-                className="p-2 text-right cursor-pointer hover:bg-gray-200"
-                onClick={() => handleSort("frecuencia_ops")}
-              >
-                <div className="flex items-center justify-end gap-1">
-                  Freq.
-                  {sortField === "frecuencia_ops" && (
-                    sortDirection === "asc" ? <ChevronUp size={14} /> : <ChevronDown size={14} />
-                  )}
-                </div>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {telasOrdenadas.map((tela) => (
-              <tr key={tela.tela_codigo} className="border-b border-gray-200 hover:bg-gray-50">
-                <td className="p-2">
+        {/* ✨ Toggle de Modos */}
+        <div className="mb-4 flex items-center gap-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
+          <span className="font-semibold text-sm text-gray-700">Modo:</span>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setModo("detallado")}
+              className={`px-4 py-2 rounded text-sm font-medium transition-all ${
+                modo === "detallado"
+                  ? "bg-blue-500 text-white shadow-md"
+                  : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+              }`}
+            >
+              Detallado
+            </button>
+            <button
+              onClick={() => setModo("monto_fijo")}
+              className={`px-4 py-2 rounded text-sm font-medium transition-all ${
+                modo === "monto_fijo"
+                  ? "bg-blue-500 text-white shadow-md"
+                  : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+              }`}
+            >
+              Monto Fijo
+            </button>
+            <button
+              onClick={() => setModo("automatico")}
+              className={`px-4 py-2 rounded text-sm font-medium transition-all ${
+                modo === "automatico"
+                  ? "bg-blue-500 text-white shadow-md"
+                  : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+              }`}
+            >
+              Automático
+            </button>
+          </div>
+        </div>
+
+        {/* ✨ Modo Monto Fijo - Caja de costo global */}
+        {modo === "monto_fijo" && (
+          <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+            <label className="block text-sm font-semibold text-green-900 mb-2">
+              Costo Total de Telas (por prenda)
+            </label>
+            <input
+              type="number"
+              value={montoFijoInput}
+              onChange={(e) => handleMontoFijoChange(e.target.value)}
+              min="0"
+              step="0.01"
+              className="w-full px-4 py-2 border border-green-300 rounded text-lg font-bold text-green-900 focus:outline-none focus:border-green-500"
+              placeholder="Ingresa el monto total"
+            />
+          </div>
+        )}
+
+        {/* Búsqueda */}
+        <div className="flex items-center gap-2 mb-4">
+          <input
+            type="text"
+            placeholder="Buscar por código o nombre de tela..."
+            className="flex-1 px-3 py-2 border border-gray-300 rounded text-sm"
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+          />
+          <button
+            onClick={toggleSelectAll}
+            className="text-xs px-3 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+          >
+            {selectedTelas.size === telasFiltradas.length && telasFiltradas.length > 0
+              ? "Desseleccionar filtradas"
+              : "Seleccionar filtradas"}
+          </button>
+        </div>
+
+        {/* Tabla */}
+        <div className="overflow-x-auto overflow-y-auto max-h-96 border border-gray-200 rounded">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-300 bg-gray-100">
+                <th className="px-3 py-2 text-center w-8">
                   <input
                     type="checkbox"
-                    checked={selectedTelas.has(tela.tela_codigo)}
-                    onChange={() => toggleSelection(tela.tela_codigo)}
-                    className="cursor-pointer"
+                    checked={selectedTelas.size === telasFiltradas.length && telasFiltradas.length > 0}
+                    onChange={toggleSelectAll}
                   />
-                </td>
-                <td className="p-2">{tela.tela_descripcion}</td>
-                <td className="p-2">{tela.tela_codigo}</td>
-                <td className="p-2 text-right">{tela.kg_por_prenda.toFixed(4)}</td>
-                <td className="p-2 text-right">${tela.precio_por_kg_real.toFixed(2)}</td>
-                <td className="p-2 text-right">
-                  <input
-                    type="number"
-                    min="0.1"
-                    max="10"
-                    step="0.1"
-                    value={factoresInputLocal[tela.tela_codigo] || "1.0"}
-                    onChange={(e) => handleFactorChange(tela.tela_codigo, e.target.value)}
-                    className="w-16 px-2 py-1 border border-gray-300 rounded text-right"
-                  />
-                </td>
-                <td className="p-2 text-right">${tela.precio_por_kg_ajustado.toFixed(2)}</td>
-                <td className="p-2 text-right font-semibold">${tela.costo_por_prenda_ajustado.toFixed(2)}</td>
-                <td className="p-2 text-right">{tela.frecuencia_ops}</td>
+                </th>
+                <th
+                  onClick={() => handleSort("tela_descripcion")}
+                  className="px-3 py-2 text-center font-semibold text-gray-700 cursor-pointer hover:bg-gray-200"
+                >
+                  <div className="flex items-center justify-center gap-1">
+                    Nombre Tela
+                    {sortField === "tela_descripcion" && (sortDirection === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
+                  </div>
+                </th>
+                <th className="px-3 py-2 text-center font-semibold text-gray-700">Código Tela</th>
+                <th
+                  onClick={() => handleSort("precio_por_kg_real")}
+                  className="px-3 py-2 text-center font-semibold text-gray-700 cursor-pointer hover:bg-gray-200"
+                >
+                  <div className="flex items-center justify-center gap-1">
+                    kg/prenda
+                    {sortField === "precio_por_kg_real" && (sortDirection === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleSort("precio_por_kg_real")}
+                  className="px-3 py-2 text-center font-semibold text-gray-700 cursor-pointer hover:bg-gray-200"
+                >
+                  <div className="flex items-center justify-center gap-1">
+                    Precio/kg
+                    {sortField === "precio_por_kg_real" && (sortDirection === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
+                  </div>
+                </th>
+                {modo === "automatico" && (
+                  <>
+                    <th className="px-3 py-2 text-center font-semibold text-gray-700">Factor</th>
+                    <th className="px-3 py-2 text-center font-semibold text-gray-700">Precio/kg Ajustado</th>
+                  </>
+                )}
+                <th className="px-3 py-2 text-center font-semibold text-gray-700">
+                  {modo === "detallado" ? "Costo/prenda (directo)" : "Costo/prenda"}
+                </th>
+                <th
+                  onClick={() => handleSort("frecuencia_ops")}
+                  className="px-3 py-2 text-center font-semibold text-gray-700 cursor-pointer hover:bg-gray-200"
+                >
+                  <div className="flex items-center justify-center gap-1">
+                    Frecuencia
+                    {sortField === "frecuencia_ops" && (sortDirection === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
+                  </div>
+                </th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {telasOrdenadas.map((tela) => (
+                <tr key={tela.tela_codigo} className="border-b border-gray-200 hover:bg-gray-50">
+                  <td className="px-3 py-2 text-center">
+                    <input
+                      type="checkbox"
+                      checked={selectedTelas.has(tela.tela_codigo)}
+                      onChange={() => toggleSelection(tela.tela_codigo)}
+                    />
+                  </td>
+                  <td className="px-3 py-2 text-center font-semibold text-gray-900">
+                    {tela.tela_descripcion}
+                  </td>
+                  <td className="px-3 py-2 text-center text-gray-700">
+                    {tela.tela_codigo}
+                  </td>
+                  <td className="px-3 py-2 text-center text-gray-700">
+                    {tela.kg_por_prenda.toFixed(4)}
+                  </td>
+                  <td className="px-3 py-2 text-center text-gray-700">
+                    ${tela.precio_por_kg_real.toFixed(4)}
+                  </td>
+                  {modo === "automatico" && (
+                    <>
+                      <td className="px-3 py-2 text-center">
+                        <input
+                          type="number"
+                          min="0.1"
+                          max="10"
+                          step="0.01"
+                          value={factoresInputLocal[tela.tela_codigo] || tela.factor.toFixed(2)}
+                          onChange={(e) => handleFactorChange(tela.tela_codigo, e.target.value)}
+                          className="w-16 px-2 py-1 border border-gray-300 rounded text-center text-sm"
+                        />
+                      </td>
+                      <td className="px-3 py-2 text-center text-gray-700">
+                        ${tela.precio_por_kg_ajustado.toFixed(4)}
+                      </td>
+                    </>
+                  )}
+                  {modo === "detallado" && (
+                    <td className="px-3 py-2 text-center">
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={costosDetalladoInputLocal[tela.tela_codigo] || ""}
+                        onChange={(e) => handleCostoDetalladoChange(tela.tela_codigo, e.target.value)}
+                        className="w-20 px-2 py-1 border border-gray-300 rounded text-center text-sm"
+                        placeholder="0.00"
+                      />
+                    </td>
+                  )}
+                  {modo === "monto_fijo" && (
+                    <td className="px-3 py-2 text-center text-gray-700 font-medium">
+                      ${montoFijoGlobal.toFixed(4)}
+                    </td>
+                  )}
+                  {modo === "automatico" && (
+                    <td className="px-3 py-2 text-center font-semibold text-red-600">
+                      ${tela.costo_por_prenda_ajustado.toFixed(4)}
+                    </td>
+                  )}
+                  {(modo === "detallado" || modo === "monto_fijo") && (
+                    <td className="px-3 py-2 text-center font-semibold text-red-600">
+                      ${tela.costo_por_prenda_ajustado.toFixed(4)}
+                    </td>
+                  )}
+                  <td className="px-3 py-2 text-center text-gray-700">
+                    {totalOps > 0 ? ((tela.frecuencia_ops / totalOps) * 100).toFixed(1) : 0}%
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
 
-      {/* Info */}
-      <div className="text-xs text-gray-600">
-        {fechaCorrida && <p>Última actualización: {fechaCorrida}</p>}
-        <p>Total OPs del estilo: {totalOps}</p>
+        {/* Resumen de Total */}
+        <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+          <div className="flex justify-between items-center">
+            <span className="font-semibold text-blue-900">Total Costo Telas (por prenda):</span>
+            <span className="text-2xl font-bold text-blue-700">
+              ${totalCostoTelas.toFixed(2)}
+            </span>
+          </div>
+          {modo === "monto_fijo" && (
+            <p className="text-xs text-blue-600 mt-2">
+              * Modo Monto Fijo: El costo total es el valor ingresado directamente
+            </p>
+          )}
+          {modo === "detallado" && (
+            <p className="text-xs text-blue-600 mt-2">
+              * Modo Detallado: El costo total es la suma de los costos ingresados por prenda
+            </p>
+          )}
+          {modo === "automatico" && (
+            <p className="text-xs text-blue-600 mt-2">
+              * Modo Automático: El costo total es calculado como (costo/kg × factor × kg/prenda) de los seleccionados
+            </p>
+          )}
+        </div>
       </div>
     </div>
   );

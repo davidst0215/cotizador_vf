@@ -65,6 +65,17 @@ const HilosDesgloseTableComponent = forwardRef<HilosDesgloseTableRef, HilosDesgl
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [busqueda, setBusqueda] = useState<string>("");
 
+  // ✨ 3 Modos de configuración
+  const [modo, setModo] = useState<"detallado" | "monto_fijo" | "automatico">("automatico");
+
+  // Estado para Modo Detallado (costos directos)
+  const [costosDetalladoLocal, setCostosDetalladoLocal] = useState<Record<string, number>>({}); // (cod_hilado) -> costo directo
+  const [costosDetalladoInputLocal, setCostosDetalladoInputLocal] = useState<Record<string, string>>({}); // (cod_hilado) -> costo (para typing)
+
+  // Estado para Modo Monto Fijo
+  const [montoFijoGlobal, setMontoFijoGlobal] = useState<number>(0);
+  const [montoFijoInput, setMontoFijoInput] = useState<string>("");
+
   // ✨ Ref para almacenar factoresHiloLocal sin crear dependencias
   const factoresHiloRef = useRef<Record<string, number>>(factoresHiloLocal);
 
@@ -179,17 +190,52 @@ const HilosDesgloseTableComponent = forwardRef<HilosDesgloseTableRef, HilosDesgl
     }
   }, []);
 
-  // ✨ Hilos con factor y costos ajustados - cálculo en cascada
+  // ✨ Actualizar costo detallado
+  const handleCostoDetalladoChange = useCallback((clave: string, value: string) => {
+    setCostosDetalladoInputLocal((prev) => ({
+      ...prev,
+      [clave]: value,
+    }));
+
+    const numValue = parseFloat(value);
+    if (!isNaN(numValue) && numValue >= 0) {
+      setCostosDetalladoLocal((prev) => ({
+        ...prev,
+        [clave]: numValue,
+      }));
+    }
+  }, []);
+
+  // ✨ Actualizar monto fijo global
+  const handleMontoFijoChange = useCallback((value: string) => {
+    setMontoFijoInput(value);
+    const numValue = parseFloat(value);
+    if (!isNaN(numValue) && numValue >= 0) {
+      setMontoFijoGlobal(numValue);
+    }
+  }, []);
+
+  // ✨ Hilos con factor y costos ajustados - cálculo en cascada según modo
   const hilosConFactor: HiloConFactor[] = hilosData.map((hilo) => {
     const clave = `${hilo.cod_hilado}|${hilo.tipo_hilo}`;
-    const factor = factoresHiloLocal[clave] || 1.0;
 
-    // Cálculo en cascada:
-    // 1. costo_por_kg_ajustado = costo_por_kg × factor
-    const costo_por_kg_ajustado = hilo.costo_por_kg * factor;
+    let factor = 1.0;
+    let costo_por_kg_ajustado = hilo.costo_por_kg;
+    let costo_por_prenda_ajustado = hilo.costo_por_prenda_final;
 
-    // 2. costo_por_prenda_ajustado = costo_por_kg_ajustado × kg_por_prenda
-    const costo_por_prenda_ajustado = costo_por_kg_ajustado * hilo.kg_por_prenda;
+    if (modo === "automatico") {
+      factor = factoresHiloLocal[clave] || 1.0;
+      costo_por_kg_ajustado = hilo.costo_por_kg * factor;
+      costo_por_prenda_ajustado = costo_por_kg_ajustado * hilo.kg_por_prenda;
+    } else if (modo === "detallado") {
+      costo_por_prenda_ajustado = costosDetalladoLocal[clave] ?? hilo.costo_por_prenda_final;
+      factor = 1.0;
+      costo_por_kg_ajustado = hilo.costo_por_kg;
+    } else if (modo === "monto_fijo") {
+      costo_por_prenda_ajustado = montoFijoGlobal;
+      factor = 1.0;
+      costo_por_kg_ajustado = hilo.costo_por_kg;
+    }
 
     return {
       ...hilo,
@@ -224,19 +270,28 @@ const HilosDesgloseTableComponent = forwardRef<HilosDesgloseTableRef, HilosDesgl
     return sortDirection === "asc" ? diff : -diff;
   });
 
-  // Calcular totales - suma de costos_por_prenda_ajustados de hilos seleccionados
-  const totalCostoHilos = hilosData.length > 0
-    ? hilosConFactor
-        .filter((h) => selectedHilos.has(`${h.cod_hilado}|${h.tipo_hilo}`))
-        .reduce((sum, h) => sum + h.costo_por_prenda_ajustado, 0)
-    : 0;
+  // ✨ Calcular total según el modo
+  let totalCostoHilos = 0;
+  if (modo === "automatico") {
+    totalCostoHilos = hilosData.length > 0
+      ? hilosConFactor
+          .filter((h) => selectedHilos.has(`${h.cod_hilado}|${h.tipo_hilo}`))
+          .reduce((sum, h) => sum + h.costo_por_prenda_ajustado, 0)
+      : 0;
+  } else if (modo === "detallado") {
+    totalCostoHilos = Array.from(selectedHilos).reduce((sum, clave) => {
+      return sum + (costosDetalladoLocal[clave] || 0);
+    }, 0);
+  } else if (modo === "monto_fijo") {
+    totalCostoHilos = montoFijoGlobal; // Monto total, no por prenda
+  }
 
   // Exponer métodos al padre via ref
   React.useImperativeHandle(ref, () => ({
     getSelectedHilos: () =>
       hilosConFactor.filter((h) => selectedHilos.has(`${h.cod_hilado}|${h.tipo_hilo}`)),
     getTotalCostoHilos: () => totalCostoHilos,
-  }), [hilosConFactor, selectedHilos, totalOps]);
+  }), [hilosConFactor, selectedHilos, totalCostoHilos, totalOps, modo]);
 
   if (cargando) {
     return (
@@ -267,6 +322,61 @@ const HilosDesgloseTableComponent = forwardRef<HilosDesgloseTableRef, HilosDesgl
             {hilosOrdenados.length} Hilos disponibles • {selectedHilos.size} seleccionados
           </h3>
         </div>
+
+        {/* ✨ Toggle de Modos */}
+        <div className="mb-4 flex items-center gap-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
+          <span className="font-semibold text-sm text-gray-700">Modo:</span>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setModo("detallado")}
+              className={`px-4 py-2 rounded text-sm font-medium transition-all ${
+                modo === "detallado"
+                  ? "bg-blue-500 text-white shadow-md"
+                  : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+              }`}
+            >
+              Detallado
+            </button>
+            <button
+              onClick={() => setModo("monto_fijo")}
+              className={`px-4 py-2 rounded text-sm font-medium transition-all ${
+                modo === "monto_fijo"
+                  ? "bg-blue-500 text-white shadow-md"
+                  : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+              }`}
+            >
+              Monto Fijo
+            </button>
+            <button
+              onClick={() => setModo("automatico")}
+              className={`px-4 py-2 rounded text-sm font-medium transition-all ${
+                modo === "automatico"
+                  ? "bg-blue-500 text-white shadow-md"
+                  : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+              }`}
+            >
+              Automático
+            </button>
+          </div>
+        </div>
+
+        {/* ✨ Modo Monto Fijo - Caja de costo global */}
+        {modo === "monto_fijo" && (
+          <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+            <label className="block text-sm font-semibold text-green-900 mb-2">
+              Costo Total de Hilos (por prenda)
+            </label>
+            <input
+              type="number"
+              value={montoFijoInput}
+              onChange={(e) => handleMontoFijoChange(e.target.value)}
+              min="0"
+              step="0.01"
+              className="w-full px-4 py-2 border border-green-300 rounded text-lg font-bold text-green-900 focus:outline-none focus:border-green-500"
+              placeholder="Ingresa el monto total"
+            />
+          </div>
+        )}
 
         {/* ✨ Buscador */}
         <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
@@ -342,9 +452,15 @@ const HilosDesgloseTableComponent = forwardRef<HilosDesgloseTableRef, HilosDesgl
                     {sortField === "costo_por_kg" && (sortDirection === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
                   </div>
                 </th>
-                <th className="px-3 py-2 text-center font-semibold text-gray-700">Factor</th>
-                <th className="px-3 py-2 text-center font-semibold text-gray-700">Costo/kg Ajustado</th>
-                <th className="px-3 py-2 text-center font-semibold text-gray-700">Costo/prenda</th>
+                {modo === "automatico" && (
+                  <>
+                    <th className="px-3 py-2 text-center font-semibold text-gray-700">Factor</th>
+                    <th className="px-3 py-2 text-center font-semibold text-gray-700">Costo/kg Ajustado</th>
+                  </>
+                )}
+                <th className="px-3 py-2 text-center font-semibold text-gray-700">
+                  {modo === "detallado" ? "Costo/prenda (directo)" : "Costo/prenda"}
+                </th>
                 <th
                   onClick={() => {
                     setSortField("frecuencia_ops");
@@ -386,23 +502,52 @@ const HilosDesgloseTableComponent = forwardRef<HilosDesgloseTableRef, HilosDesgl
                     <td className="px-3 py-2 text-center text-gray-700">
                       ${hilo.costo_por_kg.toFixed(4)}
                     </td>
-                    <td className="px-3 py-2 text-center">
-                      <input
-                        type="number"
-                        value={factoresInputLocal[clave] || hilo.factor.toFixed(2)}
-                        onChange={(e) => handleFactorChange(clave, e.target.value)}
-                        step="0.01"
-                        min="0.1"
-                        max="10"
-                        className="w-16 px-2 py-1 border border-gray-300 rounded text-center text-sm"
-                      />
-                    </td>
-                    <td className="px-3 py-2 text-center text-gray-700">
-                      ${hilo.costo_por_kg_ajustado.toFixed(4)}
-                    </td>
-                    <td className="px-3 py-2 text-center font-semibold text-red-600">
-                      ${hilo.costo_por_prenda_ajustado.toFixed(4)}
-                    </td>
+                    {modo === "automatico" && (
+                      <>
+                        <td className="px-3 py-2 text-center">
+                          <input
+                            type="number"
+                            value={factoresInputLocal[clave] || hilo.factor.toFixed(2)}
+                            onChange={(e) => handleFactorChange(clave, e.target.value)}
+                            step="0.01"
+                            min="0.1"
+                            max="10"
+                            className="w-16 px-2 py-1 border border-gray-300 rounded text-center text-sm"
+                          />
+                        </td>
+                        <td className="px-3 py-2 text-center text-gray-700">
+                          ${hilo.costo_por_kg_ajustado.toFixed(4)}
+                        </td>
+                      </>
+                    )}
+                    {modo === "detallado" && (
+                      <td className="px-3 py-2 text-center">
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={costosDetalladoInputLocal[clave] || ""}
+                          onChange={(e) => handleCostoDetalladoChange(clave, e.target.value)}
+                          className="w-20 px-2 py-1 border border-gray-300 rounded text-center text-sm"
+                          placeholder="0.00"
+                        />
+                      </td>
+                    )}
+                    {modo === "monto_fijo" && (
+                      <td className="px-3 py-2 text-center text-gray-700 font-medium">
+                        ${montoFijoGlobal.toFixed(4)}
+                      </td>
+                    )}
+                    {modo === "automatico" && (
+                      <td className="px-3 py-2 text-center font-semibold text-red-600">
+                        ${hilo.costo_por_prenda_ajustado.toFixed(4)}
+                      </td>
+                    )}
+                    {(modo === "detallado" || modo === "monto_fijo") && (
+                      <td className="px-3 py-2 text-center font-semibold text-red-600">
+                        ${hilo.costo_por_prenda_ajustado.toFixed(4)}
+                      </td>
+                    )}
                     <td className="px-3 py-2 text-center text-xs text-gray-600">
                       {totalOps > 0 ? ((hilo.frecuencia_ops / totalOps) * 100).toFixed(0) : "0"}%
                     </td>
@@ -421,6 +566,21 @@ const HilosDesgloseTableComponent = forwardRef<HilosDesgloseTableRef, HilosDesgl
               ${totalCostoHilos.toFixed(2)}
             </span>
           </div>
+          {modo === "monto_fijo" && (
+            <p className="text-xs text-blue-600 mt-2">
+              * Modo Monto Fijo: El costo total es el valor ingresado directamente
+            </p>
+          )}
+          {modo === "detallado" && (
+            <p className="text-xs text-blue-600 mt-2">
+              * Modo Detallado: El costo total es la suma de los costos ingresados por prenda
+            </p>
+          )}
+          {modo === "automatico" && (
+            <p className="text-xs text-blue-600 mt-2">
+              * Modo Automático: El costo total es calculado como (costo/kg × factor × kg/prenda) de los seleccionados
+            </p>
+          )}
         </div>
       </div>
     </div>

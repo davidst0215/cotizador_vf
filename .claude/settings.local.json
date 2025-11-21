@@ -24,7 +24,10 @@
       "Bash(python debug_estilo_18420.py:*)",
       "Bash(debug_output.txt)",
       "Bash(gh run view:*)",
-      "Bash(gh run list:*)"
+      "Bash(gh run list:*)",
+      "Bash(git rm:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)"
     ],
     "deny": [],
     "ask": []

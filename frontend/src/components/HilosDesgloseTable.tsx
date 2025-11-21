@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect, forwardRef } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 
 // Interfaz para datos de hilos desde la BD

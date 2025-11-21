@@ -23,6 +23,7 @@ import {
 import { OpsSelectionTable } from "./OpsSelectionTable";
 import { WipDesgloseTable, WipDesgloseTableRef } from "./WipDesgloseTable";
 import { HilosDesgloseTable, HilosDesgloseTableRef } from "./HilosDesgloseTable";
+import { AviosDesgloseTable, AviosDesgloseTableRef } from "./AviosDesgloseTable";
 
 // Constantes del sistema
 const CATEGORIAS_LOTE = {
@@ -619,7 +620,7 @@ const SistemaCotizadorTDV = () => {
 
   // Estados principales
   const [pestanaActiva, setPestanaActiva] = useState<
-    "formulario" | "resultados" | "costos"
+    "formulario" | "resultados" | "materiales" | "costos"
   >("formulario");
   const [cotizacionActual, setCotizacionActual] =
     useState<ResultadoCotizacion | null>(null);
@@ -637,6 +638,7 @@ const SistemaCotizadorTDV = () => {
   const wipDesgloseTableRef = useRef<WipDesgloseTableRef>(null); // ✨ Ref para acceder a WIPs seleccionados
   const selectedWipsRef = useRef<string[]>([]); // ✨ Mantener WIPs seleccionados en ref para persistencia visual
   const hilosDesgloseTableRef = useRef<HilosDesgloseTableRef>(null); // ✨ Ref para acceder a Hilos seleccionados
+  const aviosDesgloseTableRef = useRef<AviosDesgloseTableRef>(null); // ✨ Ref para acceder a Avios seleccionados
 
   // Estados para costos calculados del WIP (para sobrescribir backend values)
   const [costosWipCalculados, setCostosWipCalculados] = useState<{
@@ -2361,8 +2363,26 @@ const SistemaCotizadorTDV = () => {
               <HilosDesgloseTable
                 ref={hilosDesgloseTableRef}
                 versionCalculo={formData.version_calculo}
-                codOrdpros={selectedOpsCode}
+                estiloCliente={formData.estilo_cliente}
+                codigoEstilo={formData.codigo_estilo}
+                clienteMarca={formData.cliente_marca}
+                tipoPrenda={formData.tipo_prenda}
                 onError={(errorMsg) => console.error("Error en hilos:", errorMsg)}
+              />
+            </div>
+
+            <div>
+              <h3 className="font-bold text-lg text-red-700 mb-4">
+                Desglose de Avios
+              </h3>
+              <AviosDesgloseTable
+                ref={aviosDesgloseTableRef}
+                versionCalculo={formData.version_calculo}
+                estiloCliente={formData.estilo_cliente}
+                codigoEstilo={formData.codigo_estilo}
+                clienteMarca={formData.cliente_marca}
+                tipoPrenda={formData.tipo_prenda}
+                onError={(errorMsg) => console.error("Error en avios:", errorMsg)}
               />
             </div>
           </div>
@@ -2374,11 +2394,12 @@ const SistemaCotizadorTDV = () => {
             onClick={async () => {
               // ✨ Obtener totales de las tablas de desgloses
               const totalHilos = hilosDesgloseTableRef.current?.getTotalCostoHilos() || 0;
+              const totalAvios = aviosDesgloseTableRef.current?.getTotalCostoAvios() || 0;
 
               // Guardar costos de materiales calculados
               setCostosMaterialesFinales({
                 costo_materia_prima: totalHilos, // Por ahora solo hilos, pendiente telas
-                costo_avios: 0, // Pendiente tabla de avíos
+                costo_avios: totalAvios,
               });
 
               await procesarCotizacion();
@@ -2386,7 +2407,7 @@ const SistemaCotizadorTDV = () => {
               setTimeout(() => setPestanaActiva("costos"), 500);
             }}
             disabled={cargando || !selectedOpsCode || selectedOpsCode.length === 0}
-            className="group relative px-12 py-4 font-bold text-white rounded-2xl shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105 bg-gradient-to-r from-yellow-600 via-yellow-500 to-yellow-400"
+            className="group relative px-12 py-4 font-bold text-white rounded-2xl shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105 bg-gradient-to-r from-red-800 via-red-700 to-red-600"
           >
             {cargando ? (
               <div className="flex items-center gap-3">

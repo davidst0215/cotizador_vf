@@ -921,24 +921,34 @@ async def obtener_ops_detalladas(
         )
 
 
-@app.get("/obtener-hilos-detalladas", tags=["Bsqueda"])
+@app.get("/obtener-hilos-detalladas", tags=["Búsqueda"])
 async def obtener_hilos_detalladas(
     version_calculo: Optional[str] = None,
-    cod_ordpros: Optional[str] = None,  # Formato: "OP1,OP2,OP3"
+    estilo_cliente: Optional[str] = None,
+    codigo_estilo: Optional[str] = None,
+    cliente_marca: Optional[str] = None,
+    tipo_prenda: Optional[str] = None,
 ):
     """
-    Obtiene lista detallada de hilos para las OPs seleccionadas.
-    Retorna todos los hilos usados en esas OPs con sus costos.
+    Obtiene lista detallada de hilos para un estilo (NO filtra por OPs).
+    Retorna TODOS los hilos del estilo especificado con sus costos.
 
-    También calcula la frecuencia de uso (en cuántas OPs aparece cada hilo).
+    Parámetros:
+    - version_calculo: Versión de cálculo (FLUIDA o truncado)
+    - estilo_cliente: Estilo ingresado por el usuario
+    - codigo_estilo: Código interno del estilo
+    - cliente_marca: Marca del cliente (para búsqueda fallback si no hay estilo)
+    - tipo_prenda: Tipo de prenda (para búsqueda fallback si no hay estilo)
+
+    También calcula la frecuencia de uso (en cuántas OPs del estilo aparece cada hilo).
     """
-    logger.info(f" [LLAMADA] obtener_hilos_detalladas - version={version_calculo}, ops={cod_ordpros}")
+    logger.info(f" [LLAMADA] obtener_hilos_detalladas - version={version_calculo}, estilo_cliente={estilo_cliente}, codigo_estilo={codigo_estilo}, cliente_marca={cliente_marca}, tipo_prenda={tipo_prenda}")
     try:
         # Normalizar version_calculo
         version_normalizada = normalize_version_calculo(version_calculo)
 
-        # Parsear OPs
-        if not cod_ordpros:
+        # Validar que al menos un estilo fue proporcionado
+        if not estilo_cliente and not codigo_estilo:
             return {
                 "codigo_estilo": "N/A",
                 "version_calculo": version_normalizada,
@@ -947,24 +957,26 @@ async def obtener_hilos_detalladas(
                 "hilos": [],
             }
 
-        ops_list = [op.strip() for op in cod_ordpros.split(",") if op.strip()]
-        total_ops = len(ops_list)
-
-        # Obtener hilos de costo_hilados_detalle_op para todas las OPs
+        # Obtener hilos del estilo (sin filtrar por OPs)
         try:
-            hilos_detallados = await tdv_queries.obtener_hilos_para_ops(
-                ops_list, version_normalizada
+            hilos_detallados, total_ops = await tdv_queries.obtener_hilos_para_estilo(
+                estilo_cliente=estilo_cliente,
+                codigo_estilo=codigo_estilo,
+                cliente_marca=cliente_marca,
+                tipo_prenda=tipo_prenda,
+                version_calculo=version_normalizada,
             )
         except Exception as e:
             logger.warning(f"Error obteniendo hilos: {e}")
             hilos_detallados = []
+            total_ops = 0
 
         logger.info(
-            f" Hilos obtenidos para OPs: {len(hilos_detallados)} registros"
+            f" Hilos obtenidos para estilo: {len(hilos_detallados)} registros, total_ops: {total_ops}"
         )
 
         return {
-            "codigo_estilo": "N/A",
+            "codigo_estilo": codigo_estilo or estilo_cliente or "N/A",
             "version_calculo": version_normalizada,
             "total_ops": total_ops,
             "hilos_encontrados": len(hilos_detallados),
@@ -975,6 +987,79 @@ async def obtener_hilos_detalladas(
         logger.error(f"Error obteniendo hilos detallados: {e}")
         raise HTTPException(
             status_code=500, detail=f"Error obteniendo hilos: {str(e)}"
+        )
+
+
+@app.get("/obtener-avios-detalladas", tags=["Búsqueda"])
+async def obtener_avios_detalladas(
+    version_calculo: Optional[str] = None,
+    estilo_cliente: Optional[str] = None,
+    codigo_estilo: Optional[str] = None,
+    cliente_marca: Optional[str] = None,
+    tipo_prenda: Optional[str] = None,
+):
+    """
+    Obtiene lista detallada de avios para un estilo (NO filtra por OPs).
+    Retorna TODOS los avios del estilo especificado con sus costos.
+
+    Parámetros:
+    - version_calculo: Versión de cálculo (FLUIDA o truncado)
+    - estilo_cliente: Estilo ingresado por el usuario
+    - codigo_estilo: Código interno del estilo
+    - cliente_marca: Marca del cliente (para búsqueda fallback si no hay estilo)
+    - tipo_prenda: Tipo de prenda (para búsqueda fallback si no hay estilo)
+
+    También calcula la frecuencia de uso (en cuántas OPs del estilo aparece cada avio).
+    Incluye la última fecha_corrida disponible.
+    """
+    logger.info(f" [LLAMADA] obtener_avios_detalladas - version={version_calculo}, estilo_cliente={estilo_cliente}, codigo_estilo={codigo_estilo}, cliente_marca={cliente_marca}, tipo_prenda={tipo_prenda}")
+    try:
+        # Normalizar version_calculo
+        version_normalizada = normalize_version_calculo(version_calculo)
+
+        # Validar que al menos un estilo fue proporcionado
+        if not estilo_cliente and not codigo_estilo:
+            return {
+                "codigo_estilo": "N/A",
+                "version_calculo": version_normalizada,
+                "total_ops": 0,
+                "avios_encontrados": 0,
+                "fecha_corrida": "",
+                "avios": [],
+            }
+
+        # Obtener avios del estilo (sin filtrar por OPs)
+        try:
+            avios_detallados, fecha_corrida, total_ops = await tdv_queries.obtener_avios_para_estilo(
+                estilo_cliente=estilo_cliente,
+                codigo_estilo=codigo_estilo,
+                cliente_marca=cliente_marca,
+                tipo_prenda=tipo_prenda,
+                version_calculo=version_normalizada,
+            )
+        except Exception as e:
+            logger.warning(f"Error obteniendo avios: {e}")
+            avios_detallados = []
+            fecha_corrida = ""
+            total_ops = 0
+
+        logger.info(
+            f" Avios obtenidos para estilo: {len(avios_detallados)} registros, fecha_corrida: {fecha_corrida}, total_ops: {total_ops}"
+        )
+
+        return {
+            "codigo_estilo": codigo_estilo or estilo_cliente or "N/A",
+            "version_calculo": version_normalizada,
+            "total_ops": total_ops,
+            "avios_encontrados": len(avios_detallados),
+            "fecha_corrida": fecha_corrida,
+            "avios": avios_detallados,
+        }
+
+    except Exception as e:
+        logger.error(f"Error obteniendo avios detallados: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Error obteniendo avios: {str(e)}"
         )
 
 

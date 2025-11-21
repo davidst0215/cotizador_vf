@@ -8,7 +8,9 @@ interface Hilo {
   cod_hilado: string;
   descripcion_hilo: string;
   tipo_hilo: string;
-  costo_por_prenda_final: number;
+  kg_por_prenda: number;
+  costo_por_kg: number; // Costo sin factor (BD)
+  costo_por_prenda_final: number; // Calculado en backend: costo_por_kg × kg_por_prenda
   frecuencia_ops: number; // En cuántas OPs aparece este hilo
 }
 
@@ -24,12 +26,16 @@ interface HilosResponse {
 // Interfaz para hilo con factor (estado local)
 interface HiloConFactor extends Hilo {
   factor: number;
-  costo_ajustado: number;
+  costo_por_kg_ajustado: number; // costo_por_kg × factor
+  costo_por_prenda_ajustado: number; // costo_por_kg_ajustado × kg_por_prenda
 }
 
 interface HilosDesgloseTableProps {
   versionCalculo: string;
-  codOrdpros: string[]; // OPs seleccionadas
+  estiloCliente: string; // Estilo del cliente
+  codigoEstilo: string; // Código de estilo
+  clienteMarca?: string; // Marca del cliente (para búsqueda fallback)
+  tipoPrenda?: string; // Tipo de prenda (para búsqueda fallback)
   onError?: (error: string) => void;
   hilosPreseleccionados?: string[]; // Hilos preseleccionados por cod_hilado
 }
@@ -41,18 +47,23 @@ export interface HilosDesgloseTableRef {
 
 const HilosDesgloseTableComponent = forwardRef<HilosDesgloseTableRef, HilosDesgloseTableProps>(({
   versionCalculo,
-  codOrdpros,
+  estiloCliente,
+  codigoEstilo,
+  clienteMarca,
+  tipoPrenda,
   onError,
   hilosPreseleccionados = [],
 }, ref) => {
   const [hilosData, setHilosData] = useState<Hilo[]>([]);
+  const [totalOps, setTotalOps] = useState<number>(0);
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedHilos, setSelectedHilos] = useState<Set<string>>(new Set(hilosPreseleccionados));
   const [factoresHiloLocal, setFactoresHiloLocal] = useState<Record<string, number>>({}); // (cod_hilado|tipo_hilo) -> factor (valores reales)
   const [factoresInputLocal, setFactoresInputLocal] = useState<Record<string, string>>({}); // (cod_hilado|tipo_hilo) -> factor (para typing)
-  const [sortField, setSortField] = useState<"descripcion_hilo" | "tipo_hilo" | "costo_por_prenda_final">("descripcion_hilo");
+  const [sortField, setSortField] = useState<"descripcion_hilo" | "tipo_hilo" | "costo_por_kg" | "frecuencia_ops">("descripcion_hilo");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  const [busqueda, setBusqueda] = useState<string>("");
 
   // ✨ Ref para almacenar factoresHiloLocal sin crear dependencias
   const factoresHiloRef = useRef<Record<string, number>>(factoresHiloLocal);
@@ -80,7 +91,7 @@ const HilosDesgloseTableComponent = forwardRef<HilosDesgloseTableRef, HilosDesgl
 
   // Cargar hilos desde el backend
   useEffect(() => {
-    if (!versionCalculo || !codOrdpros || codOrdpros.length === 0) return;
+    if (!versionCalculo || (!estiloCliente && !codigoEstilo)) return;
 
     const cargarHilos = async () => {
       setCargando(true);
@@ -89,8 +100,12 @@ const HilosDesgloseTableComponent = forwardRef<HilosDesgloseTableRef, HilosDesgl
       try {
         const params = new URLSearchParams({
           version_calculo: versionCalculo,
-          cod_ordpros: codOrdpros.join(","),
         });
+
+        if (estiloCliente) params.append("estilo_cliente", estiloCliente);
+        if (codigoEstilo) params.append("codigo_estilo", codigoEstilo);
+        if (clienteMarca) params.append("cliente_marca", clienteMarca);
+        if (tipoPrenda) params.append("tipo_prenda", tipoPrenda);
 
         const url = `http://localhost:8000/obtener-hilos-detalladas?${params.toString()}`;
         const response = await fetch(url);
@@ -101,6 +116,7 @@ const HilosDesgloseTableComponent = forwardRef<HilosDesgloseTableRef, HilosDesgl
 
         const data: HilosResponse = await response.json();
         setHilosData(data.hilos || []);
+        setTotalOps(data.total_ops || 0);
 
         // Inicializar factores en 1.0 para todos los hilos usando clave compuesta (cod_hilado|tipo_hilo)
         const factoresIniciales: Record<string, number> = {};
@@ -124,7 +140,7 @@ const HilosDesgloseTableComponent = forwardRef<HilosDesgloseTableRef, HilosDesgl
     };
 
     cargarHilos();
-  }, [versionCalculo, codOrdpros]); // 🔒 NO incluir onError ni hilosPreseleccionados para evitar loops infinitos
+  }, [versionCalculo, estiloCliente, codigoEstilo, clienteMarca, tipoPrenda]); // 🔒 NO incluir onError ni hilosPreseleccionados para evitar loops infinitos
 
   const toggleSelection = useCallback((clave: string) => {
     setSelectedHilos((prev) => {
@@ -163,19 +179,38 @@ const HilosDesgloseTableComponent = forwardRef<HilosDesgloseTableRef, HilosDesgl
     }
   }, []);
 
-  // ✨ Hilos con factor y costo ajustado - usar factoresHiloLocal para cálculos
+  // ✨ Hilos con factor y costos ajustados - cálculo en cascada
   const hilosConFactor: HiloConFactor[] = hilosData.map((hilo) => {
     const clave = `${hilo.cod_hilado}|${hilo.tipo_hilo}`;
     const factor = factoresHiloLocal[clave] || 1.0;
+
+    // Cálculo en cascada:
+    // 1. costo_por_kg_ajustado = costo_por_kg × factor
+    const costo_por_kg_ajustado = hilo.costo_por_kg * factor;
+
+    // 2. costo_por_prenda_ajustado = costo_por_kg_ajustado × kg_por_prenda
+    const costo_por_prenda_ajustado = costo_por_kg_ajustado * hilo.kg_por_prenda;
+
     return {
       ...hilo,
       factor,
-      costo_ajustado: hilo.costo_por_prenda_final * factor,
+      costo_por_kg_ajustado,
+      costo_por_prenda_ajustado,
     };
   });
 
+  // ✨ Filtrar hilos según búsqueda
+  const hilosFiltrados = hilosConFactor.filter((hilo) => {
+    const term = busqueda.toLowerCase();
+    return (
+      hilo.cod_hilado.toLowerCase().includes(term) ||
+      hilo.descripcion_hilo.toLowerCase().includes(term) ||
+      hilo.tipo_hilo.toLowerCase().includes(term)
+    );
+  });
+
   // Ordenar hilos
-  const hilosOrdenados = [...hilosConFactor].sort((a, b) => {
+  const hilosOrdenados = [...hilosFiltrados].sort((a, b) => {
     const aVal = a[sortField];
     const bVal = b[sortField];
 
@@ -189,11 +224,11 @@ const HilosDesgloseTableComponent = forwardRef<HilosDesgloseTableRef, HilosDesgl
     return sortDirection === "asc" ? diff : -diff;
   });
 
-  // Calcular totales
+  // Calcular totales - suma de costos_por_prenda_ajustados de hilos seleccionados
   const totalCostoHilos = hilosData.length > 0
     ? hilosConFactor
         .filter((h) => selectedHilos.has(`${h.cod_hilado}|${h.tipo_hilo}`))
-        .reduce((sum, h) => sum + h.costo_ajustado, 0) / codOrdpros.length
+        .reduce((sum, h) => sum + h.costo_por_prenda_ajustado, 0)
     : 0;
 
   // Exponer métodos al padre via ref
@@ -201,7 +236,7 @@ const HilosDesgloseTableComponent = forwardRef<HilosDesgloseTableRef, HilosDesgl
     getSelectedHilos: () =>
       hilosConFactor.filter((h) => selectedHilos.has(`${h.cod_hilado}|${h.tipo_hilo}`)),
     getTotalCostoHilos: () => totalCostoHilos,
-  }), [hilosConFactor, selectedHilos, codOrdpros.length]);
+  }), [hilosConFactor, selectedHilos, totalOps]);
 
   if (cargando) {
     return (
@@ -233,12 +268,28 @@ const HilosDesgloseTableComponent = forwardRef<HilosDesgloseTableRef, HilosDesgl
           </h3>
         </div>
 
-        <div className="mb-4 flex justify-end">
+        {/* ✨ Buscador */}
+        <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
+          <input
+            type="text"
+            placeholder="Buscar por código, nombre o tipo de hilo..."
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:border-blue-500"
+          />
+        </div>
+
+        <div className="mb-4 flex justify-between items-center">
+          <p className="text-xs text-gray-600">
+            Mostrando {hilosOrdenados.length} de {hilosConFactor.length} hilos
+          </p>
           <button
             onClick={toggleSelectAll}
             className="text-xs px-3 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
           >
-            {selectedHilos.size === hilosOrdenados.length ? "Desseleccionar todas" : "Seleccionar todas"}
+            {selectedHilos.size === hilosOrdenados.length && hilosOrdenados.length > 0
+              ? "Desseleccionar filtrados"
+              : "Seleccionar filtrados"}
           </button>
         </div>
 
@@ -278,10 +329,34 @@ const HilosDesgloseTableComponent = forwardRef<HilosDesgloseTableRef, HilosDesgl
                   </div>
                 </th>
                 <th className="px-3 py-2 text-center font-semibold text-gray-700">Código Hilo</th>
-                <th className="px-3 py-2 text-center font-semibold text-gray-700">Costo Prenda</th>
+                <th className="px-3 py-2 text-center font-semibold text-gray-700">kg/prenda</th>
+                <th
+                  onClick={() => {
+                    setSortField("costo_por_kg");
+                    setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+                  }}
+                  className="px-3 py-2 text-center font-semibold text-gray-700 cursor-pointer hover:bg-gray-200"
+                >
+                  <div className="flex items-center justify-center gap-1">
+                    Costo/kg
+                    {sortField === "costo_por_kg" && (sortDirection === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
+                  </div>
+                </th>
                 <th className="px-3 py-2 text-center font-semibold text-gray-700">Factor</th>
-                <th className="px-3 py-2 text-center font-semibold text-gray-700">Costo Ajustado</th>
-                <th className="px-3 py-2 text-center font-semibold text-gray-700">Frecuencia</th>
+                <th className="px-3 py-2 text-center font-semibold text-gray-700">Costo/kg Ajustado</th>
+                <th className="px-3 py-2 text-center font-semibold text-gray-700">Costo/prenda</th>
+                <th
+                  onClick={() => {
+                    setSortField("frecuencia_ops");
+                    setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+                  }}
+                  className="px-3 py-2 text-center font-semibold text-gray-700 cursor-pointer hover:bg-gray-200"
+                >
+                  <div className="flex items-center justify-center gap-1">
+                    Frecuencia
+                    {sortField === "frecuencia_ops" && (sortDirection === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
+                  </div>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -306,7 +381,10 @@ const HilosDesgloseTableComponent = forwardRef<HilosDesgloseTableRef, HilosDesgl
                       {hilo.cod_hilado}
                     </td>
                     <td className="px-3 py-2 text-center text-gray-700">
-                      ${hilo.costo_por_prenda_final.toFixed(2)}
+                      {hilo.kg_por_prenda.toFixed(4)}
+                    </td>
+                    <td className="px-3 py-2 text-center text-gray-700">
+                      ${hilo.costo_por_kg.toFixed(4)}
                     </td>
                     <td className="px-3 py-2 text-center">
                       <input
@@ -319,11 +397,14 @@ const HilosDesgloseTableComponent = forwardRef<HilosDesgloseTableRef, HilosDesgl
                         className="w-16 px-2 py-1 border border-gray-300 rounded text-center text-sm"
                       />
                     </td>
+                    <td className="px-3 py-2 text-center text-gray-700">
+                      ${hilo.costo_por_kg_ajustado.toFixed(4)}
+                    </td>
                     <td className="px-3 py-2 text-center font-semibold text-red-600">
-                      ${hilo.costo_ajustado.toFixed(2)}
+                      ${hilo.costo_por_prenda_ajustado.toFixed(4)}
                     </td>
                     <td className="px-3 py-2 text-center text-xs text-gray-600">
-                      {((hilo.frecuencia_ops / codOrdpros.length) * 100).toFixed(0)}%
+                      {totalOps > 0 ? ((hilo.frecuencia_ops / totalOps) * 100).toFixed(0) : "0"}%
                     </td>
                   </tr>
                 );

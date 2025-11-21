@@ -35,7 +35,7 @@ services:
       - PROXY_TIMEOUT_MS=10000
       - PROXY_ALLOWLIST=
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://frontend:3000/cotizador/health"]
+      test: ["CMD", "wget", "-q", "--spider", "http://frontend:3000/"]
       interval: 30s
       timeout: 5s
       retries: 3

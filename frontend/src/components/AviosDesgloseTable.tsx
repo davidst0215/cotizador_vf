@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback, useEffect, forwardRef } from "react";
+import React, { useState, useCallback, useEffect, forwardRef, useRef } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 
 // Interfaz para datos de avios desde la BD

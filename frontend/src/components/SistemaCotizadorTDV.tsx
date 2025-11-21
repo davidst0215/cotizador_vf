@@ -666,13 +666,7 @@ const SistemaCotizadorTDV = () => {
     costo_telas_compradas?: number;
   } | null>(null);
 
-  // ✨ useEffect para sincronizar costos desde HilosDesgloseTable - se actualiza continuamente
-  useEffect(() => {
-    if (hilosDesgloseTableRef.current && pestanaActiva === "materiales") {
-      const totalHilos = hilosDesgloseTableRef.current.getTotalCostoHilos();
-      setCostoHilosPorPrenda(totalHilos);
-    }
-  }, [pestanaActiva]); // Se actualiza cuando entra a materiales
+  // ✨ useEffect removido - variables de costos no se utilizan
 
   // Estados para formulario - separados para evitar pérdida de foco
   const [formData, setFormData] = useState<FormData>({

@@ -41,7 +41,7 @@ services:
       retries: 3
       start_period: 10s
     ports:
-      - "3000:3000"
+      - "8088:3000"
     depends_on:
       backend:
         condition: service_healthy

@@ -118,7 +118,7 @@ const HilosDesgloseTableComponent = forwardRef<HilosDesgloseTableRef, HilosDesgl
         if (clienteMarca) params.append("cliente_marca", clienteMarca);
         if (tipoPrenda) params.append("tipo_prenda", tipoPrenda);
 
-        const url = `http://localhost:8000/obtener-hilos-detalladas?${params.toString()}`;
+        const url = `/api/proxy/obtener-hilos-detalladas?${params.toString()}`;
         const response = await fetch(url);
 
         if (!response.ok) {

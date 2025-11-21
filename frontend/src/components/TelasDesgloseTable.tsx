@@ -209,9 +209,7 @@ const TelasDesgloseTableComponent = forwardRef<TelasDesgloseTableRef, TelasDesgl
     const term = busqueda.toLowerCase();
     return (
       tela.tela_codigo.toLowerCase().includes(term) ||
-      tela.tela_descripcion.toLowerCase().includes(term) ||
-      tela.combinacion.toLowerCase().includes(term) ||
-      tela.color.toLowerCase().includes(term)
+      tela.tela_descripcion.toLowerCase().includes(term)
     );
   });
 
@@ -282,7 +280,7 @@ const TelasDesgloseTableComponent = forwardRef<TelasDesgloseTableRef, TelasDesgl
       <div className="flex items-center gap-2 mb-4">
         <input
           type="text"
-          placeholder="Buscar por código, descripción, combinación o color..."
+          placeholder="Buscar por código o nombre de tela..."
           className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm"
           value={busqueda}
           onChange={(e) => setBusqueda(e.target.value)}
@@ -310,14 +308,13 @@ const TelasDesgloseTableComponent = forwardRef<TelasDesgloseTableRef, TelasDesgl
                 onClick={() => handleSort("tela_descripcion")}
               >
                 <div className="flex items-center gap-1">
-                  Descripción
+                  Nombre de Tela
                   {sortField === "tela_descripcion" && (
                     sortDirection === "asc" ? <ChevronUp size={14} /> : <ChevronDown size={14} />
                   )}
                 </div>
               </th>
-              <th className="p-2 text-left">Combinación</th>
-              <th className="p-2 text-left">Color</th>
+              <th className="p-2 text-left">Código de Tela</th>
               <th className="p-2 text-right">kg/prenda</th>
               <th
                 className="p-2 text-right cursor-pointer hover:bg-gray-200"
@@ -358,8 +355,7 @@ const TelasDesgloseTableComponent = forwardRef<TelasDesgloseTableRef, TelasDesgl
                   />
                 </td>
                 <td className="p-2">{tela.tela_descripcion}</td>
-                <td className="p-2">{tela.combinacion}</td>
-                <td className="p-2">{tela.color}</td>
+                <td className="p-2">{tela.tela_codigo}</td>
                 <td className="p-2 text-right">{tela.kg_por_prenda.toFixed(4)}</td>
                 <td className="p-2 text-right">${tela.precio_por_kg_real.toFixed(2)}</td>
                 <td className="p-2 text-right">

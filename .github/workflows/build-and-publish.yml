@@ -10,8 +10,8 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  OWNER: ${{ github.repository_owner }}
-  REPO: ${{ github.event.repository.name }}
+  OWNER: ${{ github.repository_owner | lowercase }}
+  REPO: ${{ github.event.repository.name | lowercase }}
   CR_PAT: ${{ secrets.DOCKER_PAT || secrets.GITHUB_TOKEN }}
 
 jobs:

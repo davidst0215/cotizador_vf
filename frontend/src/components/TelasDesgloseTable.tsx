@@ -273,8 +273,8 @@ const TelasDesgloseTableComponent = forwardRef<TelasDesgloseTableRef, TelasDesgl
 
   // ✨ Ordenar telas
   const telasOrdenadas = [...telasFiltradas].sort((a, b) => {
-    let aValue = a[sortField] ?? 0;
-    let bValue = b[sortField] ?? 0;
+    const aValue = a[sortField] ?? 0;
+    const bValue = b[sortField] ?? 0;
 
     if (typeof aValue === "string") {
       return sortDirection === "asc"

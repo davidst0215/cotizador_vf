@@ -24,6 +24,7 @@ import { OpsSelectionTable } from "./OpsSelectionTable";
 import { WipDesgloseTable, WipDesgloseTableRef } from "./WipDesgloseTable";
 import { HilosDesgloseTable, HilosDesgloseTableRef } from "./HilosDesgloseTable";
 import { AviosDesgloseTable, AviosDesgloseTableRef } from "./AviosDesgloseTable";
+import { TelasDesgloseTable, TelasDesgloseTableRef } from "./TelasDesgloseTable";
 
 // Constantes del sistema
 const CATEGORIAS_LOTE = {
@@ -639,6 +640,7 @@ const SistemaCotizadorTDV = () => {
   const selectedWipsRef = useRef<string[]>([]); // ✨ Mantener WIPs seleccionados en ref para persistencia visual
   const hilosDesgloseTableRef = useRef<HilosDesgloseTableRef>(null); // ✨ Ref para acceder a Hilos seleccionados
   const aviosDesgloseTableRef = useRef<AviosDesgloseTableRef>(null); // ✨ Ref para acceder a Avios seleccionados
+  const telasDesgloseTableRef = useRef<TelasDesgloseTableRef>(null); // ✨ Ref para acceder a Telas seleccionadas
 
   // Estados para costos calculados del WIP (para sobrescribir backend values)
   const [costosWipCalculados, setCostosWipCalculados] = useState<{
@@ -2385,6 +2387,21 @@ const SistemaCotizadorTDV = () => {
                 onError={(errorMsg) => console.error("Error en avios:", errorMsg)}
               />
             </div>
+
+            <div>
+              <h3 className="font-bold text-lg text-purple-700 mb-4">
+                Desglose de Telas
+              </h3>
+              <TelasDesgloseTable
+                ref={telasDesgloseTableRef}
+                versionCalculo={formData.version_calculo}
+                estiloCliente={formData.estilo_cliente}
+                codigoEstilo={formData.codigo_estilo}
+                clienteMarca={formData.cliente_marca}
+                tipoPrenda={formData.tipo_prenda}
+                onError={(errorMsg) => console.error("Error en telas:", errorMsg)}
+              />
+            </div>
           </div>
         </div>
 
@@ -2395,10 +2412,11 @@ const SistemaCotizadorTDV = () => {
               // ✨ Obtener totales de las tablas de desgloses
               const totalHilos = hilosDesgloseTableRef.current?.getTotalCostoHilos() || 0;
               const totalAvios = aviosDesgloseTableRef.current?.getTotalCostoAvios() || 0;
+              const totalTelas = telasDesgloseTableRef.current?.getTotalCostoTelas() || 0;
 
               // Guardar costos de materiales calculados
               setCostosMaterialesFinales({
-                costo_materia_prima: totalHilos, // Por ahora solo hilos, pendiente telas
+                costo_materia_prima: totalHilos + totalTelas, // Hilos + Telas
                 costo_avios: totalAvios,
               });
 

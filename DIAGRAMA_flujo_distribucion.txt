@@ -1,0 +1,232 @@
+╔════════════════════════════════════════════════════════════════════════════╗
+║            FLUJO VISUAL: Distribución de Costos en V3                      ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+═════════════════════════════════════════════════════════════════════════════
+1️⃣  ENTRADA: REQUERIMIENTOS DE HILOS POR OP
+═════════════════════════════════════════════════════════════════════════════
+
+  Tabla bronze.es_ordproreq_hilcru_detalle  (Hilos CRUDO)
+  Tabla bronze.es_ordproreq_hilten_detalle  (Hilos TENIDO)
+
+  ┌─────────────┬──────────┬────────┬────────────┐
+  │ OP          │ Tipo     │ Hilo   │ KG req     │
+  ├─────────────┼──────────┼────────┼────────────┤
+  │ OP-001      │ CRUDO    │ H-001  │ 5.0 kg     │
+  │ OP-001      │ CRUDO    │ H-002  │ 4.0 kg     │
+  │ OP-001      │ TENIDO   │ H-003  │ 3.2 kg     │
+  │ OP-001      │ TENIDO   │ H-004  │ 2.0 kg     │
+  │ OP-002      │ CRUDO    │ H-001  │ 5.0 kg     │
+  │ OP-002      │ TENIDO   │ H-005  │ 3.1 kg     │
+  │ ... (más)   │ ...      │ ...    │ ...        │
+  └─────────────┴──────────┴────────┴────────────┘
+
+
+═════════════════════════════════════════════════════════════════════════════
+2️⃣  BÚSQUEDA DE PRECIOS: Mejor costo por hilo en el pasado
+═════════════════════════════════════════════════════════════════════════════
+
+  Tabla bronze.hi_movistk_ordpro_item
+
+  Para cada (OP, Hilo), busca:
+    • Fecha de movimiento (±120 días de fecha_creacion OP)
+    • Costo en USD / KG
+    • Distancia en días entre movimiento y creación OP
+
+  ┌─────────────┬────────┬────────────────┬──────────────┐
+  │ OP          │ Hilo   │ USD/KG         │ Fecha precio │
+  ├─────────────┼────────┼────────────────┼──────────────┤
+  │ OP-001      │ H-001  │ 50.00          │ 2024-10-15   │
+  │ OP-001      │ H-002  │ 48.50          │ 2024-10-18   │
+  │ OP-001      │ H-003  │ 55.00          │ 2024-10-20   │
+  │ OP-001      │ H-004  │ 58.00          │ 2024-10-16   │
+  │ OP-002      │ H-001  │ 49.80          │ 2024-11-05   │
+  │ OP-002      │ H-005  │ 62.00          │ 2024-11-10   │
+  │ ... (más)   │ ...    │ ...            │ ...          │
+  └─────────────┴────────┴────────────────┴──────────────┘
+
+
+═════════════════════════════════════════════════════════════════════════════
+3️⃣  CONSOLIDACIÓN: Costo por hilo (ANTES de ajuste)
+═════════════════════════════════════════════════════════════════════════════
+
+  Se calcula: costo_original = kg_requeridos * usd_por_kg
+
+  ┌─────────────┬──────────┬────────┬─────────┬────────────┬──────────────┐
+  │ OP          │ Tipo     │ Hilo   │ KG      │ USD/KG     │ Costo orig   │
+  ├─────────────┼──────────┼────────┼─────────┼────────────┼──────────────┤
+  │ OP-001      │ CRUDO    │ H-001  │ 5.0     │ 50.00      │ 250.00       │
+  │ OP-001      │ CRUDO    │ H-002  │ 4.0     │ 48.50      │ 194.00       │
+  │ OP-001      │ TENIDO   │ H-003  │ 3.2     │ 55.00      │ 176.00       │
+  │ OP-001      │ TENIDO   │ H-004  │ 2.0     │ 58.00      │ 116.00       │
+  │ OP-002      │ CRUDO    │ H-001  │ 5.0     │ 49.80      │ 249.00       │
+  │ OP-002      │ TENIDO   │ H-005  │ 3.1     │ 62.00      │ 192.20       │
+  │ ... (más)   │ ...      │ ...    │ ...     │ ...        │ ...          │
+  └─────────────┴──────────┴────────┴─────────┴────────────┴──────────────┘
+
+                           SUMA MES ENE-25: $8,000.00
+
+
+═════════════════════════════════════════════════════════════════════════════
+4️⃣  BOLSA PRESUPUESTADA: Target de costos por mes
+═════════════════════════════════════════════════════════════════════════════
+
+  Tabla silver.costos_mp_ct_avios
+
+  ┌────────┬──────┬───────────────────┐
+  │ Año    │ Mes  │ Materia Prima (Target)  │
+  ├────────┼──────┼───────────────────┤
+  │ 2025   │ 1    │ 10,000.00         │  ← ENE-25: Bolsa = $10,000
+  │ 2025   │ 2    │ 11,500.00         │  ← FEB-25: Bolsa = $11,500
+  │ 2025   │ 3    │ 9,800.00          │  ← MAR-25: Bolsa = $9,800
+  │ ...    │ ...  │ ...               │
+  └────────┴──────┴───────────────────┘
+
+
+═════════════════════════════════════════════════════════════════════════════
+5️⃣  CÁLCULO DEL FACTOR DE AJUSTE POR MES
+═════════════════════════════════════════════════════════════════════════════
+
+  ┌──────────────────────────────────────────────────────┐
+  │ FÓRMULA:                                             │
+  │                                                      │
+  │  factor_mes = bolsa_presupuestada / suma_costos_reales
+  │                                                      │
+  │  ENE-25: factor = 10,000.00 / 8,000.00             │
+  │          factor = 1.25                              │
+  │                                                      │
+  │  FEB-25: factor = 11,500.00 / 9,200.00             │
+  │          factor = 1.2826...                         │
+  └──────────────────────────────────────────────────────┘
+
+  Resultado:
+
+  ┌────────────┬──────────────────┬──────────────────┬────────────┐
+  │ Mes        │ Bolsa Target     │ Costos Reales    │ Factor     │
+  ├────────────┼──────────────────┼──────────────────┼────────────┤
+  │ ENE-25     │ 10,000.00        │ 8,000.00         │ 1.250000   │
+  │ FEB-25     │ 11,500.00        │ 9,200.00         │ 1.250000   │ (aprox)
+  │ MAR-25     │ 9,800.00         │ 8,100.00         │ 1.209876   │
+  └────────────┴──────────────────┴──────────────────┴────────────┘
+
+  ✓ Factor uniforme para TODOS los hilos del mes
+
+
+═════════════════════════════════════════════════════════════════════════════
+6️⃣  APLICACIÓN DEL FACTOR A CADA HILO
+═════════════════════════════════════════════════════════════════════════════
+
+  Se multiplica costo_original * factor_mes para cada hilo:
+
+  Para ENE-25 (factor = 1.25):
+
+  ┌─────────────┬──────────┬────────┬──────────────┬────────────┬──────────────┐
+  │ OP          │ Tipo     │ Hilo   │ Costo orig   │ Factor     │ Costo final  │
+  ├─────────────┼──────────┼────────┼──────────────┼────────────┼──────────────┤
+  │ OP-001      │ CRUDO    │ H-001  │ 250.00       │ 1.25       │ 312.50       │
+  │ OP-001      │ CRUDO    │ H-002  │ 194.00       │ 1.25       │ 242.50       │
+  │ OP-001      │ TENIDO   │ H-003  │ 176.00       │ 1.25       │ 220.00       │
+  │ OP-001      │ TENIDO   │ H-004  │ 116.00       │ 1.25       │ 145.00       │
+  │ OP-002      │ CRUDO    │ H-001  │ 249.00       │ 1.25       │ 311.25       │
+  │ OP-002      │ TENIDO   │ H-005  │ 192.20       │ 1.25       │ 240.25       │
+  │ ... (más)   │ ...      │ ...    │ ...          │ ...        │ ...          │
+  └─────────────┴──────────┴────────┴──────────────┴────────────┴──────────────┘
+
+
+═════════════════════════════════════════════════════════════════════════════
+7️⃣  VERIFICACIÓN DE INTEGRIDAD
+═════════════════════════════════════════════════════════════════════════════
+
+  ✓ Suma de costos originales ENE: $8,000.00
+  ✓ Suma de costos finales ENE:    $10,000.00
+  ✓ Relación: $10,000 / $8,000 = 1.25 ✓ CORRECTO
+
+  ✓ Proporciones CONSERVADAS:
+    Original: 250:194:176:116 = 1:0.776:0.704:0.464
+    Final:    312.5:242.5:220:145 = 1:0.776:0.704:0.464 ✓
+
+  ✓ Cada hilo mantiene su relación proporcional
+
+
+═════════════════════════════════════════════════════════════════════════════
+8️⃣  SALIDA: TABLA costo_hilados_detalle_op
+═════════════════════════════════════════════════════════════════════════════
+
+  ┌─────────────┬────────┬──────────────┬────────────┬──────────────┐
+  │ op_codigo   │ cod... │ costo_total_ │ factor_    │ costo_total_ │
+  │             │ hilado │ original     │ aplicado   │ final        │
+  ├─────────────┼────────┼──────────────┼────────────┼──────────────┤
+  │ OP-001      │ H-001  │ 250.00       │ 1.250000   │ 312.50       │
+  │ OP-001      │ H-002  │ 194.00       │ 1.250000   │ 242.50       │
+  │ OP-001      │ H-003  │ 176.00       │ 1.250000   │ 220.00       │
+  │ OP-001      │ H-004  │ 116.00       │ 1.250000   │ 145.00       │
+  │ OP-002      │ H-001  │ 249.00       │ 1.250000   │ 311.25       │
+  │ OP-002      │ H-005  │ 192.20       │ 1.250000   │ 240.25       │
+  │ ... (más)   │ ...    │ ...          │ ...        │ ...          │
+  └─────────────┴────────┴──────────────┴────────────┴──────────────┘
+
+  Datos adicionales por hilo:
+  ├─ kg_por_prenda: kg / prendas_requeridas
+  ├─ costo_por_prenda_original: costo_total / prendas
+  ├─ costo_por_prenda_final: costo_total_final / prendas
+  ├─ fecha_despacho: mes del hilo (ENE-25, etc)
+  ├─ usd_por_kg_original / _final: precio unitario
+  └─ fecha_corrida: timestamp de ejecución
+
+
+═════════════════════════════════════════════════════════════════════════════
+VALIDACIÓN FINAL
+═════════════════════════════════════════════════════════════════════════════
+
+  Costo OP-001 antes: 250 + 194 + 176 + 116 = 736.00
+  Costo OP-001 dps:  312.5 + 242.5 + 220 + 145 = 920.00
+
+  Factor para OP: 920.00 / 736.00 = 1.25 ✓ CORRECTO
+
+  Los $920 de OP-001 son parte de los $10,000 distribuidos en ENE-25.
+
+
+═════════════════════════════════════════════════════════════════════════════
+PASOS DE DISTRIBUCIÓN RESUMIDOS
+═════════════════════════════════════════════════════════════════════════════
+
+  1. LEER:   Requerimientos de hilos (KG)
+  2. BUSCAR: Precio histórico de cada hilo
+  3. SUMAR:  Costo total de todos los hilos del mes
+  4. CARGAR: Bolsa presupuestada del mes
+  5. DIVIDIR: factor = bolsa / suma
+  6. APLICAR: costo_final = costo_original * factor
+  7. GRABAR: Resultado en costo_hilados_detalle_op
+  8. VALIDAR: suma(costo_final) = bolsa ✓
+
+
+═════════════════════════════════════════════════════════════════════════════
+DISTRIBUCIÓN PROPORCIONAL GARANTIZADA
+═════════════════════════════════════════════════════════════════════════════
+
+  La bolsa de $10,000 se distribuye AUTOMÁTICAMENTE entre todos los hilos
+  de forma PROPORCIONAL a su costo original.
+
+  Ejemplo:
+  • Si Hilo A costaba 30% de la bolsa → Cuesta 30% de la bolsa ajustada
+  • Si Hilo B costaba 70% de la bolsa → Cuesta 70% de la bolsa ajustada
+
+  Esto se logra porque:
+  • El factor es UNO solo para todo el mes
+  • Se aplica a CADA hilo independientemente
+  • Las proporciones se conservan matemáticamente
+
+
+═════════════════════════════════════════════════════════════════════════════
+CONCLUSIÓN
+═════════════════════════════════════════════════════════════════════════════
+
+✅ V3 distribuye la bolsa de costos CORRECTAMENTE
+
+La lógica:
+  1. Calcula un factor por mes (bolsa / costos_reales)
+  2. Aplica el factor uniformemente a todos los hilos
+  3. Mantiene proporciones relativas
+  4. Registra el proceso para trazabilidad
+
+RESULTADO: Distribución proporcional, transparente y auditable ✓

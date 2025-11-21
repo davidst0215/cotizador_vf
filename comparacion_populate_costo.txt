@@ -1,0 +1,932 @@
+====================================================================================================
+COMPARACION: populate_costo_materia_prima vs populate_costo_materia_prima_v3
+====================================================================================================
+
+
+####################################################################################################
+# populate_costo_materia_prima
+####################################################################################################
+
+CREATE OR REPLACE PROCEDURE silver.populate_costo_materia_prima(IN modo integer DEFAULT 0, IN debug integer DEFAULT 0)
+ LANGUAGE plpgsql
+AS $procedure$
+DECLARE
+    error_message TEXT;
+    rows_processed INTEGER := 0;
+    rows_inserted INTEGER := 0;
+    fecha_ejecucion TIMESTAMPTZ := NOW();
+    ultima_fecha_corrida TIMESTAMPTZ;  -- ✅ AGREGADO: Anti-inflacion
+    
+    -- Parametros fijos basados en WIP
+    fecha_desde DATE := '2020-01-01';
+    fecha_hasta DATE;
+    
+    -- Variables para loops
+    mes_año VARCHAR(20);
+    target_hilados DECIMAL(18,4);
+    total_inductor DECIMAL(18,4);
+    factor_h DECIMAL(18,6);
+    año_tela INTEGER;
+    target_tela DECIMAL(18,4);
+    total_costo_tela DECIMAL(18,4);
+    factor_t DECIMAL(18,6);
+    
+    -- Variables para estadisticas
+    registros_wip INTEGER;
+    total_registros INTEGER;
+    costo_promedio DECIMAL(18,4);
+    con_hilados INTEGER;
+    con_tela INTEGER;
+    
+BEGIN
+    fecha_hasta := CURRENT_DATE;
+    
+    -- ========================================================================
+    -- VALIDACIONES PREREQUISITOS
+    -- ========================================================================
+    
+    -- ✅ CORREGIDO: Tabla correcta wip_time_costos_allocation
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.tables 
+        WHERE table_schema = 'silver' 
+        AND table_name = 'wip_time_costos_allocation'
+    ) THEN
+        RAISE NOTICE 'ERROR: Tabla wip_time_costos_allocation no existe';
+        RAISE NOTICE '   SOLUCION: Ejecutar primero el proceso de carga de wip_time_costos_allocation';
+        RAISE EXCEPTION 'Prerequisito faltante: tabla wip_time_costos_allocation';
+    END IF;
+    
+    -- ✅ AGREGADO: Obtener ultima fecha_corrida para anti-inflacion
+    SELECT MAX(fecha_corrida) INTO ultima_fecha_corrida
+    FROM silver.wip_time_costos_allocation;
+    
+    IF ultima_fecha_corrida IS NULL THEN
+        RAISE NOTICE 'ERROR: Tabla wip_time_costos_allocation esta vacia';
+        RAISE EXCEPTION 'Tabla wip_time_costos_allocation sin datos';
+    END IF;
+    
+    -- Verificar registros disponibles
+    SELECT COUNT(*) INTO registros_wip 
+    FROM silver.wip_time_costos_allocation
+    WHERE fecha_corrida = ultima_fecha_corrida;
+    
+    IF registros_wip = 0 THEN
+        RAISE NOTICE 'ERROR: No hay registros para fecha_corrida: %', ultima_fecha_corrida;
+        RAISE EXCEPTION 'Sin datos para fecha_corrida especifica';
+    END IF;
+    
+    -- ========================================================================
+    -- MODO CONSULTA (0)
+    -- ========================================================================
+    IF modo = 0 THEN
+        RAISE NOTICE '=======================================================';
+        RAISE NOTICE 'MODO CONSULTA - COSTO_MATERIA_PRIMA';
+        RAISE NOTICE '=======================================================';
+        RAISE NOTICE 'Rango procesamiento: % a %', fecha_desde, fecha_hasta;
+        RAISE NOTICE 'ULTIMA fecha_corrida WIP: %', ultima_fecha_corrida;
+        RAISE NOTICE 'Registros WIP (ultima corrida): %', registros_wip;
+        RAISE NOTICE 'LOGICA HISTORICA: Solo INSERT (acumula por fecha_corrida)';
+        RAISE NOTICE '';
+        RAISE NOTICE 'Se calcularan:';
+        RAISE NOTICE '  - Costos reales de hilados (crudo + tenido)';
+        RAISE NOTICE '  - Costos reales de tela comprada';
+        RAISE NOTICE '  - Factores de ajuste dinamicos por mes/año';
+        RAISE NOTICE '';
+        RAISE NOTICE 'Para ejecutar: CALL silver.populate_costo_materia_prima(1);';
+        RAISE NOTICE '=======================================================';
+        RETURN;
+    END IF;
+    
+    -- ========================================================================
+    -- MODO GUARDAR (1) - INICIO
+    -- ========================================================================
+    RAISE NOTICE '';
+    RAISE NOTICE '=======================================================';
+    RAISE NOTICE 'INICIANDO CALCULO COSTO_MATERIA_PRIMA';
+    RAISE NOTICE '=======================================================';
+    RAISE NOTICE 'Rango: % a %', fecha_desde, fecha_hasta;
+    RAISE NOTICE 'Timestamp ejecucion: %', fecha_ejecucion;
+    RAISE NOTICE 'USANDO fecha_corrida WIP: %', ultima_fecha_corrida;
+    RAISE NOTICE 'Registros WIP: %', registros_wip;
+    RAISE NOTICE '';
+    
+    -- ========================================================================
+    -- PASO 1: OPs BASE CON ACTIVIDAD WIP (CON ANTI-INFLACION)
+    -- ========================================================================
+    RAISE NOTICE 'PASO 1: Extrayendo OPs con actividad WIP...';
+    
+    DROP TABLE IF EXISTS ops_base;
+    CREATE TEMP TABLE ops_base (
+        op_codigo VARCHAR(50) PRIMARY KEY,
+        estilo_codigo VARCHAR(50),
+        cliente_codigo VARCHAR(50),
+        prendas_requeridas DECIMAL(18,2),
+        fecha_creacion TIMESTAMPTZ
+    );
+    
+    -- ✅ CORREGIDO: Usa wip_time_costos_allocation + fecha_corrida
+    INSERT INTO ops_base
+    SELECT DISTINCT 
+        op.cod_ordpro,
+        op.cod_estpro,
+        op.cod_cliente,
+        COALESCE(op.num_prenreq, 0),
+        op.fec_creacion
+    FROM bronze.es_ordpro op
+    INNER JOIN (
+        SELECT DISTINCT wip.pr_id
+        FROM silver.wip_time_costos_allocation wip
+        WHERE wip.pr_id IS NOT NULL 
+          AND wip.month_ IS NOT NULL
+          AND wip.fecha_corrida = ultima_fecha_corrida  -- ✅ ANTI-INFLACION
+          AND wip.month_::DATE BETWEEN fecha_desde AND fecha_hasta
+    ) w ON op.cod_ordpro = w.pr_id
+    WHERE op.num_prenreq > 0
+      AND op.fec_creacion >= '2020-01-01';
+    
+    GET DIAGNOSTICS rows_processed = ROW_COUNT;
+    RAISE NOTICE '  ✓ OPs base extraidas: %', rows_processed;
+    
+    -- ========================================================================
+    -- PASO 2: FECHAS DESPACHO DESDE WIP (CON ANTI-INFLACION)
+    -- ========================================================================
+    RAISE NOTICE 'PASO 2: Calculando fechas despacho WIP...';
+    
+    DROP TABLE IF EXISTS fechas_wip;
+    CREATE TEMP TABLE fechas_wip (
+        op_codigo VARCHAR(50) PRIMARY KEY,
+        fecha_despacho_min TIMESTAMPTZ,
+        fecha_despacho_formato VARCHAR(20)
+    );
+    
+    -- ✅ CORREGIDO: Usa fecha_corrida
+    INSERT INTO fechas_wip
+    SELECT 
+        wip.pr_id,
+        MIN(wip.month_),
+        CASE EXTRACT(MONTH FROM MIN(wip.month_))::INTEGER
+            WHEN 1 THEN 'Ene' WHEN 2 THEN 'Feb' WHEN 3 THEN 'Mar' WHEN 4 THEN 'Abr'
+            WHEN 5 THEN 'May' WHEN 6 THEN 'Jun' WHEN 7 THEN 'Jul' WHEN 8 THEN 'Ago'
+            WHEN 9 THEN 'Sep' WHEN 10 THEN 'Oct' WHEN 11 THEN 'Nov' WHEN 12 THEN 'Dic'
+        END || '-' || RIGHT(EXTRACT(YEAR FROM MIN(wip.month_))::TEXT, 2)
+    FROM silver.wip_time_costos_allocation wip
+    INNER JOIN ops_base ob ON wip.pr_id = ob.op_codigo
+    WHERE wip.month_ IS NOT NULL
+      AND wip.fecha_corrida = ultima_fecha_corrida  -- ✅ ANTI-INFLACION
+      AND wip.month_::DATE BETWEEN fecha_desde AND fecha_hasta
+    GROUP BY wip.pr_id;
+    
+    GET DIAGNOSTICS rows_processed = ROW_COUNT;
+    RAISE NOTICE '  ✓ Fechas WIP calculadas: %', rows_processed;
+    
+    -- ========================================================================
+    -- PASO 3: COSTOS HILADOS (CRUDO + TENIDO)
+    -- ========================================================================
+    RAISE NOTICE 'PASO 3: Calculando costos de hilados...';
+    
+    DROP TABLE IF EXISTS costos_hilados;
+    CREATE TEMP TABLE costos_hilados (
+        op_codigo VARCHAR(50) PRIMARY KEY,
+        kg_hilados_total DECIMAL(18,2),
+        inductor_hilados_original DECIMAL(18,4),
+        usd_por_kg_promedio DECIMAL(18,4),
+        dias_diferencia_promedio DECIMAL(18,2),
+        crudo_kg DECIMAL(18,2),
+        crudo_costo_usd DECIMAL(18,4),
+        tenido_kg DECIMAL(18,2),
+        tenido_costo_usd DECIMAL(18,4),
+        hilados_diferentes INTEGER
+    );
+    
+    WITH requerimientos_hilados AS (
+        -- CRUDO
+        SELECT 
+            req.cod_ordpro,
+            'CRUDO' as tipo_hilo,
+            req.cod_hiltel,
+            equiv.cod_hilado,
+            req.can_constex as kg_requeridos
+        FROM bronze.es_ordproreq_hilcru_detalle req
+        INNER JOIN bronze.hi_hilados equiv 
+            ON req.cod_hiltel = equiv.cod_hiltel_referencia
+        INNER JOIN ops_base ob ON req.cod_ordpro = ob.op_codigo
+        WHERE req.can_constex > 0
+        
+        UNION ALL
+        
+        -- TENIDO
+        SELECT 
+            req.cod_ordpro,
+            'TENIDO' as tipo_hilo,
+            req.cod_hiltel,
+            equiv.cod_hilado,
+            req.can_constex as kg_requeridos
+        FROM bronze.es_ordproreq_hilten_detalle req
+        INNER JOIN bronze.hi_hilados equiv 
+            ON req.cod_hiltel = equiv.cod_hiltel_referencia
+        INNER JOIN ops_base ob ON req.cod_ordpro = ob.op_codigo
+        WHERE req.can_constex > 0
+    ),
+    mejor_costo_por_hilado AS (
+        SELECT 
+            rh.cod_ordpro,
+            rh.tipo_hilo,
+            rh.cod_hiltel,
+            rh.cod_hilado,
+            rh.kg_requeridos,
+            mc.usd_por_kg,
+            mc.dias_diferencia
+        FROM requerimientos_hilados rh
+        CROSS JOIN LATERAL (
+            SELECT 
+                CASE 
+                    WHEN costos.num_kilos_neto > 0 
+                    THEN costos.imp_valorizado_dolares / costos.num_kilos_neto 
+                    ELSE 0 
+                END as usd_por_kg,
+				ABS((costos.fec_movstk::DATE - op.fec_creacion::DATE)::INTEGER) as dias_diferencia
+            FROM bronze.hi_movistk_ordpro_item costos
+            INNER JOIN bronze.es_ordpro op ON rh.cod_ordpro = op.cod_ordpro
+            WHERE costos.cod_hilado = rh.cod_hilado
+              AND costos.cod_almacen = '20'
+              AND costos.imp_valorizado_dolares > 0
+              AND costos.num_kilos_neto > 0
+              AND costos.fec_movstk BETWEEN 
+                  op.fec_creacion - INTERVAL '120 days' AND 
+                  op.fec_creacion + INTERVAL '120 days'
+            ORDER BY 
+                 ABS((costos.fec_movstk::DATE - op.fec_creacion::DATE)::INTEGER),
+                CASE 
+                    WHEN costos.num_kilos_neto > 0 
+                    THEN costos.imp_valorizado_dolares / costos.num_kilos_neto 
+                    ELSE 0 
+                END DESC
+            LIMIT 1
+        ) mc
+        WHERE mc.usd_por_kg > 0
+    )
+    INSERT INTO costos_hilados
+    SELECT 
+        cod_ordpro,
+        SUM(kg_requeridos),
+        SUM(kg_requeridos * usd_por_kg),
+        CASE WHEN COUNT(*) > 0 THEN AVG(usd_por_kg) ELSE 0 END,
+        CASE WHEN COUNT(*) > 0 THEN AVG(dias_diferencia) ELSE 0 END,
+        SUM(CASE WHEN tipo_hilo = 'CRUDO' THEN kg_requeridos ELSE 0 END),
+        SUM(CASE WHEN tipo_hilo = 'CRUDO' THEN kg_requeridos * usd_por_kg ELSE 0 END),
+        SUM(CASE WHEN tipo_hilo = 'TENIDO' THEN kg_requeridos ELSE 0 END),
+        SUM(CASE WHEN tipo_hilo = 'TENIDO' THEN kg_requeridos * usd_por_kg ELSE 0 END),
+        COUNT(DISTINCT cod_hiltel)
+    FROM mejor_costo_por_hilado
+    GROUP BY cod_ordpro;
+    
+    GET DIAGNOSTICS rows_processed = ROW_COUNT;
+    RAISE NOTICE '  ✓ Costos hilados calculados: %', rows_processed;
+  
+    -- ========================================================================
+    -- PASO 4: COSTOS TELA COMPRADA
+    -- ========================================================================
+    RAISE NOTICE 'PASO 4: Calculando costos de tela...';
+    
+    DROP TABLE IF EXISTS costos_tela;
+    CREATE TEMP TABLE costos_tela (
+        op_codigo VARCHAR(50) PRIMARY KEY,
+        kg_tela_comprada_total DECIMAL(18,2),
+        rollos_tela_comprada_total DECIMAL(18,2),
+        costo_tela_comprada_total DECIMAL(18,4),
+        usd_por_unidad_tela_real DECIMAL(18,4),
+        año_compra_tela INTEGER,
+        fecha_compra_tela_min TIMESTAMPTZ
+    );
+    
+    INSERT INTO costos_tela
+    SELECT 
+        d.cod_ordpro,
+        SUM(b.kgs_movimiento),
+        SUM(b.numero_rollos),
+        SUM(b.imp_valorizado_dolares_total),
+        CASE 
+            WHEN SUM(b.kgs_movimiento) > 0 
+            THEN SUM(b.imp_valorizado_dolares_total) / SUM(b.kgs_movimiento)
+            WHEN SUM(b.numero_rollos) > 0 
+            THEN SUM(b.imp_valorizado_dolares_total) / SUM(b.numero_rollos)
+            ELSE 0 
+        END,
+        EXTRACT(YEAR FROM MIN(a.fec_movstk))::INTEGER,
+        MIN(a.fec_movstk)
+    FROM bronze.tx_ordtra_items_requerimientos d
+    INNER JOIN bronze.tx_movistk_tela_tenida b 
+        ON d.cod_ordtra = b.cod_ordtra
+        AND d.cod_tela = b.cod_tela
+        AND d.cod_comb = b.cod_comb
+        AND d.cod_color = b.cod_color
+        AND d.cod_talla = b.cod_talla
+    INNER JOIN bronze.tx_movistk a 
+        ON b.cod_almacen = a.cod_almacen 
+        AND b.num_movstk = a.num_movstk
+    INNER JOIN ops_base ob ON d.cod_ordpro = ob.op_codigo
+    WHERE UPPER(d.cod_tipordtra) = 'TI'  -- ✅ Case insensitive
+      AND a.cod_almacen = '39' 
+      AND a.cod_tipmov = 'A01'
+      AND b.imp_valorizado_dolares_total > 0
+      AND d.can_programada_tex > 0
+      AND a.fec_movstk::DATE BETWEEN fecha_desde AND fecha_hasta
+      AND (b.kgs_movimiento > 0 OR b.numero_rollos > 0)
+    GROUP BY d.cod_ordpro
+    HAVING SUM(b.imp_valorizado_dolares_total) > 0;
+    
+    GET DIAGNOSTICS rows_processed = ROW_COUNT;
+    RAISE NOTICE '  ✓ Costos tela calculados: %', rows_processed;
+    
+    -- ========================================================================
+    -- PASO 5: CARGAR TARGETS DESDE costos_mp_ct_avios
+    -- ========================================================================
+    RAISE NOTICE 'PASO 5: Cargando targets de ajuste...';
+    
+    -- Targets hilados MENSUALES
+    DROP TABLE IF EXISTS targets_hilados;
+    CREATE TEMP TABLE targets_hilados (
+        mes_año VARCHAR(20) PRIMARY KEY,
+        target_monto DECIMAL(18,4)
+    );
+    
+    INSERT INTO targets_hilados
+    SELECT 
+        CASE ct.mes
+            WHEN 1 THEN 'Ene' WHEN 2 THEN 'Feb' WHEN 3 THEN 'Mar' WHEN 4 THEN 'Abr'
+            WHEN 5 THEN 'May' WHEN 6 THEN 'Jun' WHEN 7 THEN 'Jul' WHEN 8 THEN 'Ago'
+            WHEN 9 THEN 'Sep' WHEN 10 THEN 'Oct' WHEN 11 THEN 'Nov' WHEN 12 THEN 'Dic'
+        END || '-' || RIGHT(ct.año::TEXT, 2),
+        ct.materia_prima
+    FROM silver.costos_mp_ct_avios ct
+    WHERE ct.materia_prima > 0
+      AND ct.año BETWEEN EXTRACT(YEAR FROM fecha_desde) AND EXTRACT(YEAR FROM fecha_hasta)
+    ORDER BY ct.año, ct.mes;
+    
+    GET DIAGNOSTICS rows_processed = ROW_COUNT;
+    RAISE NOTICE '  ✓ Targets hilados (mensuales): %', rows_processed;
+    
+    -- Targets tela ANUALES
+    DROP TABLE IF EXISTS targets_tela;
+    CREATE TEMP TABLE targets_tela (
+        año INTEGER PRIMARY KEY,
+        target_monto DECIMAL(18,4)
+    );
+    
+    INSERT INTO targets_tela
+    SELECT 
+        ct.año,
+        SUM(ct.tela_comprada)
+    FROM silver.costos_mp_ct_avios ct
+    WHERE ct.tela_comprada > 0
+      AND ct.año BETWEEN EXTRACT(YEAR FROM fecha_desde) AND EXTRACT(YEAR FROM fecha_hasta)
+    GROUP BY ct.año
+    ORDER BY ct.año;
+    
+    GET DIAGNOSTICS rows_processed = ROW_COUNT;
+    RAISE NOTICE '  ✓ Targets tela (anuales): %', rows_processed;
+    
+    -- ========================================================================
+    -- PASO 6: CONSOLIDAR Y CALCULAR FACTORES
+    -- ========================================================================
+    RAISE NOTICE 'PASO 6: Consolidando datos y calculando factores...';
+    
+    DROP TABLE IF EXISTS consolidado_final;
+    CREATE TEMP TABLE consolidado_final (
+        op_codigo VARCHAR(50) PRIMARY KEY,
+        estilo_codigo VARCHAR(50),
+        fecha_despacho VARCHAR(20),
+        fecha_despacho_original TIMESTAMPTZ,
+        kg_hilados_total DECIMAL(18,2),
+        inductor_hilados_original DECIMAL(18,4),
+        costo_hilados_final DECIMAL(18,4),
+        usd_por_kg_promedio DECIMAL(18,4),
+        dias_diferencia_promedio DECIMAL(18,2),
+        crudo_kg DECIMAL(18,2),
+        crudo_costo_usd DECIMAL(18,4),
+        tenido_kg DECIMAL(18,2),
+        tenido_costo_usd DECIMAL(18,4),
+        hilados_diferentes INTEGER,
+        kg_tela_comprada_total DECIMAL(18,2),
+        rollos_tela_comprada_total DECIMAL(18,2),
+        costo_tela_comprada_total DECIMAL(18,4),
+        costo_tela_final DECIMAL(18,4),
+        usd_por_unidad_tela_real DECIMAL(18,4),
+        año_compra_tela INTEGER,
+        fecha_compra_tela_min TIMESTAMPTZ,
+        costo_total_mp_final DECIMAL(18,4),
+        factor_hilados DECIMAL(18,6),
+        factor_tela DECIMAL(18,6),
+        tiene_hilados BOOLEAN,
+        tiene_tela BOOLEAN,
+        tiene_mp BOOLEAN
+    );
+    
+    -- Consolidar datos base
+    INSERT INTO consolidado_final
+    SELECT 
+        ob.op_codigo,
+        ob.estilo_codigo,
+        COALESCE(fw.fecha_despacho_formato, 'Sin-Fecha'),
+        fw.fecha_despacho_min,
+        COALESCE(ch.kg_hilados_total, 0),
+        COALESCE(ch.inductor_hilados_original, 0),
+        0,
+        COALESCE(ch.usd_por_kg_promedio, 0),
+        COALESCE(ch.dias_diferencia_promedio, 0),
+        COALESCE(ch.crudo_kg, 0),
+        COALESCE(ch.crudo_costo_usd, 0),
+        COALESCE(ch.tenido_kg, 0),
+        COALESCE(ch.tenido_costo_usd, 0),
+        COALESCE(ch.hilados_diferentes, 0),
+        COALESCE(ct.kg_tela_comprada_total, 0),
+        COALESCE(ct.rollos_tela_comprada_total, 0),
+        COALESCE(ct.costo_tela_comprada_total, 0),
+        0,
+        COALESCE(ct.usd_por_unidad_tela_real, 0),
+        ct.año_compra_tela,
+        ct.fecha_compra_tela_min,
+        0,
+        0,
+        0,
+        CASE WHEN ch.inductor_hilados_original > 0 THEN TRUE ELSE FALSE END,
+        CASE WHEN ct.costo_tela_comprada_total > 0 THEN TRUE ELSE FALSE END,
+        CASE WHEN ch.inductor_hilados_original > 0 OR ct.costo_tela_comprada_total > 0 THEN TRUE ELSE FALSE END
+    FROM ops_base ob
+    LEFT JOIN fechas_wip fw ON ob.op_codigo = fw.op_codigo
+    LEFT JOIN costos_hilados ch ON ob.op_codigo = ch.op_codigo
+    LEFT JOIN costos_tela ct ON ob.op_codigo = ct.op_codigo;
+    
+    -- Calcular factores hilados por mes
+    FOR mes_año, target_hilados IN
+        SELECT th.mes_año, th.target_monto FROM targets_hilados th
+    LOOP
+        SELECT SUM(inductor_hilados_original) INTO total_inductor
+        FROM consolidado_final 
+        WHERE fecha_despacho = mes_año AND inductor_hilados_original > 0;
+        
+        IF total_inductor > 0 THEN
+            factor_h := target_hilados / total_inductor;
+            
+            UPDATE consolidado_final
+            SET factor_hilados = factor_h,
+                costo_hilados_final = inductor_hilados_original * factor_h
+            WHERE fecha_despacho = mes_año;
+        END IF;
+    END LOOP;
+    
+    -- Calcular factores tela por año
+    FOR año_tela, target_tela IN
+        SELECT tt.año, tt.target_monto FROM targets_tela tt
+    LOOP
+        SELECT SUM(costo_tela_comprada_total) INTO total_costo_tela
+        FROM consolidado_final 
+        WHERE año_compra_tela = año_tela AND costo_tela_comprada_total > 0;
+        
+        IF total_costo_tela > 0 THEN
+            factor_t := target_tela / total_costo_tela;
+            
+            UPDATE consolidado_final
+            SET factor_tela = factor_t,
+                costo_tela_final = costo_tela_comprada_total * factor_t
+            WHERE año_compra_tela = año_tela;
+        END IF;
+    END LOOP;
+    
+    -- Calcular costo total final
+    UPDATE consolidado_final
+    SET costo_total_mp_final = costo_hilados_final + costo_tela_final;
+    
+    RAISE NOTICE '  ✓ Factores aplicados y costos finales calculados';
+    
+    -- ========================================================================
+    -- PASO 7: INSERT EN TABLA FINAL (LOGICA HISTORICA)
+    -- ========================================================================
+    RAISE NOTICE 'PASO 7: Insertando en costo_materia_prima...';
+    
+    INSERT INTO silver.costo_materia_prima (
+        op_codigo, estilo_codigo, fecha_despacho, fecha_despacho_original,
+        kg_hilados_total, inductor_hilados_original, costo_hilados_final, usd_por_kg_promedio,
+        crudo_kg, crudo_costo_usd, tenido_kg, tenido_costo_usd, hilados_diferentes,
+        kg_tela_comprada_total, rollos_tela_comprada_total, costo_tela_comprada_total,
+        costo_tela_final, usd_por_unidad_tela_real, año_compra_tela, fecha_compra_tela_min,
+        costo_total_mp_final, factor_hilados, factor_tela, tiene_hilados, tiene_tela, tiene_mp,
+        fecha_corrida
+    )
+    SELECT 
+        cf.op_codigo, cf.estilo_codigo, cf.fecha_despacho, cf.fecha_despacho_original,
+        cf.kg_hilados_total, cf.inductor_hilados_original, cf.costo_hilados_final, cf.usd_por_kg_promedio,
+        cf.crudo_kg, cf.crudo_costo_usd, cf.tenido_kg, cf.tenido_costo_usd, cf.hilados_diferentes,
+        cf.kg_tela_comprada_total, cf.rollos_tela_comprada_total, cf.costo_tela_comprada_total,
+        cf.costo_tela_final, cf.usd_por_unidad_tela_real, cf.año_compra_tela, cf.fecha_compra_tela_min,
+        cf.costo_total_mp_final, cf.factor_hilados, cf.factor_tela, cf.tiene_hilados, cf.tiene_tela, cf.tiene_mp,
+        fecha_ejecucion
+    FROM consolidado_final cf
+    WHERE cf.tiene_mp = TRUE;
+    
+    GET DIAGNOSTICS rows_inserted = ROW_COUNT;
+    
+    -- Limpiar tablas temporales
+    DROP TABLE IF EXISTS ops_base;
+    DROP TABLE IF EXISTS fechas_wip;
+    DROP TABLE IF EXISTS costos_hilados;
+    DROP TABLE IF EXISTS costos_tela;
+    DROP TABLE IF EXISTS targets_hilados;
+    DROP TABLE IF EXISTS targets_tela;
+    DROP TABLE IF EXISTS consolidado_final;
+    
+    -- ========================================================================
+    -- ESTADISTICAS FINALES
+    -- ========================================================================
+    SELECT 
+        COUNT(*),
+        AVG(costo_total_mp_final),
+        SUM(CASE WHEN tiene_hilados = TRUE THEN 1 ELSE 0 END),
+        SUM(CASE WHEN tiene_tela = TRUE THEN 1 ELSE 0 END)
+    INTO total_registros, costo_promedio, con_hilados, con_tela
+    FROM silver.costo_materia_prima
+    WHERE fecha_corrida IS NOT NULL;
+    
+    RAISE NOTICE '';
+    RAISE NOTICE '=======================================================';
+    RAISE NOTICE 'PROCESO COMPLETADO EXITOSAMENTE';
+    RAISE NOTICE '=======================================================';
+    RAISE NOTICE 'Rango procesado: % a %', fecha_desde, fecha_hasta;
+    RAISE NOTICE 'Registros insertados: %', rows_inserted;
+    RAISE NOTICE 'Total registros acumulados: %', total_registros;
+    RAISE NOTICE 'OPs con hilados: %', con_hilados;
+    RAISE NOTICE 'OPs con tela: %', con_tela;
+    RAISE NOTICE 'Costo promedio MP: $%', ROUND(costo_promedio, 2);
+    RAISE NOTICE '=======================================================';
+    
+EXCEPTION 
+    WHEN OTHERS THEN
+        error_message := SQLERRM;
+        RAISE NOTICE '';
+        RAISE NOTICE 'ERROR en silver.populate_costo_materia_prima: %', error_message;
+        
+        -- Limpiar tablas temporales en caso de error
+        DROP TABLE IF EXISTS ops_base;
+        DROP TABLE IF EXISTS fechas_wip;
+        DROP TABLE IF EXISTS costos_hilados;
+        DROP TABLE IF EXISTS costos_tela;
+        DROP TABLE IF EXISTS targets_hilados;
+        DROP TABLE IF EXISTS targets_tela;
+        DROP TABLE IF EXISTS consolidado_final;
+        
+        RAISE EXCEPTION '%', error_message;
+        
+END;
+$procedure$
+
+
+
+####################################################################################################
+# populate_costo_materia_prima_v3
+####################################################################################################
+
+CREATE OR REPLACE PROCEDURE silver.populate_costo_materia_prima_v3(IN modo integer DEFAULT 0)
+ LANGUAGE plpgsql
+AS $procedure$
+DECLARE
+    error_message TEXT;
+    rows_processed INTEGER := 0;
+    rows_detalle INTEGER := 0;
+    fecha_ejecucion TIMESTAMPTZ := NOW();
+    ultima_fecha_corrida TIMESTAMPTZ;
+    fecha_desde DATE := '2020-01-01';
+    fecha_hasta DATE;
+    
+BEGIN
+    fecha_hasta := CURRENT_DATE;
+    
+    SELECT MAX(fecha_corrida) INTO ultima_fecha_corrida
+    FROM silver.wip_time_costos_allocation;
+    
+    IF modo = 0 THEN
+        RAISE NOTICE '=======================================================';
+        RAISE NOTICE 'MODO CONSULTA - COSTO_MATERIA_PRIMA V3';
+        RAISE NOTICE 'Lógica SP viejo + Tabla detallada por hilo';
+        RAISE NOTICE '=======================================================';
+        RAISE NOTICE 'Para ejecutar: CALL silver.populate_costo_materia_prima_v3(1);';
+        RAISE NOTICE '=======================================================';
+        RETURN;
+    END IF;
+    
+    RAISE NOTICE 'INICIANDO V3 (Lógica SP viejo)...';
+    
+    -- ========================================================================
+    -- PASO 1: OPs BASE
+    -- ========================================================================
+    RAISE NOTICE 'PASO 1: Extrayendo OPs base...';
+    
+    DROP TABLE IF EXISTS ops_base;
+    CREATE TEMP TABLE ops_base AS
+    SELECT DISTINCT 
+        op.cod_ordpro,
+        op.cod_estpro,
+        op.cod_cliente,
+        COALESCE(op.num_prenreq, 0) as prendas_requeridas,
+        op.fec_creacion
+    FROM bronze.es_ordpro op
+    INNER JOIN (
+        SELECT DISTINCT wip.pr_id
+        FROM silver.wip_time_costos_allocation wip
+        WHERE wip.pr_id IS NOT NULL 
+          AND wip.month_ IS NOT NULL
+          AND wip.fecha_corrida = ultima_fecha_corrida
+          AND wip.month_::DATE BETWEEN fecha_desde AND fecha_hasta
+    ) w ON op.cod_ordpro = w.pr_id
+    WHERE op.num_prenreq > 0
+      AND op.fec_creacion >= '2020-01-01';
+    
+    GET DIAGNOSTICS rows_processed = ROW_COUNT;
+    RAISE NOTICE '  ✓ OPs base: %', rows_processed;
+    
+    -- ========================================================================
+    -- PASO 2: FECHAS DESPACHO
+    -- ========================================================================
+    RAISE NOTICE 'PASO 2: Calculando fechas despacho...';
+    
+    DROP TABLE IF EXISTS fechas_wip;
+    CREATE TEMP TABLE fechas_wip AS
+    SELECT 
+        wip.pr_id as op_codigo,
+        MIN(wip.month_) as fecha_despacho_min,
+        CASE EXTRACT(MONTH FROM MIN(wip.month_))::INTEGER
+            WHEN 1 THEN 'Ene' WHEN 2 THEN 'Feb' WHEN 3 THEN 'Mar' WHEN 4 THEN 'Abr'
+            WHEN 5 THEN 'May' WHEN 6 THEN 'Jun' WHEN 7 THEN 'Jul' WHEN 8 THEN 'Ago'
+            WHEN 9 THEN 'Sep' WHEN 10 THEN 'Oct' WHEN 11 THEN 'Nov' WHEN 12 THEN 'Dic'
+        END || '-' || RIGHT(EXTRACT(YEAR FROM MIN(wip.month_))::TEXT, 2) as fecha_despacho_formato
+    FROM silver.wip_time_costos_allocation wip
+    INNER JOIN ops_base ob ON wip.pr_id = ob.cod_ordpro
+    WHERE wip.month_ IS NOT NULL
+      AND wip.fecha_corrida = ultima_fecha_corrida
+      AND wip.month_::DATE BETWEEN fecha_desde AND fecha_hasta
+    GROUP BY wip.pr_id;
+    
+    GET DIAGNOSTICS rows_processed = ROW_COUNT;
+    RAISE NOTICE '  ✓ Fechas WIP: %', rows_processed;
+    
+    -- ========================================================================
+    -- PASO 3: REQUERIMIENTOS HILADOS
+    -- ========================================================================
+    RAISE NOTICE 'PASO 3: Consolidando requerimientos...';
+    
+    DROP TABLE IF EXISTS requerimientos_hilados;
+    CREATE TEMP TABLE requerimientos_hilados AS
+    -- CRUDO
+    SELECT 
+        req.cod_ordpro,
+        'CRUDO' as tipo_hilo,
+        req.cod_hiltel,
+        equiv.cod_hilado,
+        equiv.descripcion,
+        req.can_constex as kg_requeridos
+    FROM bronze.es_ordproreq_hilcru_detalle req
+    INNER JOIN bronze.hi_hilados equiv ON req.cod_hiltel = equiv.cod_hiltel_referencia
+    INNER JOIN ops_base ob ON req.cod_ordpro = ob.cod_ordpro
+    WHERE req.can_constex > 0
+    
+    UNION ALL
+    
+    -- TENIDO
+    SELECT 
+        req.cod_ordpro,
+        'TENIDO' as tipo_hilo,
+        req.cod_hiltel,
+        equiv.cod_hilado,
+        equiv.descripcion,
+        req.can_constex as kg_requeridos
+    FROM bronze.es_ordproreq_hilten_detalle req
+    INNER JOIN bronze.hi_hilados equiv ON req.cod_hiltel = equiv.cod_hiltel_referencia
+    INNER JOIN ops_base ob ON req.cod_ordpro = ob.cod_ordpro
+    WHERE req.can_constex > 0;
+    
+    GET DIAGNOSTICS rows_processed = ROW_COUNT;
+    RAISE NOTICE '  ✓ Requerimientos: %', rows_processed;
+    
+    -- ========================================================================
+    -- PASO 4: CALCULAR COSTOS POR HILADO (LÓGICA SP VIEJO)
+    -- ========================================================================
+    RAISE NOTICE 'PASO 4: Calculando costos (lógica SP viejo)...';
+    
+    DROP TABLE IF EXISTS mejor_costo_por_hilado;
+    CREATE TEMP TABLE mejor_costo_por_hilado AS
+    SELECT 
+        rh.cod_ordpro,
+        rh.tipo_hilo,
+        rh.cod_hiltel,
+        rh.cod_hilado,
+        rh.descripcion,
+        rh.kg_requeridos,
+        mc.usd_por_kg,
+        mc.dias_diferencia,
+        mc.fecha_precio
+    FROM requerimientos_hilados rh
+    CROSS JOIN LATERAL (
+        SELECT 
+            CASE 
+                WHEN costos.num_kilos_neto > 0 
+                THEN costos.imp_valorizado_dolares / costos.num_kilos_neto 
+                ELSE 0 
+            END as usd_por_kg,
+            ABS((costos.fec_movstk::DATE - op.fec_creacion::DATE)::INTEGER) as dias_diferencia,
+            costos.fec_movstk as fecha_precio
+        FROM bronze.hi_movistk_ordpro_item costos
+        INNER JOIN bronze.es_ordpro op ON rh.cod_ordpro = op.cod_ordpro
+        WHERE costos.cod_hilado = rh.cod_hilado
+          AND costos.cod_almacen = '20'
+          AND costos.imp_valorizado_dolares > 0
+          AND costos.num_kilos_neto > 0
+          AND costos.fec_movstk BETWEEN 
+              op.fec_creacion - INTERVAL '120 days' AND 
+              op.fec_creacion + INTERVAL '120 days'
+        ORDER BY 
+            ABS((costos.fec_movstk::DATE - op.fec_creacion::DATE)::INTEGER),
+            CASE 
+                WHEN costos.num_kilos_neto > 0 
+                THEN costos.imp_valorizado_dolares / costos.num_kilos_neto 
+                ELSE 0 
+            END DESC
+        LIMIT 1
+    ) mc
+    WHERE mc.usd_por_kg > 0;
+    
+    GET DIAGNOSTICS rows_processed = ROW_COUNT;
+    RAISE NOTICE '  ✓ Costos calculados: %', rows_processed;
+    
+    -- ========================================================================
+    -- PASO 5: CREAR TABLA SI NO EXISTE
+    -- ========================================================================
+    CREATE TABLE IF NOT EXISTS silver.costo_hilados_detalle_op (
+        op_codigo VARCHAR(50),
+        estilo_codigo VARCHAR(50),
+        cod_hiltel VARCHAR(50),
+        cod_hilado VARCHAR(50),
+        descripcion_hilo TEXT,
+        tipo_hilo VARCHAR(10),
+        kg_requeridos DECIMAL(18,4),
+        prendas_requeridas DECIMAL(18,2),
+        kg_por_prenda DECIMAL(18,6),
+        usd_por_kg_original DECIMAL(18,4),
+        costo_total_original DECIMAL(18,4),
+        costo_por_prenda_original DECIMAL(18,4),
+        factor_aplicado DECIMAL(18,6),
+        usd_por_kg_final DECIMAL(18,4),
+        costo_total_final DECIMAL(18,4),
+        costo_por_prenda_final DECIMAL(18,4),
+        fecha_despacho VARCHAR(20),
+        fuente_precio VARCHAR(20),
+        fecha_precio TIMESTAMPTZ,
+        numero_oc VARCHAR(50),
+        proveedor VARCHAR(50),
+        fecha_corrida TIMESTAMPTZ,
+        PRIMARY KEY (op_codigo, cod_hiltel, tipo_hilo, fecha_corrida)
+    );
+    
+    -- ========================================================================
+    -- PASO 6: CONSOLIDAR DETALLE FINAL
+    -- ========================================================================
+    RAISE NOTICE 'PASO 6: Consolidando detalle final...';
+    
+    DROP TABLE IF EXISTS detalle_final;
+    CREATE TEMP TABLE detalle_final AS
+    SELECT 
+        mch.cod_ordpro,
+        ob.cod_estpro,
+        mch.cod_hiltel,
+        mch.cod_hilado,
+        mch.descripcion,
+        mch.tipo_hilo,
+        mch.kg_requeridos,
+        ob.prendas_requeridas,
+        CASE WHEN ob.prendas_requeridas > 0 
+             THEN mch.kg_requeridos / ob.prendas_requeridas 
+             ELSE 0 END as kg_por_prenda,
+        
+        mch.usd_por_kg,
+        mch.kg_requeridos * mch.usd_por_kg as costo_total,
+        CASE WHEN ob.prendas_requeridas > 0 
+             THEN (mch.kg_requeridos * mch.usd_por_kg) / ob.prendas_requeridas 
+             ELSE 0 END as costo_por_prenda,
+        
+        fw.fecha_despacho_formato,
+        'Historico' as fuente_precio,
+        mch.fecha_precio
+        
+    FROM mejor_costo_por_hilado mch
+    INNER JOIN ops_base ob ON mch.cod_ordpro = ob.cod_ordpro
+    LEFT JOIN fechas_wip fw ON mch.cod_ordpro = fw.op_codigo;
+    
+    GET DIAGNOSTICS rows_processed = ROW_COUNT;
+    RAISE NOTICE '  ✓ Detalle final: %', rows_processed;
+    
+ -- ========================================================================
+    -- PASO 7: APLICAR FACTORES Y ELIMINAR DUPLICADOS
+    -- ========================================================================
+    RAISE NOTICE 'PASO 7: Aplicando factores...';
+    
+    DROP TABLE IF EXISTS targets_hilados;
+    CREATE TEMP TABLE targets_hilados AS
+    SELECT 
+        CASE ct.mes
+            WHEN 1 THEN 'Ene' WHEN 2 THEN 'Feb' WHEN 3 THEN 'Mar' WHEN 4 THEN 'Abr'
+            WHEN 5 THEN 'May' WHEN 6 THEN 'Jun' WHEN 7 THEN 'Jul' WHEN 8 THEN 'Ago'
+            WHEN 9 THEN 'Sep' WHEN 10 THEN 'Oct' WHEN 11 THEN 'Nov' WHEN 12 THEN 'Dic'
+        END || '-' || RIGHT(ct.año::TEXT, 2) as mes_año,
+        ct.materia_prima as target_monto
+    FROM silver.costos_mp_ct_avios ct
+    WHERE ct.materia_prima > 0
+      AND ct.año BETWEEN EXTRACT(YEAR FROM fecha_desde) AND EXTRACT(YEAR FROM fecha_hasta);
+    
+    DROP TABLE IF EXISTS factores_mes;
+    CREATE TEMP TABLE factores_mes AS
+    SELECT 
+        df.fecha_despacho_formato,
+        th.target_monto / NULLIF(SUM(df.costo_total), 0) as factor_mes
+    FROM detalle_final df
+    LEFT JOIN targets_hilados th ON df.fecha_despacho_formato = th.mes_año
+    WHERE th.target_monto IS NOT NULL
+    GROUP BY df.fecha_despacho_formato, th.target_monto;
+    
+    -- ⭐ ELIMINAR DUPLICADOS
+    DROP TABLE IF EXISTS detalle_unico;
+    CREATE TEMP TABLE detalle_unico AS
+    SELECT DISTINCT ON (cod_ordpro, cod_hiltel, tipo_hilo)
+        cod_ordpro, cod_estpro, cod_hiltel, cod_hilado, descripcion, tipo_hilo,
+        kg_requeridos, prendas_requeridas, kg_por_prenda,
+        usd_por_kg, costo_total, costo_por_prenda,
+        fecha_despacho_formato, fuente_precio, fecha_precio
+    FROM detalle_final
+    ORDER BY cod_ordpro, cod_hiltel, tipo_hilo, fecha_precio DESC NULLS LAST;
+    
+    RAISE NOTICE '  ✓ Duplicados eliminados';
+    
+    -- INSERT FINAL
+    INSERT INTO silver.costo_hilados_detalle_op (
+        op_codigo, estilo_codigo, cod_hiltel, cod_hilado, descripcion_hilo, tipo_hilo,
+        kg_requeridos, prendas_requeridas, kg_por_prenda,
+        usd_por_kg_original, costo_total_original, costo_por_prenda_original,
+        factor_aplicado, usd_por_kg_final, costo_total_final, costo_por_prenda_final,
+        fecha_despacho, fuente_precio, fecha_precio, numero_oc, proveedor, fecha_corrida
+    )
+    SELECT 
+        du.cod_ordpro,
+        du.cod_estpro,
+        du.cod_hiltel,
+        du.cod_hilado,
+        du.descripcion,
+        du.tipo_hilo,
+        du.kg_requeridos,
+        du.prendas_requeridas,
+        du.kg_por_prenda,
+        du.usd_por_kg,
+        du.costo_total,
+        du.costo_por_prenda,
+        COALESCE(fm.factor_mes, 1.0),
+        du.usd_por_kg * COALESCE(fm.factor_mes, 1.0),
+        du.costo_total * COALESCE(fm.factor_mes, 1.0),
+        du.costo_por_prenda * COALESCE(fm.factor_mes, 1.0),
+        du.fecha_despacho_formato,
+        du.fuente_precio,
+        du.fecha_precio,
+        NULL,
+        NULL,
+        fecha_ejecucion
+    FROM detalle_unico du
+    LEFT JOIN factores_mes fm ON du.fecha_despacho_formato = fm.fecha_despacho_formato
+    ON CONFLICT (op_codigo, cod_hiltel, tipo_hilo, fecha_corrida) 
+    DO UPDATE SET
+        kg_requeridos = EXCLUDED.kg_requeridos,
+        usd_por_kg_original = EXCLUDED.usd_por_kg_original,
+        costo_total_original = EXCLUDED.costo_total_original,
+        factor_aplicado = EXCLUDED.factor_aplicado,
+        usd_por_kg_final = EXCLUDED.usd_por_kg_final,
+        costo_total_final = EXCLUDED.costo_total_final;
+    
+    GET DIAGNOSTICS rows_detalle = ROW_COUNT;
+    
+    -- Limpiar
+    DROP TABLE IF EXISTS ops_base;
+    DROP TABLE IF EXISTS fechas_wip;
+    DROP TABLE IF EXISTS requerimientos_hilados;
+    DROP TABLE IF EXISTS mejor_costo_por_hilado;
+    DROP TABLE IF EXISTS detalle_final;
+    DROP TABLE IF EXISTS detalle_unico;
+    DROP TABLE IF EXISTS targets_hilados;
+    DROP TABLE IF EXISTS factores_mes;
+    
+    RAISE NOTICE '=======================================================';
+    RAISE NOTICE 'V3 COMPLETADO - Registros: %', rows_detalle;
+    RAISE NOTICE '=======================================================';
+    
+EXCEPTION 
+    WHEN OTHERS THEN
+        error_message := SQLERRM;
+        RAISE NOTICE 'ERROR: %', error_message;
+        RAISE EXCEPTION '%', error_message;
+END;
+$procedure$
+
+

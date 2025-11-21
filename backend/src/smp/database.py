@@ -2409,6 +2409,163 @@ class TDVQueries:
             logger.error(f" [AVIOS-ESTILO] ❌ Error obteniendo avios por estilo: {e}")
             raise
 
+    async def obtener_telas_para_estilo(
+        self,
+        estilo_cliente: Optional[str] = None,
+        codigo_estilo: Optional[str] = None,
+        cliente_marca: Optional[str] = None,
+        tipo_prenda: Optional[str] = None,
+        version_calculo: str = "FLUIDA",
+    ) -> tuple[List[Dict[str, Any]], str, int]:
+        """
+        Obtiene desglose de telas para un estilo (NO filtra por OPs).
+        Retorna TODAS las telas del estilo especificado.
+
+        Parámetros:
+        - estilo_cliente: Estilo ingresado por el usuario
+        - codigo_estilo: Código interno del estilo
+        - cliente_marca: Marca del cliente (para búsqueda fallback)
+        - tipo_prenda: Tipo de prenda (para búsqueda fallback)
+        - version_calculo: Versión (FLUIDA o truncado)
+
+        Retorna:
+        - Lista de telas con detalles
+        - Fecha corrida más reciente
+        - Total de OPs en el estilo (para cálculo de frecuencia)
+        """
+
+        if not estilo_cliente and not codigo_estilo and not (cliente_marca and tipo_prenda):
+            logger.warning(" [TELAS-ESTILO] No se proporcionó estilo_cliente, codigo_estilo, ni cliente_marca+tipo_prenda")
+            return [], "", 0
+
+        # ✨ Normalizar version_calculo
+        version_norm = normalize_version_calculo(version_calculo)
+
+        logger.info(f" [TELAS-ESTILO] ===== INICIANDO DESGLOSE TELAS POR ESTILO =====")
+        logger.info(f" [TELAS-ESTILO] Estilo: {estilo_cliente or codigo_estilo}, Version: {version_norm}")
+
+        try:
+            # ✨ PASO 1: Obtener todas las OPs que pertenecen al estilo desde costo_op_detalle
+            cod_ordpros_list = []
+
+            # PRIMERO: Intentar buscar por estilo (estilo_propio o estilo_cliente)
+            if estilo_cliente or codigo_estilo:
+                conditions = []
+                params_estilo = []
+
+                if codigo_estilo:
+                    conditions.append("cod.estilo_propio = %s")
+                    params_estilo.append(codigo_estilo)
+
+                if estilo_cliente:
+                    conditions.append("cod.estilo_cliente = %s")
+                    params_estilo.append(estilo_cliente)
+
+                where_estilo = "WHERE " + " OR ".join(conditions)
+
+                # Obtener OPs del estilo
+                query_ops = f"""
+                SELECT DISTINCT cod.cod_ordpro
+                FROM {settings.db_schema}.costo_op_detalle cod
+                {where_estilo}
+                AND cod.version_calculo = %s
+                """
+
+                logger.info(f" [TELAS-ESTILO] Buscando OPs por estilo: {estilo_cliente or codigo_estilo}")
+                ops_del_estilo = await self.db.query(query_ops, params_estilo + [version_norm])
+                cod_ordpros_list = [row["cod_ordpro"] for row in ops_del_estilo] if ops_del_estilo else []
+
+                if cod_ordpros_list:
+                    logger.info(f" [TELAS-ESTILO] ✅ Encontradas {len(cod_ordpros_list)} OPs por estilo: {cod_ordpros_list}")
+
+            # FALLBACK: Si no encontró por estilo, buscar por cliente_marca + tipo_prenda
+            if not cod_ordpros_list and cliente_marca and tipo_prenda:
+                logger.info(f" [TELAS-ESTILO] No encontrado por estilo, intentando fallback: marca={cliente_marca}, tipo={tipo_prenda}")
+
+                query_ops_fallback = f"""
+                SELECT DISTINCT cod.cod_ordpro
+                FROM {settings.db_schema}.costo_op_detalle cod
+                WHERE cod.cliente = %s
+                AND cod.tipo_de_producto = %s
+                AND cod.version_calculo = %s
+                """
+
+                ops_del_estilo = await self.db.query(query_ops_fallback, [cliente_marca, tipo_prenda, version_norm])
+                cod_ordpros_list = [row["cod_ordpro"] for row in ops_del_estilo] if ops_del_estilo else []
+
+                if cod_ordpros_list:
+                    logger.info(f" [TELAS-ESTILO] ✅ Encontradas {len(cod_ordpros_list)} OPs por marca+tipo: {cod_ordpros_list}")
+
+            if not cod_ordpros_list:
+                logger.warning(f" [TELAS-ESTILO] No se encontraron OPs ni por estilo ni por marca+tipo")
+                return [], "", 0
+
+            # ✨ PASO 2: Obtener TELAS de esas OPs
+            placeholders = ",".join(["%s"] * len(cod_ordpros_list))
+
+            # Lógica similar a avios
+            query = f"""
+            SELECT
+                tela_codigo,
+                tela_descripcion,
+                combinacion,
+                color,
+                talla,
+                ROUND(AVG(kg_por_prenda)::numeric, 6) as kg_por_prenda,
+                ROUND(AVG(precio_por_kg_real)::numeric, 4) as precio_por_kg_real,
+                ROUND(AVG(costo_por_prenda)::numeric, 4) as costo_por_prenda,
+                COUNT(DISTINCT op_codigo) as frecuencia_ops,
+                MAX(fecha_corrida)::text as fecha_corrida
+            FROM {settings.db_schema}.costo_telas_detalle_op
+            WHERE op_codigo IN ({placeholders})
+            GROUP BY
+                tela_codigo,
+                tela_descripcion,
+                combinacion,
+                color,
+                talla
+            ORDER BY tela_descripcion
+            """
+
+            logger.info(f" [TELAS-ESTILO] Ejecutando query con {len(cod_ordpros_list)} OPs del estilo...")
+            resultados = await self.db.query(query, cod_ordpros_list)
+
+            logger.info(f" [TELAS-ESTILO] ✅ Query completada: {len(resultados)} telas encontradas")
+
+            # Procesar resultados
+            telas_lista = []
+            fecha_corrida_ultima = ""
+            total_ops = len(cod_ordpros_list)
+
+            for row in resultados:
+                kg_por_prenda = float(row.get("kg_por_prenda", 0)) or 0.0
+                precio_por_kg_real = float(row.get("precio_por_kg_real", 0)) or 0.0
+                costo_por_prenda = float(row.get("costo_por_prenda", 0)) or 0.0
+
+                tela_detalle = {
+                    "tela_codigo": row.get("tela_codigo", ""),
+                    "tela_descripcion": row.get("tela_descripcion", ""),
+                    "combinacion": row.get("combinacion", ""),
+                    "color": row.get("color", ""),
+                    "talla": row.get("talla", ""),
+                    "kg_por_prenda": kg_por_prenda,
+                    "precio_por_kg_real": precio_por_kg_real,
+                    "costo_por_prenda": costo_por_prenda,
+                    "frecuencia_ops": int(row.get("frecuencia_ops", 0)) or 0,
+                }
+                telas_lista.append(tela_detalle)
+
+                # Capturar la fecha_corrida del primero
+                if not fecha_corrida_ultima and row.get("fecha_corrida"):
+                    fecha_corrida_ultima = str(row.get("fecha_corrida", ""))
+
+            logger.info(f" [TELAS-ESTILO] ✅ Retornando {len(telas_lista)} telas procesadas (total_ops: {total_ops})")
+            return telas_lista, fecha_corrida_ultima, total_ops
+
+        except Exception as e:
+            logger.error(f" [TELAS-ESTILO] ❌ Error obteniendo telas por estilo: {e}")
+            raise
+
     # ========================================
     #  FUNCIONES DE WIPS (SIN CAMBIOS - YA USAN FECHAS RELATIVAS)
     # ========================================

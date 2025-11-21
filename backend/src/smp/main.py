@@ -1063,6 +1063,79 @@ async def obtener_avios_detalladas(
         )
 
 
+@app.get("/obtener-telas-detalladas", tags=["Búsqueda"])
+async def obtener_telas_detalladas(
+    version_calculo: Optional[str] = None,
+    estilo_cliente: Optional[str] = None,
+    codigo_estilo: Optional[str] = None,
+    cliente_marca: Optional[str] = None,
+    tipo_prenda: Optional[str] = None,
+):
+    """
+    Obtiene lista detallada de telas para un estilo (NO filtra por OPs).
+    Retorna TODAS las telas del estilo especificado con sus costos.
+
+    Parámetros:
+    - version_calculo: Versión de cálculo (FLUIDA o truncado)
+    - estilo_cliente: Estilo ingresado por el usuario
+    - codigo_estilo: Código interno del estilo
+    - cliente_marca: Marca del cliente (para búsqueda fallback si no hay estilo)
+    - tipo_prenda: Tipo de prenda (para búsqueda fallback si no hay estilo)
+
+    También calcula la frecuencia de uso (en cuántas OPs del estilo aparece cada tela).
+    Incluye la última fecha_corrida disponible.
+    """
+    logger.info(f" [LLAMADA] obtener_telas_detalladas - version={version_calculo}, estilo_cliente={estilo_cliente}, codigo_estilo={codigo_estilo}, cliente_marca={cliente_marca}, tipo_prenda={tipo_prenda}")
+    try:
+        # Normalizar version_calculo
+        version_normalizada = normalize_version_calculo(version_calculo)
+
+        # Validar que al menos un estilo fue proporcionado
+        if not estilo_cliente and not codigo_estilo and not (cliente_marca and tipo_prenda):
+            return {
+                "codigo_estilo": "N/A",
+                "version_calculo": version_normalizada,
+                "total_ops": 0,
+                "telas_encontradas": 0,
+                "fecha_corrida": "",
+                "telas": [],
+            }
+
+        # Obtener telas del estilo (sin filtrar por OPs)
+        try:
+            telas_detalladas, fecha_corrida, total_ops = await tdv_queries.obtener_telas_para_estilo(
+                estilo_cliente=estilo_cliente,
+                codigo_estilo=codigo_estilo,
+                cliente_marca=cliente_marca,
+                tipo_prenda=tipo_prenda,
+                version_calculo=version_normalizada,
+            )
+        except Exception as e:
+            logger.warning(f"Error obteniendo telas: {e}")
+            telas_detalladas = []
+            fecha_corrida = ""
+            total_ops = 0
+
+        logger.info(
+            f" Telas obtenidas para estilo: {len(telas_detalladas)} registros, fecha_corrida: {fecha_corrida}, total_ops: {total_ops}"
+        )
+
+        return {
+            "codigo_estilo": codigo_estilo or estilo_cliente or "N/A",
+            "version_calculo": version_normalizada,
+            "total_ops": total_ops,
+            "telas_encontradas": len(telas_detalladas),
+            "fecha_corrida": fecha_corrida,
+            "telas": telas_detalladas,
+        }
+
+    except Exception as e:
+        logger.error(f"Error obteniendo telas detalladas: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Error obteniendo telas: {str(e)}"
+        )
+
+
 @app.get("/debug-estilo/{estilo}", tags=["Debug"])
 async def debug_estilo(estilo: str, tipo_estilo: str = "estilo_propio"):
     """Debug: Verificar qué valores de estilo_propio o estilo_cliente existen"""

@@ -12,8 +12,6 @@ services:
       - DB_PASSWORD=NewServerAz654@!
       - DB_NAME=tdv
       - DB_SCHEMA=silver
-      - PGSSLCERT=/.secrets/cotizador.crt
-      - PGSSLKEY=/.secrets/cotizador.key
       - PGSSLMODE=require
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8000/health"]

@@ -842,15 +842,15 @@ class TDVQueries:
         SELECT DISTINCT cliente
         FROM {settings.db_schema}.costo_op_detalle
         WHERE cliente IS NOT NULL
-          AND version_calculo = ?
+          AND version_calculo = %s
           AND fecha_corrida = (
             SELECT MAX(fecha_corrida)
             FROM {settings.db_schema}.costo_op_detalle
-            WHERE version_calculo = ?)
+            WHERE version_calculo = %s)
           AND fecha_facturacion >= (
             SELECT (MAX(fecha_facturacion) - INTERVAL '36 months')
             FROM {settings.db_schema}.costo_op_detalle
-            WHERE version_calculo = ?
+            WHERE version_calculo = %s
           )
         ORDER BY cliente
         """

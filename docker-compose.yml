@@ -12,9 +12,9 @@ services:
       - DB_PASSWORD=${DB_PASSWORD}
       - DB_NAME=${DB_NAME}
       - DB_SCHEMA=${DB_SCHEMA}
+      - PGSSLMODE=${SSLMODE}
       - PGSSLCERT=/.secrets/cotizador.crt
       - PGSSLKEY=/.secrets/cotizador.key
-      - CONNECTION_STRING=Driver={PostgreSQL};Server=${DB_HOST};Port=${DB_PORT};Database=${DB_NAME};Uid=${DB_USER};Sslmode=${SSLMODE};Pooling=1;Timeout=30;ConnectTimeout=10
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8000/health"]
       interval: 30s

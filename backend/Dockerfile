@@ -89,15 +89,29 @@ COPY odbcinst.sh /tmp
 RUN set -eux; \
     /tmp/odbcinst.sh
 
-# configure entrypoint
-RUN cat <<EOF > /usr/local/bin/entrypoint.sh && \
-    chmod +x /usr/local/bin/entrypoint.sh
+# configure entrypoint - fix SSL cert permissions then run uvicorn
+RUN cat > /usr/local/bin/entrypoint.sh <<'ENTRYPOINT' && chmod +x /usr/local/bin/entrypoint.sh
 #!/bin/sh
-exec uvicorn ${APP_MODULE}.main:app --host \${API_HOST:-0.0.0.0} --port \${API_PORT:-8000} --proxy-headers
-EOF
+set -e
+
+# Fix certificate permissions (required for Windows mounted volumes)
+echo "Checking certificates..."
+if [ -d "/.secrets" ]; then
+    echo "Found /.secrets directory, fixing permissions..."
+    if [ -f "/.secrets/cotizador.key" ]; then
+        chmod 600 "/.secrets/cotizador.key" 2>/dev/null || true
+        ls -la "/.secrets/cotizador.key"
+    fi
+    if [ -f "/.secrets/cotizador.crt" ]; then
+        chmod 644 "/.secrets/cotizador.crt" 2>/dev/null || true
+    fi
+fi
+
+echo "Starting uvicorn..."
+exec uvicorn smp.main:app --host 0.0.0.0 --port 8000 --proxy-headers
+ENTRYPOINT
 
 WORKDIR /app
-USER ${APP_USER}
 
 # Lightweight healthcheck implemented with the bundled python binary (no extra packages required).
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \

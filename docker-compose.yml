@@ -4,17 +4,17 @@ services:
       context: backend
       dockerfile: Dockerfile
     environment:
-      - API_HOST=${API_HOST}
-      - API_PORT=${API_PORT}
-      - DB_HOST=${DB_HOST}
-      - DB_PORT=${DB_PORT}
-      - DB_USER=${DB_USER}
-      - DB_PASSWORD=${DB_PASSWORD}
-      - DB_NAME=${DB_NAME}
-      - DB_SCHEMA=${DB_SCHEMA}
+      - API_HOST=0.0.0.0
+      - API_PORT=8000
+      - DB_HOST=18.118.59.50
+      - DB_PORT=5432
+      - DB_USER=david
+      - DB_PASSWORD=NewServerAz654@!
+      - DB_NAME=tdv
+      - DB_SCHEMA=silver
       - PGSSLCERT=/.secrets/cotizador.crt
       - PGSSLKEY=/.secrets/cotizador.key
-      - PGSSLMODE=${SSLMODE}
+      - PGSSLMODE=require
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8000/health"]
       interval: 30s
@@ -31,17 +31,17 @@ services:
       context: frontend
       dockerfile: Dockerfile
     environment:
-      - INTERNAL_API_URL=http://backend:${API_PORT}
+      - INTERNAL_API_URL=http://backend:8000
       - PROXY_TIMEOUT_MS=10000
       - PROXY_ALLOWLIST=
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://frontend:3000/cotizador/health"]
+      test: ["CMD", "wget", "-q", "--spider", "http://frontend:3000/"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 10s
     ports:
-      - "3000:3000"
+      - "8088:3000"
     depends_on:
       backend:
         condition: service_healthy

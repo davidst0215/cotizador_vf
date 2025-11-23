@@ -112,7 +112,7 @@ const WipDesgloseTableComponent = forwardRef<WipDesgloseTableRef, WipDesgloseTab
           version_calculo: versionCalculo,
         };
 
-        const response = await fetch("http://localhost:8000/desglose-wip-ops", {
+        const response = await fetch("/api/proxy/desglose-wip-ops", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),

@@ -98,7 +98,7 @@ export const OpsSelectionTable: React.FC<OpsSelectionTableProps> = ({
           tipo_estilo: tipoEstilo, // v2.0: Indicar si es estilo_propio o estilo_cliente
         });
 
-        const url = `http://localhost:8000/obtener-ops-detalladas/${codigoEstilo}?${params.toString()}`;
+        const url = `/api/proxy/obtener-ops-detalladas/${codigoEstilo}?${params.toString()}`;
         const response = await fetch(url);
 
         if (!response.ok) {

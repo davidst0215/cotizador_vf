@@ -850,7 +850,6 @@ const SistemaCotizadorTDV = () => {
     []
   );
 
-
   // Callback para OPs seleccionadas - SOLO SETEA, SIN CALCULAR
   // Manejar OPs seleccionadas desde OpsSelectionTable
   const handleOpsSelected = useCallback((opsSeleccionadas: any[]) => {

@@ -78,7 +78,7 @@ RUN set -eux; \
 
 # hadolint ignore=DL3018
 RUN set -eux; \
-    apk add --no-cache freetds libpq psqlodbc libstdc++ unixodbc
+    apk add --no-cache freetds libpq psqlodbc libstdc++ unixodbc openssl
 
 # copy only the venv and application; preserve ownership for security
 COPY --from=builder --chown=${APP_USER}:${APP_USER} /opt/venv /opt/venv
@@ -90,11 +90,8 @@ RUN set -eux; \
     /tmp/odbcinst.sh
 
 # configure entrypoint
-RUN cat <<EOF > /usr/local/bin/entrypoint.sh && \
-    chmod +x /usr/local/bin/entrypoint.sh
-#!/bin/sh
-exec uvicorn ${APP_MODULE}.main:app --host \${API_HOST:-0.0.0.0} --port \${API_PORT:-8000} --proxy-headers
-EOF
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
 
 WORKDIR /app
 USER ${APP_USER}

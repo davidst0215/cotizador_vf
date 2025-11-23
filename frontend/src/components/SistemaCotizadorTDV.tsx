@@ -656,10 +656,6 @@ const SistemaCotizadorTDV = () => {
   // ✨ Estado para factores de ajuste WIP - PERSISTENTE entre pestañas
   const [factoresWip, setFactoresWip] = useState<Record<string, number>>({});
 
-  // ✨ Estados para costos de materiales - sincronizados desde desgloses
-  const [costoHilosPorPrenda, setCostoHilosPorPrenda] = useState<number>(0);
-  const [costoTelasPorPrenda, setCostoTelasPorPrenda] = useState<number>(0);
-  const [costoAviosPorPrenda, setCostoAviosPorPrenda] = useState<number>(0);
 
   // ✨ Estados para guardar costos calculados de materiales (para usar en Costos Finales)
   const [costosMaterialesFinales, setCostosMaterialesFinales] = useState<{
@@ -668,14 +664,6 @@ const SistemaCotizadorTDV = () => {
     costo_hilos_materia_prima?: number;
     costo_telas_compradas?: number;
   } | null>(null);
-
-  // ✨ useEffect para sincronizar costos desde HilosDesgloseTable - se actualiza continuamente
-  useEffect(() => {
-    if (hilosDesgloseTableRef.current && pestanaActiva === "materiales") {
-      const totalHilos = hilosDesgloseTableRef.current.getTotalCostoHilos();
-      setCostoHilosPorPrenda(totalHilos);
-    }
-  }, [pestanaActiva]); // Se actualiza cuando entra a materiales
 
   // Estados para formulario - separados para evitar pérdida de foco
   const [formData, setFormData] = useState<FormData>({
@@ -861,109 +849,6 @@ const SistemaCotizadorTDV = () => {
     },
     []
   );
-
-  // ✨ NUEVO: Calcular costos finales usando valores directos del WIP
-  const handleCalcularCostosFinales = useCallback(() => {
-    if (!selectedOpsData || selectedOpsData.length === 0) {
-      return;
-    }
-
-    if (!cotizacionActual) {
-      return;
-    }
-
-    // ✨ v2.0: CALCULAR ESFUERZO PROMEDIO DE OPs SELECCIONADAS Y DETERMINAR FACTOR
-    const totalEsfuerzo = selectedOpsData.reduce((sum, op) => sum + (op.esfuerzo_total || 6), 0);
-    const esforzoPromedio = Math.round(totalEsfuerzo / selectedOpsData.length);
-
-    // Mapear esfuerzo a factor (misma lógica que backend)
-    let nuevoFactorEsfuerzo = 1.00; // Default: Medio
-    let categoriaNueva = "Medio";
-    if (esforzoPromedio >= 0 && esforzoPromedio <= 5) {
-      nuevoFactorEsfuerzo = 0.90;
-      categoriaNueva = "Bajo";
-    } else if (esforzoPromedio === 6) {
-      nuevoFactorEsfuerzo = 1.00;
-      categoriaNueva = "Medio";
-    } else if (esforzoPromedio >= 7 && esforzoPromedio <= 10) {
-      nuevoFactorEsfuerzo = 1.15;
-      categoriaNueva = "Alto";
-    }
-
-    console.log(`🎯 Recalculando vector con esfuerzo promedio: ${esforzoPromedio}`);
-    console.log(`   Factor Esfuerzo Anterior: ${(cotizacionActual.factor_esfuerzo || 1).toFixed(2)}`);
-    console.log(`   Factor Esfuerzo Nuevo: ${nuevoFactorEsfuerzo.toFixed(2)} (${categoriaNueva})`);
-
-    // ✨ OBTENER valores de textil y manufactura directamente del WIP resumen
-    const promedioTextil = wipDesgloseTableRef.current?.getTotalTextil() || 0;
-    const promedioManufactura = wipDesgloseTableRef.current?.getTotalManufactura() || 0;
-
-    // ✨ GUARDAR los WIP IDs en ref para mantener la selección visual
-    const wipIdsSeleccionados = wipDesgloseTableRef.current?.getSelectedWipsIds() || [];
-    selectedWipsRef.current = wipIdsSeleccionados;
-
-    // Otros costos desde OPs (materia prima, avíos, indirecto, admin, ventas)
-    let totalMateriaPrima = 0;
-    let totalAvios = 0;
-    let totalIndirecto = 0;
-    let totalAdministracion = 0;
-    let totalVentas = 0;
-
-    selectedOpsData.forEach((op) => {
-      totalMateriaPrima += op.materia_prima_unitario || 0;
-      totalAvios += op.avios_unitario || 0;
-      totalIndirecto += op.indirecto_fijo_unitario || 0;
-      totalAdministracion += op.administracion_unitario || 0;
-      totalVentas += op.ventas_unitario || 0;
-    });
-
-    const promedioMateriaPrima = selectedOpsData.length > 0 ? totalMateriaPrima / selectedOpsData.length : 0;
-    const promedioAvios = selectedOpsData.length > 0 ? totalAvios / selectedOpsData.length : 0;
-    const promedioIndirecto = selectedOpsData.length > 0 ? totalIndirecto / selectedOpsData.length : 0;
-    const promedioAdministracion = selectedOpsData.length > 0 ? totalAdministracion / selectedOpsData.length : 0;
-    const promedioVentas = selectedOpsData.length > 0 ? totalVentas / selectedOpsData.length : 0;
-
-    // Sumar todos para costo base
-    const costosBase = promedioTextil + promedioManufactura + promedioMateriaPrima + promedioAvios + promedioIndirecto + promedioAdministracion + promedioVentas;
-
-    // ✨ v2.0: RECALCULAR VECTOR TOTAL CON NUEVO FACTOR ESFUERZO
-    const nuevoVectorTotal = nuevoFactorEsfuerzo * (cotizacionActual.factor_marca || 1);
-    const nuevoMargenAplicado = 15 * nuevoVectorTotal; // 15% × vector_total
-    const costosConFactores = costosBase * (1 + (nuevoMargenAplicado / 100));
-
-    // Aplicar margen
-    const precioFinal = costosConFactores;
-
-    console.log(`📊 Recálculo Vector:`);
-    console.log(`   Vector Anterior: ${(cotizacionActual.vector_total || 1).toFixed(3)}`);
-    console.log(`   Vector Nuevo: ${nuevoVectorTotal.toFixed(3)} (${nuevoFactorEsfuerzo.toFixed(2)} × ${(cotizacionActual.factor_marca || 1).toFixed(2)})`);
-    console.log(`   Margen Anterior: ${(cotizacionActual.margen_aplicado || 0).toFixed(1)}%`);
-    console.log(`   Margen Nuevo: ${nuevoMargenAplicado.toFixed(1)}%`);
-
-    // ✨ ACTUALIZAR cotizacionActual con los nuevos valores
-    setCotizacionActual((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        costo_textil: promedioTextil,
-        costo_manufactura: promedioManufactura,
-        costo_materia_prima: promedioMateriaPrima,
-        costo_avios: promedioAvios,
-        costo_indirecto_fijo: promedioIndirecto,
-        gasto_administracion: promedioAdministracion,
-        gasto_ventas: promedioVentas,
-        costo_base_total: costosBase,
-        factor_esfuerzo: nuevoFactorEsfuerzo,
-        categoria_esfuerzo: esforzoPromedio,
-        vector_total: nuevoVectorTotal,
-        margen_aplicado: nuevoMargenAplicado,
-        precio_final: precioFinal,
-      };
-    });
-
-    // ✨ NAVEGAR a la pestaña de costos finales
-    setPestanaActiva("costos");
-  }, [selectedOpsData, cotizacionActual]);
 
 
   // Callback para OPs seleccionadas - SOLO SETEA, SIN CALCULAR

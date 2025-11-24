@@ -349,7 +349,6 @@ class TDVQueries:
             # Para las otras tablas que S tienen version_calculo
             queries = {
                 "costo_op_detalle": f"SELECT MAX(fecha_corrida) as fecha_max FROM {settings.db_schema}.costo_op_detalle WHERE version_calculo = ?",
-                "resumen_wip_por_prenda": f"SELECT MAX(fecha_corrida) as fecha_max FROM {settings.db_schema}.resumen_wip_por_prenda WHERE version_calculo = ?",
                 "costo_wip_op": f"SELECT MAX(fecha_corrida) as fecha_max FROM silver.costo_wip_op WHERE version_calculo = ?",
             }
 
@@ -2595,21 +2594,23 @@ class TDVQueries:
     ) -> Dict[str, float]:
         """
         CORRECCIN: Filtra por marca y total_prendas >= 200
+        NOTA: resumen_wip_por_prenda ya no existe - retorna dict vaco
         """
 
         costos_wips = {}
 
-        #  QUERY CORREGIDA: marca + filtro prendas >= 200
-        version_norm = version_calculo
+        try:
+            #  QUERY CORREGIDA: marca + filtro prendas >= 200
+            version_norm = version_calculo
 
-        query_variabilidad = f"""
-        SELECT
-          wip_id,
-          EXTRACT(YEAR FROM mes) as ao,
-          EXTRACT(MONTH FROM mes) as mes,
-          AVG(CAST(costo_por_prenda AS FLOAT)) as costo_mensual,
-          AVG(CAST(total_prendas AS FLOAT)) as prendas_promedio
-        FROM {settings.db_schema}.resumen_wip_por_prenda
+            query_variabilidad = f"""
+            SELECT
+              wip_id,
+              EXTRACT(YEAR FROM mes) as ao,
+              EXTRACT(MONTH FROM mes) as mes,
+              AVG(CAST(costo_por_prenda AS FLOAT)) as costo_mensual,
+              AVG(CAST(total_prendas AS FLOAT)) as prendas_promedio
+            FROM {settings.db_schema}.resumen_wip_por_prenda
         WHERE tipo_de_producto = %s
           AND version_calculo = %s
           AND fecha_corrida = (
@@ -2799,10 +2800,13 @@ class TDVQueries:
                 costos_wips[wip_id] = float(resultado_wip[0]["costo_promedio"])
                 logger.debug(f" WIP {wip_id}: ${costos_wips[wip_id]:.2f}")
 
-        logger.info(
-            f" Anlisis inteligente completado: {len(costos_wips)} WIPs para {tipo_prenda} ({version_calculo})"
-        )
-        return costos_wips
+            logger.info(
+                f" Anlisis inteligente completado: {len(costos_wips)} WIPs para {tipo_prenda} ({version_calculo})"
+            )
+            return costos_wips
+        except Exception as e:
+            logger.warning(f" Error en obtener_costos_wips_inteligente (tabla no existe?): {e}")
+            return {}
 
     async def obtener_ruta_textil_recomendada(
         self,
@@ -2927,12 +2931,16 @@ class TDVQueries:
         version_calculo: str = "FLUIDA",
         marca: Optional[str] = None,
     ) -> Dict[str, float]:
-        """ CORRECCIN: Filtra por marca y total_prendas >= 200"""
+        """ CORRECCIN: Filtra por marca y total_prendas >= 200
+        NOTA: resumen_wip_por_prenda ya no existe - retorna dict vaco
+        """
         costos_wips = {}
-        version_norm = version_calculo
 
-        #  WIPs inestables (37, 45): Promedio con marca + filtro prendas >= 200
-        query_inestables = f"""
+        try:
+            version_norm = version_calculo
+
+            #  WIPs inestables (37, 45): Promedio con marca + filtro prendas >= 200
+            query_inestables = f"""
         SELECT wip_id, AVG(CAST(costo_por_prenda AS FLOAT)) as costo_promedio
         FROM {settings.db_schema}.resumen_wip_por_prenda
         WHERE wip_id IN ('37', '45')
@@ -3000,13 +3008,16 @@ class TDVQueries:
         resultados_estables = await self.db.query(
             query_estables, tuple(params_estables)
         )
-        for row in resultados_estables:
-            costos_wips[row["wip_id"]] = float(row["costo_por_prenda"])
+            for row in resultados_estables:
+                costos_wips[row["wip_id"]] = float(row["costo_por_prenda"])
 
-        logger.info(
-            f" Mtodo legacy: {len(costos_wips)} WIPs encontrados para {tipo_prenda} ({version_calculo})"
-        )
-        return costos_wips
+            logger.info(
+                f" Mtodo legacy: {len(costos_wips)} WIPs encontrados para {tipo_prenda} ({version_calculo})"
+            )
+            return costos_wips
+        except Exception as e:
+            logger.warning(f" Error en _obtener_costos_wips_legacy (tabla no existe?): {e}")
+            return {}
 
     async def obtener_wips_disponibles_estructurado(
         self,

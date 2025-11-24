@@ -107,7 +107,8 @@ def diagnosticar_version_calculo():
                 print(f" Query completa FALLA: {e}")
 
         # 9. Verificar otras tablas problemticas
-        for tabla in ["historial_estilos", "resumen_wip_por_prenda"]:
+        # NOTA: resumen_wip_por_prenda ya no existe - removido de esta verificación
+        for tabla in ["historial_estilos"]:
             try:
                 cursor.execute(f"""
                     SELECT COLUMN_NAME

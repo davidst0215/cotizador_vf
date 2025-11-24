@@ -41,44 +41,45 @@ class Settings(BaseSettings):
         if not self.connection_driver:
             self.connection_driver = "psycopg2" if is_postgres else "{SQL Server}"
 
-        if not self.connection_string:
-            if is_postgres:
-                # PostgreSQL: usar diccionario de parmetros en lugar de DSN string
-                # Esto evita problemas con espacios en rutas de certificados
-                self.connection_string = {
-                    'dbname': self.db_name,
-                    'user': self.db_user,
-                    'host': self.db_host,
-                    'port': self.db_port,
-                }
+        # Para PostgreSQL, SIEMPRE construir desde variables individuales
+        # Esto ignora cualquier CONNECTION_STRING antigua del docker-compose.yml
+        if is_postgres:
+            # PostgreSQL: usar diccionario de parámetros en lugar de DSN string
+            # Esto evita problemas con espacios en rutas de certificados
+            self.connection_string = {
+                'dbname': self.db_name,
+                'user': self.db_user,
+                'host': self.db_host,
+                'port': self.db_port,
+            }
 
-                if self.db_password:
-                    self.connection_string['password'] = self.db_password
+            if self.db_password:
+                self.connection_string['password'] = self.db_password
 
-                # Agregar SSL settings
-                if self.pgsslmode:
-                    self.connection_string['sslmode'] = self.pgsslmode
-                else:
-                    self.connection_string['sslmode'] = 'disable'
-
-                if self.pgsslcert:
-                    self.connection_string['sslcert'] = self.pgsslcert
-                if self.pgsslkey:
-                    self.connection_string['sslkey'] = self.pgsslkey
-                if self.pgsslrootcert:
-                    self.connection_string['sslrootcert'] = self.pgsslrootcert
+            # Agregar SSL settings
+            if self.pgsslmode:
+                self.connection_string['sslmode'] = self.pgsslmode
             else:
-                # SQL Server connection string
-                self.connection_string = (
-                    f"DRIVER={self.connection_driver};"
-                    f"SERVER={self.db_host},{self.db_port};"
-                    f"UID={self.db_user};"
-                    f"PWD={self.db_password};"
-                    f"DATABASE={self.db_name};"
-                    f"TrustServerCertificate=yes;"
-                    f"Connection Timeout=30;"
-                    f"Command Timeout=60"
-                )
+                self.connection_string['sslmode'] = 'disable'
+
+            if self.pgsslcert:
+                self.connection_string['sslcert'] = self.pgsslcert
+            if self.pgsslkey:
+                self.connection_string['sslkey'] = self.pgsslkey
+            if self.pgsslrootcert:
+                self.connection_string['sslrootcert'] = self.pgsslrootcert
+        elif not self.connection_string:
+            # SQL Server connection string (solo si no hay CONNECTION_STRING seteada)
+            self.connection_string = (
+                f"DRIVER={self.connection_driver};"
+                f"SERVER={self.db_host},{self.db_port};"
+                f"UID={self.db_user};"
+                f"PWD={self.db_password};"
+                f"DATABASE={self.db_name};"
+                f"TrustServerCertificate=yes;"
+                f"Connection Timeout=30;"
+                f"Command Timeout=60"
+            )
         return self
 
     # API

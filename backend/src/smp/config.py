@@ -29,6 +29,7 @@ class Settings(BaseSettings):
 
     # PostgreSQL SSL settings
     pgsslmode: Optional[str] = None
+    sslmode: Optional[str] = None  # Alternate name for SSL mode (used by EC2)
     pgsslcert: Optional[str] = None
     pgsslkey: Optional[str] = None
     pgsslrootcert: Optional[str] = None
@@ -36,7 +37,7 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def _build(self):
         #  DETECTAR PostgreSQL por puerto (5432) o por variables de entorno
-        is_postgres = self.db_port == 5432 or self.pgsslmode is not None
+        is_postgres = self.db_port == 5432
 
         if not self.connection_driver:
             self.connection_driver = "psycopg2" if is_postgres else "{SQL Server}"
@@ -56,9 +57,11 @@ class Settings(BaseSettings):
             if self.db_password:
                 self.connection_string['password'] = self.db_password
 
-            # Agregar SSL settings
+            # Agregar SSL settings (prioridad: pgsslmode > sslmode > 'disable')
             if self.pgsslmode:
                 self.connection_string['sslmode'] = self.pgsslmode
+            elif self.sslmode:
+                self.connection_string['sslmode'] = self.sslmode
             else:
                 self.connection_string['sslmode'] = 'disable'
 

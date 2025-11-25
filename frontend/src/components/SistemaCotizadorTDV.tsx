@@ -665,6 +665,10 @@ const SistemaCotizadorTDV = () => {
     costo_telas_compradas?: number;
   } | null>(null);
 
+  // ✨ Estado para controlar si la pestaña de Costos Finales debe estar habilitada
+  // Solo se habilita después de hacer clic en "Calcular Costos Finales"
+  const [costosFinalCalculados, setCostosFinalCalculados] = useState(false);
+
   // Estados para formulario - separados para evitar pérdida de foco
   const [formData, setFormData] = useState<FormData>({
     estilo_cliente: "", // v2.0: Código de estilo cliente
@@ -2063,7 +2067,10 @@ const SistemaCotizadorTDV = () => {
         {/* Botones de acción */}
         <div className="flex justify-center gap-4">
           <button
-            onClick={() => setPestanaActiva("formulario")}
+            onClick={() => {
+              setCostosFinalCalculados(false);
+              setPestanaActiva("formulario");
+            }}
             className="px-8 py-3 font-semibold text-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 bg-red-500"
           >
             Nueva Cotización
@@ -2340,6 +2347,8 @@ const SistemaCotizadorTDV = () => {
               });
 
               await procesarCotizacion();
+              // Marcar que los costos finales han sido calculados
+              setCostosFinalCalculados(true);
               // Navegar a Costos Finales después de procesar
               setTimeout(() => setPestanaActiva("costos"), 500);
             }}
@@ -2430,7 +2439,7 @@ const SistemaCotizadorTDV = () => {
 
             <button
               onClick={() => setPestanaActiva("costos")}
-              disabled={!cotizacionActual}
+              disabled={!costosFinalCalculados}
               className={`px-8 py-4 font-bold transition-all duration-300 flex items-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed ${
                 pestanaActiva === "costos"
                   ? "text-white shadow-lg"

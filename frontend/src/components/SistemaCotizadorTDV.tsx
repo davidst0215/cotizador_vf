@@ -2158,18 +2158,6 @@ const SistemaCotizadorTDV = () => {
                   )}
                 </div>
               </div>
-              <div className="text-right">
-                <div className="bg-white/20 backdrop-blur-sm rounded-2xl p-6">
-                  <div className="text-4xl font-bold mb-1">
-                    ${(cotizacionActual.precio_final || 0).toFixed(2)}
-                  </div>
-                  <div className="text-white/90 text-lg">por prenda</div>
-                  <div className="text-sm text-white/80 mt-2 px-3 py-1 bg-white/20 rounded-full">
-                    Margen: {(cotizacionActual.margen_aplicado || 0).toFixed(1)}
-                    %
-                  </div>
-                </div>
-              </div>
             </div>
           </div>
         </div>

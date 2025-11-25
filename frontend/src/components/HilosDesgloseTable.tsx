@@ -71,6 +71,7 @@ const HilosDesgloseTableComponent = forwardRef<HilosDesgloseTableRef, HilosDesgl
 
   // Estado para modal de histórico de precios
   const [modalHistoricoAbierto, setModalHistoricoAbierto] = useState(false);
+  const [codigoMaterialSeleccionado, setCodigoMaterialSeleccionado] = useState<string>("");
 
   // Estado para Modo Detallado (costos directos)
   const [costosDetalladoLocal, setCostosDetalladoLocal] = useState<Record<string, number>>({}); // (cod_hilado) -> costo directo
@@ -455,18 +456,9 @@ const HilosDesgloseTableComponent = forwardRef<HilosDesgloseTableRef, HilosDesgl
                   <div className="flex items-center justify-center gap-1">
                     Costo/kg
                     {sortField === "costo_por_kg" && (sortDirection === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setModalHistoricoAbierto(true);
-                      }}
-                      className="ml-1 p-1 hover:bg-gray-200 rounded transition-colors"
-                      title="Ver histórico de precios"
-                    >
-                      <TrendingUp className="h-4 w-4 text-red-600 hover:text-red-800" />
-                    </button>
                   </div>
                 </th>
+                <th className="px-3 py-2 text-center font-semibold text-gray-700">Histórico</th>
                 {modo === "automatico" && (
                   <>
                     <th className="px-3 py-2 text-center font-semibold text-gray-700">Factor</th>
@@ -516,6 +508,18 @@ const HilosDesgloseTableComponent = forwardRef<HilosDesgloseTableRef, HilosDesgl
                     </td>
                     <td className="px-3 py-2 text-center text-gray-700">
                       ${hilo.costo_por_kg.toFixed(4)}
+                    </td>
+                    <td className="px-3 py-2 text-center">
+                      <button
+                        onClick={() => {
+                          setCodigoMaterialSeleccionado(hilo.cod_hilado);
+                          setModalHistoricoAbierto(true);
+                        }}
+                        className="p-1 hover:bg-gray-200 rounded transition-colors inline-block"
+                        title="Ver histórico de precios"
+                      >
+                        <TrendingUp className="h-4 w-4 text-red-600 hover:text-red-800" />
+                      </button>
                     </td>
                     {modo === "automatico" && (
                       <>
@@ -603,6 +607,7 @@ const HilosDesgloseTableComponent = forwardRef<HilosDesgloseTableRef, HilosDesgl
           isOpen={modalHistoricoAbierto}
           onClose={() => setModalHistoricoAbierto(false)}
           basePath={process.env.NEXT_PUBLIC_BASE_PATH || ''}
+          codigoMaterialInicial={codigoMaterialSeleccionado}
         />
       </div>
     </div>

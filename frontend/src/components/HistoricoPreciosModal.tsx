@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   LineChart,
   Line,
@@ -9,7 +9,7 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
-import { X, Search, TrendingUp } from "lucide-react";
+import { X, Search, TrendingUp, ArrowUp, ArrowDown, BarChart3 } from "lucide-react";
 
 interface PrecioHistorico {
   fecha: string;
@@ -32,12 +32,14 @@ interface Props {
   isOpen: boolean;
   onClose: () => void;
   basePath?: string;
+  codigoMaterialInicial?: string;
 }
 
 const HistoricoPreciosModal: React.FC<Props> = ({
   isOpen,
   onClose,
   basePath = "",
+  codigoMaterialInicial = "",
 }) => {
   const [codigoMaterial, setCodigoMaterial] = useState("");
   const [historicoData, setHistoricoData] = useState<HistoricoData | null>(
@@ -45,6 +47,13 @@ const HistoricoPreciosModal: React.FC<Props> = ({
   );
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState("");
+
+  // Cuando se abre el modal con un código inicial, pre-llenarlo y buscar automáticamente
+  useEffect(() => {
+    if (isOpen && codigoMaterialInicial) {
+      setCodigoMaterial(codigoMaterialInicial);
+    }
+  }, [isOpen, codigoMaterialInicial]);
 
   const buscarHistorico = async () => {
     if (!codigoMaterial.trim()) {
@@ -135,10 +144,7 @@ const HistoricoPreciosModal: React.FC<Props> = ({
             background: `linear-gradient(to right, ${colors.primary}, ${colors.primaryLight})`
           }}
         >
-          <div className="flex items-center gap-3">
-            <TrendingUp className="h-6 w-6" />
-            <h2 className="text-2xl font-bold">Histórico de Precios</h2>
-          </div>
+          <h2 className="text-2xl font-bold">Histórico de Precios</h2>
           <button
             onClick={onClose}
             className="p-2 rounded-lg transition-colors hover:opacity-80"
@@ -213,70 +219,45 @@ const HistoricoPreciosModal: React.FC<Props> = ({
 
           {/* Datos */}
           {historicoData && historicoData.datos.length > 0 && (
-            <div className="flex-1 flex gap-4 min-h-0">
-              {/* Left Panel - Info */}
-              <div className="w-48 flex flex-col gap-3 overflow-y-auto">
-                {/* Estadísticas - ARRIBA */}
-                <div className="space-y-2">
-                  <div
-                    className="p-2 rounded-lg text-center"
-                    style={{ backgroundColor: colors.primaryVeryLight }}
-                  >
-                    <p className="text-xs font-semibold" style={{ color: colors.primary }}>
-                      Máximo
-                    </p>
-                    <p className="text-sm font-bold" style={{ color: colors.primary }}>
-                      ${Math.max(...historicoData.datos.map((d) => d.precio)).toFixed(2)}
+            <div className="flex-1 flex flex-col gap-4 min-h-0">
+              {/* Estadísticas - Franja Superior */}
+              <div className="flex gap-3 rounded-lg p-4" style={{ backgroundColor: colors.primaryVeryLight }}>
+                {/* Máximo */}
+                <div className="flex-1 flex items-center gap-3 p-3 rounded-lg bg-white border" style={{ borderColor: colors.primaryLight }}>
+                  <ArrowUp className="h-6 w-6" style={{ color: colors.primary }} />
+                  <div>
+                    <p className="text-xs font-semibold" style={{ color: colors.primary }}>Máximo</p>
+                    <p className="text-lg font-bold" style={{ color: colors.primary }}>
+                      ${Math.max(...historicoData.datos.map((d) => d.precio)).toFixed(4)}
                     </p>
                   </div>
-                  <div
-                    className="p-2 rounded-lg text-center"
-                    style={{ backgroundColor: colors.primaryVeryLight }}
-                  >
-                    <p className="text-xs font-semibold" style={{ color: colors.primary }}>
-                      Promedio
-                    </p>
-                    <p className="text-sm font-bold" style={{ color: colors.primary }}>
+                </div>
+                {/* Promedio */}
+                <div className="flex-1 flex items-center gap-3 p-3 rounded-lg bg-white border" style={{ borderColor: colors.primaryLight }}>
+                  <BarChart3 className="h-6 w-6" style={{ color: colors.primary }} />
+                  <div>
+                    <p className="text-xs font-semibold" style={{ color: colors.primary }}>Promedio</p>
+                    <p className="text-lg font-bold" style={{ color: colors.primary }}>
                       ${(
                         historicoData.datos.reduce((sum, d) => sum + d.precio, 0) /
                         historicoData.datos.length
-                      ).toFixed(2)}
-                    </p>
-                  </div>
-                  <div
-                    className="p-2 rounded-lg text-center"
-                    style={{ backgroundColor: colors.primaryVeryLight }}
-                  >
-                    <p className="text-xs font-semibold" style={{ color: colors.primary }}>
-                      Mínimo
-                    </p>
-                    <p className="text-sm font-bold" style={{ color: colors.primary }}>
-                      ${Math.min(...historicoData.datos.map((d) => d.precio)).toFixed(2)}
+                      ).toFixed(4)}
                     </p>
                   </div>
                 </div>
-
-                {/* Info del material - ABAJO */}
-                <div
-                  className="p-3 rounded-lg"
-                  style={{ backgroundColor: colors.primaryVeryLight }}
-                >
-                  <p className="text-xs" style={{ color: colors.primary }}>
-                    <span className="font-semibold block">Código</span>{" "}
-                    {historicoData.cod_material}
-                  </p>
-                  <p className="text-xs mt-2" style={{ color: colors.primary }}>
-                    <span className="font-semibold block">Tipo</span>{" "}
-                    {historicoData.tipo_material}
-                  </p>
-                  <p className="text-xs mt-2" style={{ color: colors.primary }}>
-                    <span className="font-semibold block">Descripción</span>{" "}
-                    <span className="text-xs break-words">{historicoData.descripcion}</span>
-                  </p>
+                {/* Mínimo */}
+                <div className="flex-1 flex items-center gap-3 p-3 rounded-lg bg-white border" style={{ borderColor: colors.primaryLight }}>
+                  <ArrowDown className="h-6 w-6" style={{ color: colors.primary }} />
+                  <div>
+                    <p className="text-xs font-semibold" style={{ color: colors.primary }}>Mínimo</p>
+                    <p className="text-lg font-bold" style={{ color: colors.primary }}>
+                      ${Math.min(...historicoData.datos.map((d) => d.precio)).toFixed(4)}
+                    </p>
+                  </div>
                 </div>
               </div>
 
-              {/* Right Panel - Chart */}
+              {/* Chart - Ancho completo */}
               <div
                 className="flex-1 rounded-lg p-3"
                 style={{
@@ -310,7 +291,7 @@ const HistoricoPreciosModal: React.FC<Props> = ({
                         fontSize: 12,
                       }}
                       formatter={(value) =>
-                        `$${typeof value === "number" ? value.toFixed(2) : value}`
+                        `$${typeof value === "number" ? value.toFixed(4) : value}`
                       }
                       labelFormatter={(label) => `Mes: ${label}`}
                     />

@@ -72,6 +72,7 @@ const AviosDesgloseTableComponent = forwardRef<AviosDesgloseTableRef, AviosDesgl
 
   // Estado para modal de histórico de precios
   const [modalHistoricoAbierto, setModalHistoricoAbierto] = useState(false);
+  const [codigoMaterialSeleccionado, setCodigoMaterialSeleccionado] = useState<string>("");
 
   // Estado para Modo Automático (factores)
   const [factoresAvioLocal, setFactoresAvioLocal] = useState<Record<string, number>>({}); // (avio_codigo) -> factor
@@ -448,7 +449,6 @@ const AviosDesgloseTableComponent = forwardRef<AviosDesgloseTableRef, AviosDesgl
                     {sortField === "can_consuni" && (sortDirection === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
                   </div>
                 </th>
-
                 {/* Columnas según modo */}
                 {modo === "automatico" && (
                   <>
@@ -462,18 +462,9 @@ const AviosDesgloseTableComponent = forwardRef<AviosDesgloseTableRef, AviosDesgl
                       <div className="flex items-center justify-center gap-1">
                         Costo/unidad
                         {sortField === "costo_por_unidad" && (sortDirection === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setModalHistoricoAbierto(true);
-                          }}
-                          className="ml-1 p-1 hover:bg-gray-200 rounded transition-colors"
-                          title="Ver histórico de precios"
-                        >
-                          <TrendingUp className="h-4 w-4 text-red-600 hover:text-red-800" />
-                        </button>
                       </div>
                     </th>
+                    <th className="px-3 py-2 text-center font-semibold text-gray-700">Histórico</th>
                     <th className="px-3 py-2 text-center font-semibold text-gray-700">Factor</th>
                     <th className="px-3 py-2 text-center font-semibold text-gray-700">Costo/unidad Ajustado</th>
                     <th className="px-3 py-2 text-center font-semibold text-gray-700">Costo/prenda</th>
@@ -481,9 +472,12 @@ const AviosDesgloseTableComponent = forwardRef<AviosDesgloseTableRef, AviosDesgl
                 )}
 
                 {(modo === "detallado" || modo === "monto_fijo") && (
-                  <th className="px-3 py-2 text-center font-semibold text-gray-700">
-                    {modo === "detallado" ? "Costo/prenda" : "Costo/prenda (ref)"}
-                  </th>
+                  <>
+                    <th className="px-3 py-2 text-center font-semibold text-gray-700">
+                      {modo === "detallado" ? "Costo/prenda" : "Costo/prenda (ref)"}
+                    </th>
+                    <th className="px-3 py-2 text-center font-semibold text-gray-700">Histórico</th>
+                  </>
                 )}
 
                 <th
@@ -529,6 +523,18 @@ const AviosDesgloseTableComponent = forwardRef<AviosDesgloseTableRef, AviosDesgl
                           ${avio.costo_por_unidad.toFixed(4)}
                         </td>
                         <td className="px-3 py-2 text-center">
+                          <button
+                            onClick={() => {
+                              setCodigoMaterialSeleccionado(avio.avio_codigo);
+                              setModalHistoricoAbierto(true);
+                            }}
+                            className="p-1 hover:bg-gray-200 rounded transition-colors inline-block"
+                            title="Ver histórico de precios"
+                          >
+                            <TrendingUp className="h-4 w-4 text-red-600 hover:text-red-800" />
+                          </button>
+                        </td>
+                        <td className="px-3 py-2 text-center">
                           <input
                             type="number"
                             value={factoresInputLocal[clave] || avio.factor.toFixed(2)}
@@ -549,22 +555,50 @@ const AviosDesgloseTableComponent = forwardRef<AviosDesgloseTableRef, AviosDesgl
                     )}
 
                     {modo === "detallado" && (
-                      <td className="px-3 py-2 text-center">
-                        <input
-                          type="number"
-                          value={costosDetalladoInputLocal[clave] || costosDetalladoLocal[clave]?.toFixed(4) || avio.costo_por_prenda_final.toFixed(4)}
-                          onChange={(e) => handleCostoDetalladoChange(clave, e.target.value)}
-                          step="0.01"
-                          min="0"
-                          className="w-24 px-2 py-1 border border-gray-300 rounded text-center text-sm font-semibold text-blue-600"
-                        />
-                      </td>
+                      <>
+                        <td className="px-3 py-2 text-center">
+                          <input
+                            type="number"
+                            value={costosDetalladoInputLocal[clave] || costosDetalladoLocal[clave]?.toFixed(4) || avio.costo_por_prenda_final.toFixed(4)}
+                            onChange={(e) => handleCostoDetalladoChange(clave, e.target.value)}
+                            step="0.01"
+                            min="0"
+                            className="w-24 px-2 py-1 border border-gray-300 rounded text-center text-sm font-semibold text-blue-600"
+                          />
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          <button
+                            onClick={() => {
+                              setCodigoMaterialSeleccionado(avio.avio_codigo);
+                              setModalHistoricoAbierto(true);
+                            }}
+                            className="p-1 hover:bg-gray-200 rounded transition-colors inline-block"
+                            title="Ver histórico de precios"
+                          >
+                            <TrendingUp className="h-4 w-4 text-red-600 hover:text-red-800" />
+                          </button>
+                        </td>
+                      </>
                     )}
 
                     {modo === "monto_fijo" && (
-                      <td className="px-3 py-2 text-center text-gray-700">
-                        ${avio.costo_por_prenda_final.toFixed(4)}
-                      </td>
+                      <>
+                        <td className="px-3 py-2 text-center text-gray-700">
+                          ${avio.costo_por_prenda_final.toFixed(4)}
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          <button
+                            onClick={() => {
+                              setCodigoMaterialSeleccionado(avio.avio_codigo);
+                              setModalHistoricoAbierto(true);
+                            }}
+                            className="p-1 hover:bg-gray-200 rounded transition-colors inline-block"
+                            title="Ver histórico de precios"
+                          >
+                            <TrendingUp className="h-4 w-4 text-red-600 hover:text-red-800" />
+                          </button>
+                        </td>
+                      </>
                     )}
 
                     <td className="px-3 py-2 text-center text-xs text-gray-600">
@@ -607,6 +641,7 @@ const AviosDesgloseTableComponent = forwardRef<AviosDesgloseTableRef, AviosDesgl
           isOpen={modalHistoricoAbierto}
           onClose={() => setModalHistoricoAbierto(false)}
           basePath={process.env.NEXT_PUBLIC_BASE_PATH || ''}
+          codigoMaterialInicial={codigoMaterialSeleccionado}
         />
       </div>
     </div>

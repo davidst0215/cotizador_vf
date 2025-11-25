@@ -127,7 +127,8 @@ const AviosDesgloseTableComponent = forwardRef<AviosDesgloseTableRef, AviosDesgl
         if (clienteMarca) params.append("cliente_marca", clienteMarca);
         if (tipoPrenda) params.append("tipo_prenda", tipoPrenda);
 
-        const url = `/api/proxy/obtener-avios-detalladas?${params.toString()}`;
+        const basePath = process.env.NEXT_PUBLIC_BASE_PATH || '';
+        const url = `${basePath}/api/proxy/obtener-avios-detalladas?${params.toString()}`;
         const response = await fetch(url);
 
         if (!response.ok) {

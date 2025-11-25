@@ -107,12 +107,13 @@ const WipDesgloseTableComponent = forwardRef<WipDesgloseTableRef, WipDesgloseTab
       setError(null);
 
       try {
+        const basePath = process.env.NEXT_PUBLIC_BASE_PATH || '';
         const payload = {
           cod_ordpros: codOrdpros,
           version_calculo: versionCalculo,
         };
 
-        const response = await fetch("/api/proxy/desglose-wip-ops", {
+        const response = await fetch(`${basePath}/api/proxy/desglose-wip-ops`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),

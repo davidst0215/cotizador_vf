@@ -91,14 +91,21 @@ export const OpsSelectionTable: React.FC<OpsSelectionTableProps> = ({
       setError(null);
 
       try {
+        // Normalizar version_calculo: FLUIDO -> FLUIDA
+        const versionNormalizada = versionCalculo
+          .toUpperCase()
+          .replace(/FLUIDO(?!A)/, "FLUIDA")
+          .replace(/FLU(?!IDA|IDO)/, "FLUIDA") || "FLUIDA";
+
         const params = new URLSearchParams({
-          version_calculo: versionCalculo,
+          version_calculo: versionNormalizada,
           marca,
           tipo_prenda: tipoPrenda,
           tipo_estilo: tipoEstilo, // v2.0: Indicar si es estilo_propio o estilo_cliente
         });
 
-        const url = `/api/proxy/obtener-ops-detalladas/${codigoEstilo}?${params.toString()}`;
+        const basePath = process.env.NEXT_PUBLIC_BASE_PATH || '';
+        const url = `${basePath}/api/proxy/obtener-ops-detalladas/${codigoEstilo}?${params.toString()}`;
         const response = await fetch(url);
 
         if (!response.ok) {

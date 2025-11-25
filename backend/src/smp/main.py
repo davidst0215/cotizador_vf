@@ -1921,6 +1921,66 @@ async def obtener_versiones_calculo():
         )
 
 
+@app.get("/historico-precios/{cod_material}", tags=["Materiales"])
+async def obtener_historico_precios(cod_material: str, dias: int = 1095):
+    """[OK] Obtiene el histórico de precios de un material específico"""
+    try:
+        logger.info(f"📈 [HISTORICO] Buscando histrico para: {cod_material} (últimos {dias} días)")
+
+        query = f"""
+        SELECT
+            fecha_precio,
+            precio_unitario,
+            tipo_material,
+            descripcion,
+            unidad_medida,
+            fuente
+        FROM {settings.db_schema}.historico_precios_materiales
+        WHERE LOWER(TRIM(cod_material)) = LOWER(TRIM(%s))
+        ORDER BY fecha_precio DESC
+        """
+
+        resultado = await tdv_queries.db.query(query, (cod_material.strip(),))
+
+        if not resultado:
+            logger.warning(f"⚠️ [HISTORICO] No se encontraron precios para: {cod_material}")
+            return {
+                "cod_material": cod_material,
+                "datos": [],
+                "total_registros": 0,
+                "mensaje": f"No hay histórico para {cod_material}"
+            }
+
+        # Transformar resultado
+        datos_procesados = [
+            {
+                "fecha": row.get("fecha_precio"),
+                "precio": float(row.get("precio_unitario", 0)),
+                "tipo_material": row.get("tipo_material"),
+                "descripcion": row.get("descripcion"),
+                "unidad_medida": row.get("unidad_medida"),
+                "fuente": row.get("fuente"),
+            }
+            for row in resultado
+        ]
+
+        logger.info(f"✅ [HISTORICO] Encontrados {len(datos_procesados)} registros para {cod_material}")
+
+        return {
+            "cod_material": cod_material,
+            "tipo_material": datos_procesados[0].get("tipo_material") if datos_procesados else None,
+            "descripcion": datos_procesados[0].get("descripcion") if datos_procesados else None,
+            "datos": datos_procesados,
+            "total_registros": len(datos_procesados)
+        }
+
+    except Exception as e:
+        logger.error(f"❌ [ERROR] Error obteniendo histórico de precios: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Error obteniendo histórico: {str(e)}"
+        )
+
+
 # =====================================================================
 # STARTUP Y CONFIGURACIN
 # =====================================================================

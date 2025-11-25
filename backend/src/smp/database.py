@@ -2602,6 +2602,7 @@ class TDVQueries:
         #  QUERY CORREGIDA: marca + filtro prendas >= 200
         version_norm = version_calculo
 
+        marca_clause = "AND marca = %s" if marca else ""
         query_variabilidad = f"""
         SELECT
           wip_id,
@@ -2623,7 +2624,7 @@ class TDVQueries:
           )
           AND costo_por_prenda > 0
           AND total_prendas >= 200
-          {f"AND marca = %s" if marca else ""}
+          {marca_clause}
         GROUP BY wip_id, EXTRACT(YEAR FROM mes), EXTRACT(MONTH FROM mes)
         ORDER BY wip_id, ao DESC, mes DESC
         """

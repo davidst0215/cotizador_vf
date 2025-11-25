@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState, useCallback, useEffect, forwardRef, useRef } from "react";
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronDown, ChevronUp, TrendingUp } from "lucide-react";
+import HistoricoPreciosModal from "./HistoricoPreciosModal";
 
 // Interfaz para datos de hilos desde la BD
 interface Hilo {
@@ -67,6 +68,9 @@ const HilosDesgloseTableComponent = forwardRef<HilosDesgloseTableRef, HilosDesgl
 
   // ✨ 3 Modos de configuración
   const [modo, setModo] = useState<"detallado" | "monto_fijo" | "automatico">("automatico");
+
+  // Estado para modal de histórico de precios
+  const [modalHistoricoAbierto, setModalHistoricoAbierto] = useState(false);
 
   // Estado para Modo Detallado (costos directos)
   const [costosDetalladoLocal, setCostosDetalladoLocal] = useState<Record<string, number>>({}); // (cod_hilado) -> costo directo
@@ -451,6 +455,16 @@ const HilosDesgloseTableComponent = forwardRef<HilosDesgloseTableRef, HilosDesgl
                   <div className="flex items-center justify-center gap-1">
                     Costo/kg
                     {sortField === "costo_por_kg" && (sortDirection === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setModalHistoricoAbierto(true);
+                      }}
+                      className="ml-1 p-1 hover:bg-gray-200 rounded transition-colors"
+                      title="Ver histórico de precios"
+                    >
+                      <TrendingUp className="h-4 w-4 text-red-600 hover:text-red-800" />
+                    </button>
                   </div>
                 </th>
                 {modo === "automatico" && (
@@ -583,6 +597,13 @@ const HilosDesgloseTableComponent = forwardRef<HilosDesgloseTableRef, HilosDesgl
             </p>
           )}
         </div>
+
+        {/* Modal de Histórico de Precios */}
+        <HistoricoPreciosModal
+          isOpen={modalHistoricoAbierto}
+          onClose={() => setModalHistoricoAbierto(false)}
+          basePath={process.env.NEXT_PUBLIC_BASE_PATH || ''}
+        />
       </div>
     </div>
   );

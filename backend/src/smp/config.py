@@ -152,6 +152,16 @@ class FactoresTDV:
         "OTRAS MARCAS": 1.10,  # Default para cualquier otra marca
     }
 
+    # CONFIGURABLES - Vector de Ajuste v2.0 (Margen + Dos Factores)
+    # Margen base (porcentaje): define el 15% que se aplica al vector total
+    MARGEN_BASE_PORCENTAJE: float = 0.15  # 15% = 0.15
+
+    # Factores configurables del vector total
+    # Vector Total = factor_esfuerzo × factor_marca
+    # Puede ajustarse el peso relativo de cada factor aquí
+    PESO_FACTOR_ESFUERZO: float = 1.0  # Multiplicador del factor esfuerzo
+    PESO_FACTOR_MARCA: float = 1.0      # Multiplicador del factor marca
+
     # WIPs disponibles (basado en anlisis previo)
     WIPS_TEXTILES = ["10c", "14", "16", "19a", "19c", "24"]
     WIPS_MANUFACTURA = ["34", "37", "40", "43", "44", "45", "49", "50"]

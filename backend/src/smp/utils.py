@@ -723,11 +723,14 @@ class CotizadorTDV:
 
         _, factor_esfuerzo = factores.obtener_factor_esfuerzo(esfuerzo_utilizado)
 
-        # Vector total (v2.0): Solo factor_esfuerzo × factor_marca
+        # Vector total (v2.0): factor_esfuerzo × factor_marca (con pesos configurables)
         # Nota: factor_lote y factor_estilo fueron eliminados
-        vector_total = factor_esfuerzo * factor_marca
-        precio_final = costo_base_total * (1 + 0.15 * vector_total)
-        margen_aplicado = 15 * vector_total
+        # Los pesos permiten ajustar la influencia relativa de cada factor
+        vector_total = (factor_esfuerzo * factores.PESO_FACTOR_ESFUERZO) * (factor_marca * factores.PESO_FACTOR_MARCA)
+
+        # Aplicar margen configurable (MARGEN_BASE_PORCENTAJE = 0.15 = 15% por defecto)
+        precio_final = costo_base_total * (1 + factores.MARGEN_BASE_PORCENTAJE * vector_total)
+        margen_aplicado = (factores.MARGEN_BASE_PORCENTAJE * 100) * vector_total
 
         #  OBTENER INFORMACIN COMERCIAL
         info_comercial = await self._obtener_info_comercial_mejorada(input_data)
@@ -894,11 +897,14 @@ class CotizadorTDV:
 
         _, factor_esfuerzo = factores.obtener_factor_esfuerzo(esfuerzo_estimado)
 
-        # Vector total (v2.0): Solo factor_esfuerzo × factor_marca
+        # Vector total (v2.0): factor_esfuerzo × factor_marca (con pesos configurables)
         # Nota: factor_lote y factor_estilo fueron eliminados
-        vector_total = factor_esfuerzo * factor_marca
-        precio_final = costo_base_total * (1 + 0.15 * vector_total)
-        margen_aplicado = 15 * vector_total
+        # Los pesos permiten ajustar la influencia relativa de cada factor
+        vector_total = (factor_esfuerzo * factores.PESO_FACTOR_ESFUERZO) * (factor_marca * factores.PESO_FACTOR_MARCA)
+
+        # Aplicar margen configurable (MARGEN_BASE_PORCENTAJE = 0.15 = 15% por defecto)
+        precio_final = costo_base_total * (1 + factores.MARGEN_BASE_PORCENTAJE * vector_total)
+        margen_aplicado = (factores.MARGEN_BASE_PORCENTAJE * 100) * vector_total
 
         #  INFORMACIN COMERCIAL
         info_comercial = await self._obtener_info_comercial_mejorada(input_data)

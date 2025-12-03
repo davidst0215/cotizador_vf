@@ -245,7 +245,7 @@ const HistoricoPreciosModal: React.FC<Props> = ({
           )}
 
           {/* Datos */}
-          {historicoData && (historicoData.precios_almacen.length > 0 || historicoData.costos_compras?.length! > 0) && (
+          {historicoData && (historicoData.precios_almacen.length > 0 || (historicoData.costos_compras?.length || 0) > 0) && (
             <div className="flex-1 flex flex-col gap-4 min-h-0">
               {/* Estadísticas - Franja Superior */}
               <div className="flex gap-3 rounded-lg p-4" style={{ backgroundColor: colors.primaryVeryLight }}>
@@ -257,7 +257,7 @@ const HistoricoPreciosModal: React.FC<Props> = ({
                     <p className="text-lg font-bold" style={{ color: colors.primary }}>
                       ${Math.max(
                         ...(historicoData.precios_almacen.length > 0 ? historicoData.precios_almacen.map((d) => d.precio) : [0]),
-                        ...(historicoData.costos_compras?.length! > 0 ? historicoData.costos_compras!.map((d) => d.precio) : [0])
+                        ...((historicoData.costos_compras?.length || 0) > 0 ? (historicoData.costos_compras || []).map((d) => d.precio) : [0])
                       ).toFixed(4)}
                     </p>
                   </div>
@@ -284,7 +284,7 @@ const HistoricoPreciosModal: React.FC<Props> = ({
                     <p className="text-lg font-bold" style={{ color: colors.primary }}>
                       ${Math.min(
                         ...(historicoData.precios_almacen.length > 0 ? historicoData.precios_almacen.map((d) => d.precio) : [Infinity]),
-                        ...(historicoData.costos_compras?.length! > 0 ? historicoData.costos_compras!.map((d) => d.precio) : [Infinity])
+                        ...((historicoData.costos_compras?.length || 0) > 0 ? (historicoData.costos_compras || []).map((d) => d.precio) : [Infinity])
                       ).toFixed(4)}
                     </p>
                   </div>

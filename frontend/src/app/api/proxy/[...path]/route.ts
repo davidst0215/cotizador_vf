@@ -1,9 +1,9 @@
 // app/api/proxy/[...path]/route.ts
 import type { NextRequest } from "next/server";
 
-// server-only internal API (e.g. "http://internal-api:8000")
-// Default to localhost:8000 since frontend and backend always run on same machine
-const INTERNAL_API_URL = process.env.INTERNAL_API_URL || "http://localhost:8000";
+// server-only internal API (e.g. "http://internal-api:8001")
+// Default to localhost:8001 since frontend and backend always run on same machine
+const INTERNAL_API_URL = process.env.INTERNAL_API_URL || "http://localhost:8001";
 const PROXY_TIMEOUT_MS = parseInt(process.env.PROXY_TIMEOUT_MS || "10000", 10);
 const PROXY_ALLOWLIST = (process.env.PROXY_ALLOWLIST || "")
   .split(",")

@@ -14,17 +14,27 @@ import { X, Search, TrendingUp, ArrowUp, ArrowDown, BarChart3 } from "lucide-rea
 interface PrecioHistorico {
   fecha: string;
   precio: number;
-  tipo_material: string;
-  descripcion: string;
-  unidad_medida: string;
-  fuente: string;
+  tipo_material?: string;
+  descripcion?: string;
+  unidad_medida?: string;
+  fuente?: string;
+}
+
+interface CompraHistorico {
+  fecha: string;
+  precio: number;
+  cantidad_comprada?: number;
+  importe?: number;
+  costo_kg?: number;
 }
 
 interface HistoricoData {
   cod_material: string;
   tipo_material: string | null;
   descripcion: string | null;
-  datos: PrecioHistorico[];
+  precios_almacen: PrecioHistorico[];
+  costos_compras?: CompraHistorico[];
+  disponibles: string[];
   total_registros: number;
 }
 
@@ -78,24 +88,40 @@ const HistoricoPreciosModal: React.FC<Props> = ({
 
       const data: HistoricoData = await response.json();
 
-      if (!data.datos || data.datos.length === 0) {
+      if ((!data.precios_almacen || data.precios_almacen.length === 0) && (!data.costos_compras || data.costos_compras.length === 0)) {
         setError(`No se encontró histórico para: ${codigoMaterial}`);
         setHistoricoData(null);
       } else {
-        // Agrupar por mes y calcular promedio
-        const datosAgrupados: { [key: string]: number[] } = {};
-
-        data.datos.forEach((row) => {
-          // Extraer año-mes de la fecha (YYYY-MM)
+        // Curva 1: Agrupar precios de almacén por mes
+        const preciosAgrupados: { [key: string]: number[] } = {};
+        data.precios_almacen?.forEach((row) => {
           const fecha = row.fecha.substring(0, 7);
-          if (!datosAgrupados[fecha]) {
-            datosAgrupados[fecha] = [];
+          if (!preciosAgrupados[fecha]) {
+            preciosAgrupados[fecha] = [];
           }
-          datosAgrupados[fecha].push(row.precio);
+          preciosAgrupados[fecha].push(row.precio);
         });
 
-        // Convertir a array de datos mensuales
-        const datosPromedios = Object.entries(datosAgrupados)
+        // Convertir a array de datos mensuales (Precios Almacén)
+        const preciosPromedios = Object.entries(preciosAgrupados)
+          .map(([mes, precios]) => ({
+            fecha: mes,
+            precio: precios.reduce((a, b) => a + b, 0) / precios.length,
+          }))
+          .sort((a, b) => a.fecha.localeCompare(b.fecha));
+
+        // Curva 2: Agrupar costos de compras por mes
+        const comprasAgrupadas: { [key: string]: number[] } = {};
+        data.costos_compras?.forEach((row) => {
+          const fecha = row.fecha.substring(0, 7);
+          if (!comprasAgrupadas[fecha]) {
+            comprasAgrupadas[fecha] = [];
+          }
+          comprasAgrupadas[fecha].push(row.precio);
+        });
+
+        // Convertir a array de datos mensuales (Costos Compras)
+        const comprasPromedios = Object.entries(comprasAgrupadas)
           .map(([mes, precios]) => ({
             fecha: mes,
             precio: precios.reduce((a, b) => a + b, 0) / precios.length,
@@ -104,7 +130,8 @@ const HistoricoPreciosModal: React.FC<Props> = ({
 
         setHistoricoData({
           ...data,
-          datos: datosPromedios as any,
+          precios_almacen: preciosPromedios as any,
+          costos_compras: comprasPromedios as any,
         });
         setError("");
       }
@@ -218,7 +245,7 @@ const HistoricoPreciosModal: React.FC<Props> = ({
           )}
 
           {/* Datos */}
-          {historicoData && historicoData.datos.length > 0 && (
+          {historicoData && (historicoData.precios_almacen.length > 0 || historicoData.costos_compras?.length! > 0) && (
             <div className="flex-1 flex flex-col gap-4 min-h-0">
               {/* Estadísticas - Franja Superior */}
               <div className="flex gap-3 rounded-lg p-4" style={{ backgroundColor: colors.primaryVeryLight }}>
@@ -228,7 +255,10 @@ const HistoricoPreciosModal: React.FC<Props> = ({
                   <div>
                     <p className="text-xs font-semibold" style={{ color: colors.primary }}>Máximo</p>
                     <p className="text-lg font-bold" style={{ color: colors.primary }}>
-                      ${Math.max(...historicoData.datos.map((d) => d.precio)).toFixed(4)}
+                      ${Math.max(
+                        ...(historicoData.precios_almacen.length > 0 ? historicoData.precios_almacen.map((d) => d.precio) : [0]),
+                        ...(historicoData.costos_compras?.length! > 0 ? historicoData.costos_compras!.map((d) => d.precio) : [0])
+                      ).toFixed(4)}
                     </p>
                   </div>
                 </div>
@@ -239,8 +269,9 @@ const HistoricoPreciosModal: React.FC<Props> = ({
                     <p className="text-xs font-semibold" style={{ color: colors.primary }}>Promedio</p>
                     <p className="text-lg font-bold" style={{ color: colors.primary }}>
                       ${(
-                        historicoData.datos.reduce((sum, d) => sum + d.precio, 0) /
-                        historicoData.datos.length
+                        (historicoData.precios_almacen.reduce((sum, d) => sum + d.precio, 0) +
+                          (historicoData.costos_compras?.reduce((sum, d) => sum + d.precio, 0) || 0)) /
+                        (historicoData.precios_almacen.length + (historicoData.costos_compras?.length || 0))
                       ).toFixed(4)}
                     </p>
                   </div>
@@ -251,7 +282,10 @@ const HistoricoPreciosModal: React.FC<Props> = ({
                   <div>
                     <p className="text-xs font-semibold" style={{ color: colors.primary }}>Mínimo</p>
                     <p className="text-lg font-bold" style={{ color: colors.primary }}>
-                      ${Math.min(...historicoData.datos.map((d) => d.precio)).toFixed(4)}
+                      ${Math.min(
+                        ...(historicoData.precios_almacen.length > 0 ? historicoData.precios_almacen.map((d) => d.precio) : [Infinity]),
+                        ...(historicoData.costos_compras?.length! > 0 ? historicoData.costos_compras!.map((d) => d.precio) : [Infinity])
+                      ).toFixed(4)}
                     </p>
                   </div>
                 </div>
@@ -266,7 +300,15 @@ const HistoricoPreciosModal: React.FC<Props> = ({
                 }}
               >
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={historicoData.datos}>
+                  <LineChart
+                    data={historicoData.costos_compras && historicoData.costos_compras.length > 0
+                      ? historicoData.precios_almacen.map((d, i) => ({
+                          ...d,
+                          precio_compra: historicoData.costos_compras?.[i]?.precio
+                        }))
+                      : historicoData.precios_almacen
+                    }
+                  >
                     <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                     <XAxis
                       dataKey="fecha"
@@ -277,7 +319,7 @@ const HistoricoPreciosModal: React.FC<Props> = ({
                       tick={{ fontSize: 11 }}
                       stroke="#9ca3af"
                       label={{
-                        value: `Precio (${historicoData.datos[0]?.unidad_medida || "UNIDAD"})`,
+                        value: `Precio (${historicoData.precios_almacen[0]?.unidad_medida || "UNIDAD"})`,
                         angle: -90,
                         position: "insideLeft",
                         style: { textAnchor: "middle", fontSize: 11 },
@@ -303,8 +345,20 @@ const HistoricoPreciosModal: React.FC<Props> = ({
                       strokeWidth={2}
                       dot={{ fill: colors.primary, r: 4 }}
                       activeDot={{ r: 6 }}
-                      name="Precio Promedio Mensual"
+                      name="Costo Almacén (Requerido)"
                     />
+                    {historicoData.costos_compras && historicoData.costos_compras.length > 0 && (
+                      <Line
+                        type="monotone"
+                        dataKey="precio_compra"
+                        stroke={colors.chartLight}
+                        strokeWidth={2}
+                        dot={{ fill: colors.chartLight, r: 4 }}
+                        activeDot={{ r: 6 }}
+                        name="Costo Órdenes Compra (Real)"
+                        connectNulls
+                      />
+                    )}
                   </LineChart>
                 </ResponsiveContainer>
               </div>

@@ -1923,11 +1923,14 @@ async def obtener_versiones_calculo():
 
 @app.get("/historico-precios/{cod_material}", tags=["Materiales"])
 async def obtener_historico_precios(cod_material: str, dias: int = 1095):
-    """[OK] Obtiene el histórico de precios de un material específico"""
+    """[OK] Obtiene el histórico de precios y compras de un material específico con dos curvas (flexible)"""
     try:
-        logger.info(f"📈 [HISTORICO] Buscando histrico para: {cod_material} (últimos {dias} días)")
+        # Normalizar código de material: trim + uppercase
+        cod_material_limpio = cod_material.strip().upper()
+        logger.info(f"📈 [HISTORICO] Buscando histórico para: {cod_material_limpio} (últimos {dias} días)")
 
-        query = f"""
+        # Consulta 1: Curva de Precios de Almacén (Costo Requerido)
+        query_precios_almacen = f"""
         SELECT
             fecha_precio,
             precio_unitario,
@@ -1936,46 +1939,99 @@ async def obtener_historico_precios(cod_material: str, dias: int = 1095):
             unidad_medida,
             fuente
         FROM {settings.db_schema}.historico_precios_materiales
-        WHERE LOWER(TRIM(cod_material)) = LOWER(TRIM(%s))
+        WHERE TRIM(UPPER(cod_material)) = %s
         ORDER BY fecha_precio DESC
         """
 
-        resultado = await tdv_queries.db.query(query, (cod_material.strip(),))
+        # Consulta 2: Curva de Costos de Órdenes de Compra (Costo Real)
+        query_costos_compras = f"""
+        SELECT
+            año_compra,
+            mes_compra,
+            precio_unitario_promedio,
+            cantidad_comprada_total,
+            importe_total_mes,
+            costo_por_kg_promedio
+        FROM {settings.db_schema}.historico_compras_materiales
+        WHERE TRIM(UPPER(cod_material)) = %s
+        ORDER BY año_compra DESC, mes_compra DESC
+        """
 
-        if not resultado:
-            logger.warning(f"⚠️ [HISTORICO] No se encontraron precios para: {cod_material}")
-            return {
-                "cod_material": cod_material,
-                "datos": [],
-                "total_registros": 0,
-                "mensaje": f"No hay histórico para {cod_material}"
-            }
+        logger.info(f"🔍 [DEBUG] Buscando con cod_material='{cod_material_limpio}' en schema={settings.db_schema}")
 
-        # Transformar resultado
-        datos_procesados = [
+        # Ejecutar ambas queries en paralelo (pero sin bloqueo mutuo)
+        resultado_precios_almacen = await tdv_queries.db.query(query_precios_almacen, (cod_material_limpio,))
+        logger.info(f"✅ [CURVA 1] Precios Almacén: {len(resultado_precios_almacen)} registros")
+
+        resultado_costos_compras = []
+        try:
+            logger.info(f"🔍 [CURVA 2] Ejecutando query costos de compras...")
+            resultado_costos_compras = await tdv_queries.db.query(query_costos_compras, (cod_material_limpio,))
+            logger.info(f"✅ [CURVA 2] Costos Órdenes Compra: {len(resultado_costos_compras)} registros")
+        except Exception as e:
+            logger.warning(f"⚠️ [CURVA 2] Sin datos de compras (no es crítico): {str(e)}")
+            resultado_costos_compras = []
+
+        # Transformar Curva 1: Precios de Almacén
+        precios_almacen = [
             {
                 "fecha": row.get("fecha_precio"),
-                "precio": float(row.get("precio_unitario", 0)),
+                "precio": float(row.get("precio_unitario") or 0),
                 "tipo_material": row.get("tipo_material"),
                 "descripcion": row.get("descripcion"),
                 "unidad_medida": row.get("unidad_medida"),
                 "fuente": row.get("fuente"),
             }
-            for row in resultado
+            for row in resultado_precios_almacen
         ]
 
-        logger.info(f"✅ [HISTORICO] Encontrados {len(datos_procesados)} registros para {cod_material}")
+        # Transformar Curva 2: Costos de Órdenes de Compra
+        costos_compras = [
+            {
+                "fecha": f"{row.get('año_compra')}-{str((row.get('mes_compra') or 1)).zfill(2)}-01",
+                "precio": float(row.get("precio_unitario_promedio") or 0),
+                "cantidad_comprada": float(row.get("cantidad_comprada_total") or 0),
+                "importe": float(row.get("importe_total_mes") or 0),
+                "costo_kg": float(row.get("costo_por_kg_promedio") or 0),
+            }
+            for row in resultado_costos_compras
+        ]
+
+        # Si no hay datos en ninguna tabla, retornar vacío
+        if not precios_almacen and not costos_compras:
+            logger.warning(f"⚠️ [HISTORICO] No se encontraron datos para: {cod_material_limpio}")
+            return {
+                "cod_material": cod_material_limpio,
+                "precios_almacen": [],
+                "costos_compras": [],
+                "disponibles": [],
+                "total_registros": 0,
+                "mensaje": f"No hay histórico para {cod_material_limpio}"
+            }
+
+        # Construir respuesta con información de qué curvas están disponibles
+        disponibles = []
+        if precios_almacen:
+            disponibles.append("precios_almacen")
+        if costos_compras:
+            disponibles.append("costos_compras")
+
+        logger.info(f"✅ [HISTORICO] Encontrados registros - Almacén: {len(precios_almacen)}, Compras: {len(costos_compras)}")
 
         return {
-            "cod_material": cod_material,
-            "tipo_material": datos_procesados[0].get("tipo_material") if datos_procesados else None,
-            "descripcion": datos_procesados[0].get("descripcion") if datos_procesados else None,
-            "datos": datos_procesados,
-            "total_registros": len(datos_procesados)
+            "cod_material": cod_material_limpio,
+            "tipo_material": precios_almacen[0].get("tipo_material") if precios_almacen else None,
+            "descripcion": precios_almacen[0].get("descripcion") if precios_almacen else (costos_compras[0].get("descripcion") if costos_compras else None),
+            "precios_almacen": precios_almacen,
+            "costos_compras": costos_compras,
+            "disponibles": disponibles,  # Indica qué curvas están presentes
+            "total_registros": len(precios_almacen) + len(costos_compras)
         }
 
     except Exception as e:
         logger.error(f"❌ [ERROR] Error obteniendo histórico de precios: {e}")
+        import traceback
+        logger.error(f"❌ [TRACEBACK] {traceback.format_exc()}")
         raise HTTPException(
             status_code=500, detail=f"Error obteniendo histórico: {str(e)}"
         )

@@ -2320,10 +2320,30 @@ const SistemaCotizadorTDV = () => {
               // ✨ Actualizar también cotizacionActual con los nuevos costos separados
               setCotizacionActual((prev) => {
                 if (!prev) return prev;
+
+                // Recalcular costo_base_total sumando todos los componentes actualizados
+                const nuevosCostos = {
+                  costo_textil: prev.costo_textil || 0,
+                  costo_manufactura: prev.costo_manufactura || 0,
+                  costo_avios: totalAvios, // Actualizado
+                  costo_materia_prima: totalHilos + totalTelas, // Actualizado
+                  costo_indirecto_fijo: prev.costo_indirecto_fijo || 0,
+                  gasto_administracion: prev.gasto_administracion || 0,
+                  gasto_ventas: prev.gasto_ventas || 0,
+                };
+                const costoBaseTotalActualizado = Object.values(nuevosCostos).reduce((a, b) => a + b, 0);
+
+                // Recalcular precio_final con el nuevo costo_base_total
+                const vectorTotal = prev.vector_total || 1;
+                const margenBase = 0.15; // 15% margen
+                const precioFinalActualizado = costoBaseTotalActualizado * (1 + margenBase * vectorTotal);
+
                 return {
                   ...prev,
                   costo_materia_prima: totalHilos + totalTelas,
                   costo_avios: totalAvios,
+                  costo_base_total: costoBaseTotalActualizado, // ✨ Recalculado
+                  precio_final: precioFinalActualizado, // ✨ Recalculado con nuevo costo base
                   // ✨ Agregar campos separados para visualización en desglose
                   ...(costosMateriales.costo_hilos_materia_prima !== undefined && {
                     costo_hilos_materia_prima: costosMateriales.costo_hilos_materia_prima,

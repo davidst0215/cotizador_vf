@@ -1,5 +1,5 @@
-import React from "react";
-import { RotateCcw, Settings2 } from "lucide-react";
+import React, { useState, useEffect, useRef } from "react";
+import { RotateCcw, Settings2, Plus, Minus } from "lucide-react";
 
 // Estilos CSS para inputs numéricos
 const inputStyles = `
@@ -44,6 +44,124 @@ const DEFAULTS: ParametrosAjustables = {
   margenBase: 0.15,
   pesoFactorEsfuerzo: 1.0,
   pesoFactorMarca: 1.0,
+};
+
+// Componente helper para input numérico con estado local y botones de incremento/decremento
+interface NumericInputProps {
+  value: number;
+  onChange: (value: number) => void;
+  min: number;
+  max: number;
+  step: number;
+  label: string;
+  suffix: string;
+  borderColor: string;
+  buttonColor: string;
+}
+
+const NumericInput: React.FC<NumericInputProps> = ({
+  value,
+  onChange,
+  min,
+  max,
+  step,
+  label,
+  suffix,
+  borderColor,
+  buttonColor,
+}) => {
+  const [localValue, setLocalValue] = useState<string>(value.toFixed(2));
+  const prevValueRef = useRef<number>(value);
+
+  // Sincronizar cuando el valor externo cambia significativamente
+  useEffect(() => {
+    if (Math.abs(value - prevValueRef.current) > step / 2) {
+      prevValueRef.current = value;
+      setLocalValue(value.toFixed(2));
+    }
+  }, [value, step]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newVal = e.target.value;
+    setLocalValue(newVal);
+
+    const numVal = parseFloat(newVal);
+    if (!isNaN(numVal)) {
+      const clamped = Math.max(min, Math.min(max, numVal));
+      onChange(clamped);
+    }
+  };
+
+  const handleBlur = () => {
+    const numVal = parseFloat(localValue);
+    if (isNaN(numVal)) {
+      setLocalValue(value.toFixed(2));
+    } else {
+      const clamped = Math.max(min, Math.min(max, numVal));
+      setLocalValue(clamped.toFixed(2));
+      onChange(clamped);
+    }
+  };
+
+  const handleIncrement = () => {
+    const numVal = parseFloat(localValue) || min;
+    const newVal = Math.min(max, numVal + step);
+    setLocalValue(newVal.toFixed(2));
+    onChange(newVal);
+  };
+
+  const handleDecrement = () => {
+    const numVal = parseFloat(localValue) || max;
+    const newVal = Math.max(min, numVal - step);
+    setLocalValue(newVal.toFixed(2));
+    onChange(newVal);
+  };
+
+  return (
+    <div>
+      <label className={`font-semibold block mb-2`} style={{ color: borderColor }}>
+        {label}
+      </label>
+      <div className="flex gap-1 items-center">
+        <button
+          type="button"
+          onClick={handleDecrement}
+          className="px-2 py-2 rounded-lg transition-colors hover:opacity-75"
+          style={{ backgroundColor: buttonColor, color: "white" }}
+        >
+          <Minus className="h-4 w-4" />
+        </button>
+        <input
+          type="number"
+          min={min}
+          max={max}
+          step={step}
+          value={localValue}
+          onChange={handleChange}
+          onBlur={handleBlur}
+          className="flex-1 px-3 py-2 border-2 rounded-lg focus:outline-none transition-colors bg-white"
+          style={{
+            borderColor: borderColor,
+            "--tw-ring-color": borderColor,
+          } as React.CSSProperties}
+        />
+        <span className="text-sm font-semibold min-w-fit" style={{ color: borderColor }}>
+          {suffix}
+        </span>
+        <button
+          type="button"
+          onClick={handleIncrement}
+          className="px-2 py-2 rounded-lg transition-colors hover:opacity-75"
+          style={{ backgroundColor: buttonColor, color: "white" }}
+        >
+          <Plus className="h-4 w-4" />
+        </button>
+      </div>
+      <div className="text-xs mt-1" style={{ color: borderColor }}>
+        Rango: {min} a {max} | Incremento: {step}
+      </div>
+    </div>
+  );
 };
 
 export const PanelConfiguracionPrecios: React.FC<PanelConfiguracionPreciosProps> = ({
@@ -101,70 +219,43 @@ export const PanelConfiguracionPrecios: React.FC<PanelConfiguracionPreciosProps>
       {isOpen && (
         <div className="space-y-4 p-4 bg-red-50 rounded-lg border border-red-200">
           {/* Margen Base */}
-          <div>
-            <label className="font-semibold text-red-900 block mb-2">
-              Margen Base (%)
-            </label>
-            <div className="flex gap-2 items-center">
-              <input
-                type="number"
-                min="0"
-                max="100"
-                step="0.01"
-                value={(parametros.margenBase * 100).toFixed(2)}
-                onChange={(e) => handleMargenChange(parseFloat(e.target.value) / 100)}
-                className="flex-1 px-3 py-2 border-2 border-red-300 rounded-lg focus:border-red-600 transition-colors bg-white"
-              />
-              <span className="text-sm font-semibold text-red-600 min-w-fit">%</span>
-            </div>
-            <div className="text-xs text-red-600 mt-1">
-              Rango: 0% a 100% (default: 15%) | Incremento: 0.01%
-            </div>
-          </div>
+          <NumericInput
+            value={parametros.margenBase * 100}
+            onChange={(v) => handleMargenChange(v / 100)}
+            min={0}
+            max={100}
+            step={0.01}
+            label="Margen Base (%)"
+            suffix="%"
+            borderColor="#dc2626"
+            buttonColor="#dc2626"
+          />
 
           {/* Peso Factor Esfuerzo */}
-          <div>
-            <label className="font-semibold text-orange-900 block mb-2">
-              Peso Factor Esfuerzo
-            </label>
-            <div className="flex gap-2 items-center">
-              <input
-                type="number"
-                min="0.1"
-                max="3.0"
-                step="0.01"
-                value={parametros.pesoFactorEsfuerzo.toFixed(2)}
-                onChange={(e) => handlePesoEsfuerzoChange(parseFloat(e.target.value))}
-                className="flex-1 px-3 py-2 border-2 border-orange-300 rounded-lg focus:border-orange-600 transition-colors bg-white"
-              />
-              <span className="text-sm font-semibold text-orange-600 min-w-fit">x</span>
-            </div>
-            <div className="text-xs text-orange-600 mt-1">
-              Rango: 0.1x a 3.0x (default: 1.0x) | Incremento: 0.01x
-            </div>
-          </div>
+          <NumericInput
+            value={parametros.pesoFactorEsfuerzo}
+            onChange={handlePesoEsfuerzoChange}
+            min={0.1}
+            max={3.0}
+            step={0.01}
+            label="Peso Factor Esfuerzo"
+            suffix="x"
+            borderColor="#ea580c"
+            buttonColor="#ea580c"
+          />
 
           {/* Peso Factor Marca */}
-          <div>
-            <label className="font-semibold text-yellow-900 block mb-2">
-              Peso Factor Marca
-            </label>
-            <div className="flex gap-2 items-center">
-              <input
-                type="number"
-                min="0.1"
-                max="3.0"
-                step="0.01"
-                value={parametros.pesoFactorMarca.toFixed(2)}
-                onChange={(e) => handlePesoMarcaChange(parseFloat(e.target.value))}
-                className="flex-1 px-3 py-2 border-2 border-yellow-300 rounded-lg focus:border-yellow-600 transition-colors bg-white"
-              />
-              <span className="text-sm font-semibold text-yellow-600 min-w-fit">x</span>
-            </div>
-            <div className="text-xs text-yellow-600 mt-1">
-              Rango: 0.1x a 3.0x (default: 1.0x) | Incremento: 0.01x
-            </div>
-          </div>
+          <NumericInput
+            value={parametros.pesoFactorMarca}
+            onChange={handlePesoMarcaChange}
+            min={0.1}
+            max={3.0}
+            step={0.01}
+            label="Peso Factor Marca"
+            suffix="x"
+            borderColor="#ca8a04"
+            buttonColor="#ca8a04"
+          />
 
           {/* Preview */}
           {vectorPreview !== undefined && precioPreview !== undefined && (

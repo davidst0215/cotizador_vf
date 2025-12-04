@@ -1,6 +1,60 @@
 import React from "react";
 import { RotateCcw, Settings2 } from "lucide-react";
 
+// Estilos CSS para los sliders
+const sliderStyles = `
+  input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 8px;
+    border-radius: 5px;
+    background: inherit;
+    outline: none;
+    cursor: pointer;
+  }
+
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: currentColor;
+    cursor: grab;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+    transition: all 0.2s ease;
+  }
+
+  input[type="range"]::-webkit-slider-thumb:active {
+    cursor: grabbing;
+    transform: scale(1.2);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+  }
+
+  input[type="range"]::-moz-range-thumb {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: currentColor;
+    cursor: grab;
+    border: none;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+    transition: all 0.2s ease;
+  }
+
+  input[type="range"]::-moz-range-thumb:active {
+    cursor: grabbing;
+    transform: scale(1.2);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+  }
+
+  input[type="range"]::-moz-range-track {
+    background: transparent;
+    border: none;
+  }
+`;
+
 export interface ParametrosAjustables {
   margenBase: number;
   pesoFactorEsfuerzo: number;
@@ -56,7 +110,9 @@ export const PanelConfiguracionPrecios: React.FC<PanelConfiguracionPreciosProps>
   };
 
   return (
-    <div className="border-t-2 border-red-300 pt-4 mt-4">
+    <>
+      <style>{sliderStyles}</style>
+      <div className="border-t-2 border-red-300 pt-4 mt-4">
       {/* Botón para expandir/contraer */}
       <button
         onClick={onToggle}
@@ -81,14 +137,14 @@ export const PanelConfiguracionPrecios: React.FC<PanelConfiguracionPreciosProps>
                 Margen Base (%)
               </label>
               <span className="text-lg font-bold text-red-700">
-                {(parametros.margenBase * 100).toFixed(1)}%
+                {(parametros.margenBase * 100).toFixed(2)}%
               </span>
             </div>
             <input
               type="range"
               min="0"
               max="100"
-              step="1"
+              step="0.01"
               value={parametros.margenBase * 100}
               onChange={(e) => handleMargenChange(parseFloat(e.target.value) / 100)}
               className="w-full h-2 bg-red-200 rounded-lg appearance-none cursor-pointer accent-red-600"
@@ -112,7 +168,7 @@ export const PanelConfiguracionPrecios: React.FC<PanelConfiguracionPreciosProps>
               type="range"
               min="0.1"
               max="3.0"
-              step="0.1"
+              step="0.05"
               value={parametros.pesoFactorEsfuerzo}
               onChange={(e) => handlePesoEsfuerzoChange(parseFloat(e.target.value))}
               className="w-full h-2 bg-orange-200 rounded-lg appearance-none cursor-pointer accent-orange-600"
@@ -136,7 +192,7 @@ export const PanelConfiguracionPrecios: React.FC<PanelConfiguracionPreciosProps>
               type="range"
               min="0.1"
               max="3.0"
-              step="0.1"
+              step="0.05"
               value={parametros.pesoFactorMarca}
               onChange={(e) => handlePesoMarcaChange(parseFloat(e.target.value))}
               className="w-full h-2 bg-yellow-200 rounded-lg appearance-none cursor-pointer accent-yellow-600"
@@ -176,5 +232,6 @@ export const PanelConfiguracionPrecios: React.FC<PanelConfiguracionPreciosProps>
         </div>
       )}
     </div>
+    </>
   );
 };

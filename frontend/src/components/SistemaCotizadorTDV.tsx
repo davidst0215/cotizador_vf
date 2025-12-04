@@ -2055,7 +2055,7 @@ const SistemaCotizadorTDV = () => {
                       ${(cotizacionActual.precio_final || 0).toFixed(2)}/prenda
                     </div>
                     <div className="text-xs text-white/70">
-                      ${(cotizacionActual.costo_base_total || 0).toFixed(2)} × (1 + 15% × {(cotizacionActual.vector_total || 1).toFixed(3)})
+                      ${(componentesAgrupados.reduce((sum, comp) => sum + comp.costo_unitario, 0) || 0).toFixed(2)} × (1 + 15% × {(cotizacionActual.vector_total || 1).toFixed(3)})
                     </div>
                   </div>
                 </div>

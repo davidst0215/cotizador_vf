@@ -26,8 +26,8 @@ import { HilosDesgloseTable, HilosDesgloseTableRef } from "./HilosDesgloseTable"
 import { AviosDesgloseTable, AviosDesgloseTableRef } from "./AviosDesgloseTable";
 import { TelasDesgloseTable, TelasDesgloseTableRef } from "./TelasDesgloseTable";
 import {
-  PanelConfiguracionPrecios,
   ParametrosAjustables,
+  CompactNumericInput,
 } from "./PanelConfiguracionPrecios";
 
 // Constantes del sistema
@@ -730,7 +730,6 @@ const SistemaCotizadorTDV = () => {
     pesoFactorEsfuerzo: 1.0,
     pesoFactorMarca: 1.0,
   });
-  const [mostrarPanelConfiguracion, setMostrarPanelConfiguracion] = useState(false);
 
   // Referencias para evitar re-renders y debouncing
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -2061,22 +2060,60 @@ const SistemaCotizadorTDV = () => {
                 </h3>
                 <div className="space-y-3">
                   {/* v2.0: Factor Lote y Factor Estilo eliminados - no se usan en el cálculo */}
-                  <div className="flex justify-between items-center p-3 rounded-xl bg-orange-50">
-                    <span className="font-semibold text-red-900">
-                      Factor Esfuerzo (
-                      {cotizacionActual.categoria_esfuerzo || 6}/10)
-                    </span>
-                    <span className="font-bold text-red-500">
-                      {(cotizacionActual.factor_esfuerzo || 1).toFixed(2)}
-                    </span>
+                  <div className="flex justify-between items-center p-3 rounded-xl bg-orange-50 gap-3">
+                    <div className="flex flex-col flex-1">
+                      <span className="font-semibold text-red-900 text-sm">
+                        Factor Esfuerzo (
+                        {cotizacionActual.categoria_esfuerzo || 6}/10)
+                      </span>
+                      <span className="font-bold text-red-500 text-lg">
+                        {(cotizacionActual.factor_esfuerzo || 1).toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="flex flex-col items-end">
+                      <span className="text-xs font-semibold text-orange-700 mb-1">Peso (×)</span>
+                      <CompactNumericInput
+                        value={parametrosAjustables.pesoFactorEsfuerzo}
+                        onChange={(v) =>
+                          setParametrosAjustables({
+                            ...parametrosAjustables,
+                            pesoFactorEsfuerzo: Math.max(0.1, Math.min(3.0, v)),
+                          })
+                        }
+                        min={0.1}
+                        max={3.0}
+                        step={0.01}
+                        borderColor="#ea580c"
+                        buttonColor="#ea580c"
+                      />
+                    </div>
                   </div>
-                  <div className="flex justify-between items-center p-3 rounded-xl bg-orange-50">
-                    <span className="font-semibold text-red-900">
-                      Factor Marca ({cotizacionActual.inputs.cliente_marca})
-                    </span>
-                    <span className="font-bold text-red-500">
-                      {(cotizacionActual.factor_marca || 1).toFixed(2)}
-                    </span>
+                  <div className="flex justify-between items-center p-3 rounded-xl bg-orange-50 gap-3">
+                    <div className="flex flex-col flex-1">
+                      <span className="font-semibold text-red-900 text-sm">
+                        Factor Marca ({cotizacionActual.inputs.cliente_marca})
+                      </span>
+                      <span className="font-bold text-red-500 text-lg">
+                        {(cotizacionActual.factor_marca || 1).toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="flex flex-col items-end">
+                      <span className="text-xs font-semibold text-yellow-700 mb-1">Peso (×)</span>
+                      <CompactNumericInput
+                        value={parametrosAjustables.pesoFactorMarca}
+                        onChange={(v) =>
+                          setParametrosAjustables({
+                            ...parametrosAjustables,
+                            pesoFactorMarca: Math.max(0.1, Math.min(3.0, v)),
+                          })
+                        }
+                        min={0.1}
+                        max={3.0}
+                        step={0.01}
+                        borderColor="#ca8a04"
+                        buttonColor="#ca8a04"
+                      />
+                    </div>
                   </div>
 
                   <div className="border-t-2 pt-3 mt-4 border-orange-400">
@@ -2088,27 +2125,38 @@ const SistemaCotizadorTDV = () => {
                     </div>
                   </div>
 
-                  <div className="p-4 rounded-xl text-center bg-red-500">
-                    <div className="text-sm text-white/90 mb-2">
+                  <div className="p-4 rounded-xl bg-red-500">
+                    <div className="text-sm text-white/90 mb-3">
                       Precio Final ($ por prenda)
                     </div>
-                    <div className="text-2xl font-bold text-white mb-2">
+                    <div className="text-2xl font-bold text-white mb-3 text-center">
                       ${(precioConParametrosAjustados.precio_final || 0).toFixed(2)}/prenda
                     </div>
-                    <div className="text-xs text-white/70">
+
+                    {/* Margen control inline */}
+                    <div className="flex justify-between items-center p-2 bg-red-600 rounded-lg mb-3">
+                      <span className="text-xs font-semibold text-white">Margen (%)</span>
+                      <CompactNumericInput
+                        value={parametrosAjustables.margenBase * 100}
+                        onChange={(v) =>
+                          setParametrosAjustables({
+                            ...parametrosAjustables,
+                            margenBase: Math.max(0, Math.min(100, v)) / 100,
+                          })
+                        }
+                        min={0}
+                        max={100}
+                        step={0.01}
+                        borderColor="#fff"
+                        buttonColor="#fca5a5"
+                      />
+                    </div>
+
+                    <div className="text-xs text-white/70 text-center">
                       ${(componentesAgrupados.reduce((sum, comp) => sum + comp.costo_unitario, 0) || 0).toFixed(2)} × (1 + {(parametrosAjustables.margenBase * 100).toFixed(1)}% × {(precioConParametrosAjustados.vector_total || 1).toFixed(3)})
                     </div>
                   </div>
 
-                  {/* Panel de Configuración de Precios */}
-                  <PanelConfiguracionPrecios
-                    parametros={parametrosAjustables}
-                    onParametrosChange={setParametrosAjustables}
-                    isOpen={mostrarPanelConfiguracion}
-                    onToggle={() => setMostrarPanelConfiguracion(!mostrarPanelConfiguracion)}
-                    precioPreview={precioConParametrosAjustados.precio_final}
-                    vectorPreview={precioConParametrosAjustados.vector_total}
-                  />
                 </div>
               </div>
             </div>

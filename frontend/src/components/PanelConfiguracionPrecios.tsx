@@ -59,7 +59,7 @@ interface NumericInputProps {
   buttonColor: string;
 }
 
-const NumericInput: React.FC<NumericInputProps> = ({
+const NumericInput = React.memo<React.FC<NumericInputProps>>(({
   value,
   onChange,
   min,
@@ -162,7 +162,115 @@ const NumericInput: React.FC<NumericInputProps> = ({
       </div>
     </div>
   );
-};
+});
+
+NumericInput.displayName = "NumericInput";
+
+// Componente compacto para uso inline en tarjetas
+interface CompactNumericInputProps {
+  value: number;
+  onChange: (value: number) => void;
+  min: number;
+  max: number;
+  step: number;
+  borderColor: string;
+  buttonColor: string;
+}
+
+export const CompactNumericInput = React.memo<React.FC<CompactNumericInputProps>>(({
+  value,
+  onChange,
+  min,
+  max,
+  step,
+  borderColor,
+  buttonColor,
+}) => {
+  const [localValue, setLocalValue] = useState<string>(value.toFixed(2));
+  const prevValueRef = useRef<number>(value);
+
+  useEffect(() => {
+    if (Math.abs(value - prevValueRef.current) > step / 2) {
+      prevValueRef.current = value;
+      setLocalValue(value.toFixed(2));
+    }
+  }, [value, step]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newVal = e.target.value;
+    setLocalValue(newVal);
+
+    const numVal = parseFloat(newVal);
+    if (!isNaN(numVal)) {
+      const clamped = Math.max(min, Math.min(max, numVal));
+      onChange(clamped);
+    }
+  };
+
+  const handleBlur = () => {
+    const numVal = parseFloat(localValue);
+    if (isNaN(numVal)) {
+      setLocalValue(value.toFixed(2));
+    } else {
+      const clamped = Math.max(min, Math.min(max, numVal));
+      setLocalValue(clamped.toFixed(2));
+      onChange(clamped);
+    }
+  };
+
+  const handleIncrement = () => {
+    const numVal = parseFloat(localValue) || min;
+    const newVal = Math.min(max, numVal + step);
+    setLocalValue(newVal.toFixed(2));
+    onChange(newVal);
+  };
+
+  const handleDecrement = () => {
+    const numVal = parseFloat(localValue) || max;
+    const newVal = Math.max(min, numVal - step);
+    setLocalValue(newVal.toFixed(2));
+    onChange(newVal);
+  };
+
+  return (
+    <div className="flex gap-0.5 items-center">
+      <button
+        type="button"
+        onClick={handleDecrement}
+        className="p-1 rounded transition-colors hover:opacity-75"
+        style={{ backgroundColor: buttonColor, color: "white" }}
+        title="Disminuir"
+      >
+        <Minus className="h-3 w-3" />
+      </button>
+      <input
+        type="number"
+        min={min}
+        max={max}
+        step={step}
+        value={localValue}
+        onChange={handleChange}
+        onBlur={handleBlur}
+        className="w-14 px-1 py-1 text-sm text-center border rounded focus:outline-none transition-colors bg-white font-semibold"
+        style={{
+          borderColor: borderColor,
+          fontSize: "0.75rem",
+        }}
+      />
+      <button
+        type="button"
+        onClick={handleIncrement}
+        className="p-1 rounded transition-colors hover:opacity-75"
+        style={{ backgroundColor: buttonColor, color: "white" }}
+        title="Aumentar"
+      >
+        <Plus className="h-3 w-3" />
+      </button>
+    </div>
+  );
+});
+
+CompactNumericInput.displayName = "CompactNumericInput";
 
 export const PanelConfiguracionPrecios: React.FC<PanelConfiguracionPreciosProps> = ({
   parametros,

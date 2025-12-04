@@ -25,6 +25,10 @@ import { WipDesgloseTable, WipDesgloseTableRef } from "./WipDesgloseTable";
 import { HilosDesgloseTable, HilosDesgloseTableRef } from "./HilosDesgloseTable";
 import { AviosDesgloseTable, AviosDesgloseTableRef } from "./AviosDesgloseTable";
 import { TelasDesgloseTable, TelasDesgloseTableRef } from "./TelasDesgloseTable";
+import {
+  PanelConfiguracionPrecios,
+  ParametrosAjustables,
+} from "./PanelConfiguracionPrecios";
 
 // Constantes del sistema
 const CATEGORIAS_LOTE = {
@@ -719,6 +723,14 @@ const SistemaCotizadorTDV = () => {
   // Estados para WIPs seleccionadas
   const [wipsTextiles] = useState<WipSeleccionada[]>([]);
   const [wipsManufactura] = useState<WipSeleccionada[]>([]);
+
+  // Estados para configuración de precios ajustables
+  const [parametrosAjustables, setParametrosAjustables] = useState<ParametrosAjustables>({
+    margenBase: 0.15,
+    pesoFactorEsfuerzo: 1.0,
+    pesoFactorMarca: 1.0,
+  });
+  const [mostrarPanelConfiguracion, setMostrarPanelConfiguracion] = useState(false);
 
   // Referencias para evitar re-renders y debouncing
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -1895,6 +1907,35 @@ const SistemaCotizadorTDV = () => {
       costosMaterialesFinales, // ✨ Actualizar cuando cambian los costos de materiales
     ]);
 
+    // ✨ Calcular precio con parámetros ajustables - REEMPLAZA el vector y margen originales
+    const precioConParametrosAjustados = useMemo(() => {
+      if (!cotizacionActual || componentesAgrupados.length === 0) {
+        return {
+          precio_final: cotizacionActual?.precio_final || 0,
+          vector_total: cotizacionActual?.vector_total || 1,
+        };
+      }
+
+      // Calcular costo base total desde componentesAgrupados
+      const costoBase = componentesAgrupados.reduce(
+        (sum, comp) => sum + comp.costo_unitario,
+        0
+      );
+
+      // Recalcular vector con pesos ajustados (REEMPLAZA los originales)
+      const vectorAjustado =
+        (cotizacionActual.factor_esfuerzo || 1) * parametrosAjustables.pesoFactorEsfuerzo *
+        (cotizacionActual.factor_marca || 1) * parametrosAjustables.pesoFactorMarca;
+
+      // Recalcular precio final con margen ajustado (REEMPLAZA el original)
+      const precioAjustado = costoBase * (1 + parametrosAjustables.margenBase * vectorAjustado);
+
+      return {
+        precio_final: precioAjustado,
+        vector_total: vectorAjustado,
+      };
+    }, [cotizacionActual, componentesAgrupados, parametrosAjustables]);
+
     if (!cotizacionActual) {
       return (
         <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 text-center">
@@ -2042,7 +2083,7 @@ const SistemaCotizadorTDV = () => {
                     <div className="flex justify-between items-center font-bold text-lg p-3 rounded-xl bg-orange-200 text-red-900">
                       <span>Vector Total</span>
                       <span>
-                        {(cotizacionActual.vector_total || 1).toFixed(3)}
+                        {(precioConParametrosAjustados.vector_total || 1).toFixed(3)}
                       </span>
                     </div>
                   </div>
@@ -2052,12 +2093,22 @@ const SistemaCotizadorTDV = () => {
                       Precio Final ($ por prenda)
                     </div>
                     <div className="text-2xl font-bold text-white mb-2">
-                      ${(cotizacionActual.precio_final || 0).toFixed(2)}/prenda
+                      ${(precioConParametrosAjustados.precio_final || 0).toFixed(2)}/prenda
                     </div>
                     <div className="text-xs text-white/70">
-                      ${(componentesAgrupados.reduce((sum, comp) => sum + comp.costo_unitario, 0) || 0).toFixed(2)} × (1 + 15% × {(cotizacionActual.vector_total || 1).toFixed(3)})
+                      ${(componentesAgrupados.reduce((sum, comp) => sum + comp.costo_unitario, 0) || 0).toFixed(2)} × (1 + {(parametrosAjustables.margenBase * 100).toFixed(1)}% × {(precioConParametrosAjustados.vector_total || 1).toFixed(3)})
                     </div>
                   </div>
+
+                  {/* Panel de Configuración de Precios */}
+                  <PanelConfiguracionPrecios
+                    parametros={parametrosAjustables}
+                    onParametrosChange={setParametrosAjustables}
+                    isOpen={mostrarPanelConfiguracion}
+                    onToggle={() => setMostrarPanelConfiguracion(!mostrarPanelConfiguracion)}
+                    precioPreview={precioConParametrosAjustados.precio_final}
+                    vectorPreview={precioConParametrosAjustados.vector_total}
+                  />
                 </div>
               </div>
             </div>

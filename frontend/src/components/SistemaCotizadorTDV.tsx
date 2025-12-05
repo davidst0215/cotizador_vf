@@ -644,8 +644,11 @@ const SistemaCotizadorTDV = () => {
   const wipDesgloseTableRef = useRef<WipDesgloseTableRef>(null); // ✨ Ref para acceder a WIPs seleccionados
   const selectedWipsRef = useRef<string[]>([]); // ✨ Mantener WIPs seleccionados en ref para persistencia visual
   const hilosDesgloseTableRef = useRef<HilosDesgloseTableRef>(null); // ✨ Ref para acceder a Hilos seleccionados
+  const selectedHilosRef = useRef<string[]>([]); // ✨ Mantener Hilos seleccionados en ref para persistencia visual
   const aviosDesgloseTableRef = useRef<AviosDesgloseTableRef>(null); // ✨ Ref para acceder a Avios seleccionados
+  const selectedAviosRef = useRef<string[]>([]); // ✨ Mantener Avíos seleccionados en ref para persistencia visual
   const telasDesgloseTableRef = useRef<TelasDesgloseTableRef>(null); // ✨ Ref para acceder a Telas seleccionadas
+  const selectedTelasRef = useRef<string[]>([]); // ✨ Mantener Telas seleccionadas en ref para persistencia visual
 
   // Estados para costos calculados del WIP (para sobrescribir backend values)
   const [costosWipCalculados, setCostosWipCalculados] = useState<{
@@ -2437,6 +2440,11 @@ const SistemaCotizadorTDV = () => {
                         if (wipDesgloseTableRef.current) {
                           const wipsSeleccionados = wipDesgloseTableRef.current.getSelectedWipsIds();
                           selectedWipsRef.current = wipsSeleccionados;
+
+                          // ✨ Capturar costos calculados de WIP con factores aplicados
+                          const totalTextil = wipDesgloseTableRef.current.getTotalTextil();
+                          const totalManufactura = wipDesgloseTableRef.current.getTotalManufactura();
+                          handleCostosWipCalculados(totalTextil, totalManufactura);
                         }
                         setPestanaActiva("materiales");
                       }}
@@ -2483,6 +2491,7 @@ const SistemaCotizadorTDV = () => {
                 clienteMarca={formData.cliente_marca}
                 tipoPrenda={formData.tipo_prenda}
                 onError={(errorMsg) => console.error("Error en hilos:", errorMsg)}
+                hilosPreseleccionados={selectedHilosRef.current}
               />
             </div>
 
@@ -2498,6 +2507,7 @@ const SistemaCotizadorTDV = () => {
                 clienteMarca={formData.cliente_marca}
                 tipoPrenda={formData.tipo_prenda}
                 onError={(errorMsg) => console.error("Error en avios:", errorMsg)}
+                aviosPreseleccionados={selectedAviosRef.current}
               />
             </div>
 
@@ -2513,6 +2523,7 @@ const SistemaCotizadorTDV = () => {
                 clienteMarca={formData.cliente_marca}
                 tipoPrenda={formData.tipo_prenda}
                 onError={(errorMsg) => console.error("Error en telas:", errorMsg)}
+                telasPreseleccionadas={selectedTelasRef.current}
               />
             </div>
           </div>
@@ -2522,6 +2533,20 @@ const SistemaCotizadorTDV = () => {
         <div className="flex justify-end gap-4">
           <button
             onClick={async () => {
+              // ✨ Guardar selecciones en refs para persistencia visual
+              if (telasDesgloseTableRef.current) {
+                const telasSeleccionadas = telasDesgloseTableRef.current.getSelectedTelas();
+                selectedTelasRef.current = telasSeleccionadas.map(t => t.tela_codigo);
+              }
+              if (hilosDesgloseTableRef.current) {
+                const hilosSeleccionados = hilosDesgloseTableRef.current.getSelectedHilos();
+                selectedHilosRef.current = hilosSeleccionados.map(h => `${h.cod_hilado}|${h.tipo_hilo}`);
+              }
+              if (aviosDesgloseTableRef.current) {
+                const aviosSeleccionados = aviosDesgloseTableRef.current.getSelectedAvios();
+                selectedAviosRef.current = aviosSeleccionados.map(a => a.avio_codigo);
+              }
+
               // ✨ Obtener totales de las tablas de desgloses
               const totalHilos = hilosDesgloseTableRef.current?.getTotalCostoHilos() || 0;
               const totalAvios = aviosDesgloseTableRef.current?.getTotalCostoAvios() || 0;

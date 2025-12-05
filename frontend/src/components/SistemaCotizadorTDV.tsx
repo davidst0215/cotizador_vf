@@ -14,7 +14,6 @@ import {
   BarChart3,
   FileText,
   Download,
-  Printer,
   RefreshCw,
   Database,
   Search,
@@ -659,17 +658,6 @@ const SistemaCotizadorTDV = () => {
 
   // ✨ Estado para factores de ajuste WIP - PERSISTENTE entre pestañas
   const [factoresWip, setFactoresWip] = useState<Record<string, number>>({});
-
-  // ✨ Estados PERSISTENTES para Materiales (Telas, Hilos, Avíos)
-  const [selectedTelas, setSelectedTelas] = useState<string[]>([]);
-  const [factoresTelas, setFactoresTelas] = useState<Record<string, number>>({});
-
-  const [selectedHilos, setSelectedHilos] = useState<string[]>([]);
-  const [factoresHilos, setFactoresHilos] = useState<Record<string, number>>({});
-
-  const [selectedAvios, setSelectedAvios] = useState<string[]>([]);
-  const [factoresAvios, setFactoresAvios] = useState<Record<string, number>>({});
-
 
   // ✨ Estados para guardar costos calculados de materiales (para usar en Costos Finales)
   const [costosMaterialesFinales, setCostosMaterialesFinales] = useState<{

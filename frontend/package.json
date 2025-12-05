@@ -18,6 +18,8 @@
     "postinstall": "husky install || true"
   },
   "dependencies": {
+    "jspdf": "^3.0.4",
+    "jspdf-autotable": "^5.0.2",
     "lucide-react": "^0.453.0",
     "next": "^14.2.15",
     "react": "^18.3.1",

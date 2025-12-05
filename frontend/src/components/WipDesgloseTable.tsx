@@ -375,6 +375,7 @@ const WipDesgloseTableComponent = forwardRef<WipDesgloseTableRef, WipDesgloseTab
                     <input
                       type="text"
                       inputMode="decimal"
+                      autoComplete="off"
                       min="0.1"
                       max="10"
                       value={factoresInputLocal[desglose.wip_id] !== undefined ? factoresInputLocal[desglose.wip_id] : (factoresWipLocal[desglose.wip_id] || "1")}
@@ -418,7 +419,7 @@ const WipDesgloseTableComponent = forwardRef<WipDesgloseTableRef, WipDesgloseTab
                         handleFactorBlur();
                       }}
                       placeholder="1"
-                      className="w-16 px-2 py-1 border border-gray-300 rounded text-center text-sm"
+                      className="w-16 px-2 py-1 border border-gray-300 rounded text-center text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
                   </td>
                   <td className="px-4 py-3 text-right text-gray-900 bg-blue-50 font-semibold">

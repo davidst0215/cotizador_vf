@@ -27,8 +27,8 @@ const inputStyles = `
 
 export interface ParametrosAjustables {
   margenBase: number;
-  pesoFactorEsfuerzo: number;
-  pesoFactorMarca: number;
+  factorEsfuerzo: number;  // ✨ Reemplaza directamente el factor de esfuerzo
+  factorMarca: number;     // ✨ Reemplaza directamente el factor de marca
 }
 
 interface PanelConfiguracionPreciosProps {
@@ -42,8 +42,8 @@ interface PanelConfiguracionPreciosProps {
 
 const DEFAULTS: ParametrosAjustables = {
   margenBase: 0.15,
-  pesoFactorEsfuerzo: 1.0,
-  pesoFactorMarca: 1.0,
+  factorEsfuerzo: 1.0,
+  factorMarca: 1.0,
 };
 
 // Componente helper para input numérico con estado local y botones de incremento/decremento
@@ -59,7 +59,7 @@ interface NumericInputProps {
   buttonColor: string;
 }
 
-const NumericInput = React.memo<React.FC<NumericInputProps>>(({
+const NumericInput = React.memo(({
   value,
   onChange,
   min,
@@ -69,7 +69,7 @@ const NumericInput = React.memo<React.FC<NumericInputProps>>(({
   suffix,
   borderColor,
   buttonColor,
-}) => {
+}: NumericInputProps) => {
   const [localValue, setLocalValue] = useState<string>(value.toFixed(2));
   const prevValueRef = useRef<number>(value);
 
@@ -84,11 +84,11 @@ const NumericInput = React.memo<React.FC<NumericInputProps>>(({
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newVal = e.target.value;
     setLocalValue(newVal);
+  };
 
-    const numVal = parseFloat(newVal);
-    if (!isNaN(numVal)) {
-      const clamped = Math.max(min, Math.min(max, numVal));
-      onChange(clamped);
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.currentTarget.blur();
     }
   };
 
@@ -133,13 +133,15 @@ const NumericInput = React.memo<React.FC<NumericInputProps>>(({
         </button>
         <input
           type="number"
+          autoComplete="off"
           min={min}
           max={max}
           step={step}
           value={localValue}
           onChange={handleChange}
           onBlur={handleBlur}
-          className="flex-1 px-3 py-2 border-2 rounded-lg focus:outline-none transition-colors bg-white"
+          onKeyDown={handleKeyDown}
+          className="flex-1 px-3 py-2 border-2 rounded-lg focus:outline-none focus:ring-2 transition-colors bg-white"
           style={{
             borderColor: borderColor,
             "--tw-ring-color": borderColor,
@@ -177,7 +179,7 @@ interface CompactNumericInputProps {
   buttonColor: string;
 }
 
-export const CompactNumericInput = React.memo<React.FC<CompactNumericInputProps>>(({
+export const CompactNumericInput = React.memo(({
   value,
   onChange,
   min,
@@ -185,7 +187,7 @@ export const CompactNumericInput = React.memo<React.FC<CompactNumericInputProps>
   step,
   borderColor,
   buttonColor,
-}) => {
+}: CompactNumericInputProps) => {
   const [localValue, setLocalValue] = useState<string>(value.toFixed(2));
   const prevValueRef = useRef<number>(value);
 
@@ -199,11 +201,11 @@ export const CompactNumericInput = React.memo<React.FC<CompactNumericInputProps>
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newVal = e.target.value;
     setLocalValue(newVal);
+  };
 
-    const numVal = parseFloat(newVal);
-    if (!isNaN(numVal)) {
-      const clamped = Math.max(min, Math.min(max, numVal));
-      onChange(clamped);
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.currentTarget.blur();
     }
   };
 
@@ -245,13 +247,15 @@ export const CompactNumericInput = React.memo<React.FC<CompactNumericInputProps>
       </button>
       <input
         type="number"
+        autoComplete="off"
         min={min}
         max={max}
         step={step}
         value={localValue}
         onChange={handleChange}
         onBlur={handleBlur}
-        className="w-14 px-1 py-1 text-sm text-center border rounded focus:outline-none transition-colors bg-white font-semibold"
+        onKeyDown={handleKeyDown}
+        className="w-14 px-1 py-1 text-sm text-center border rounded focus:outline-none focus:ring-2 transition-colors bg-white font-semibold"
         style={{
           borderColor: borderColor,
           fontSize: "0.75rem",
@@ -287,17 +291,17 @@ export const PanelConfiguracionPrecios: React.FC<PanelConfiguracionPreciosProps>
     });
   };
 
-  const handlePesoEsfuerzoChange = (value: number) => {
+  const handleFactorEsfuerzoChange = (value: number) => {
     onParametrosChange({
       ...parametros,
-      pesoFactorEsfuerzo: Math.max(0.1, Math.min(3.0, value)),
+      factorEsfuerzo: Math.max(0.1, Math.min(3.0, value)),
     });
   };
 
-  const handlePesoMarcaChange = (value: number) => {
+  const handleFactorMarcaChange = (value: number) => {
     onParametrosChange({
       ...parametros,
-      pesoFactorMarca: Math.max(0.1, Math.min(3.0, value)),
+      factorMarca: Math.max(0.1, Math.min(3.0, value)),
     });
   };
 
@@ -309,92 +313,92 @@ export const PanelConfiguracionPrecios: React.FC<PanelConfiguracionPreciosProps>
     <>
       <style>{inputStyles}</style>
       <div className="border-t-2 border-red-300 pt-4 mt-4">
-      {/* Botón para expandir/contraer */}
-      <button
-        onClick={onToggle}
-        className="w-full flex items-center justify-between p-3 rounded-lg bg-red-50 hover:bg-red-100 transition-colors mb-3"
-      >
-        <div className="flex items-center gap-2">
-          <Settings2 className="h-5 w-5 text-red-700" />
-          <span className="font-semibold text-red-900">Configurar Parámetros de Precio</span>
-        </div>
-        <span className="text-red-700 text-lg">
-          {isOpen ? "−" : "+"}
-        </span>
-      </button>
+        {/* Botón para expandir/contraer */}
+        <button
+          onClick={onToggle}
+          className="w-full flex items-center justify-between p-3 rounded-lg bg-red-50 hover:bg-red-100 transition-colors mb-3"
+        >
+          <div className="flex items-center gap-2">
+            <Settings2 className="h-5 w-5 text-red-700" />
+            <span className="font-semibold text-red-900">Configurar Parámetros de Precio</span>
+          </div>
+          <span className="text-red-700 text-lg">
+            {isOpen ? "−" : "+"}
+          </span>
+        </button>
 
-      {/* Panel colapsable */}
-      {isOpen && (
-        <div className="space-y-4 p-4 bg-red-50 rounded-lg border border-red-200">
-          {/* Margen Base */}
-          <NumericInput
-            value={parametros.margenBase * 100}
-            onChange={(v) => handleMargenChange(v / 100)}
-            min={0}
-            max={100}
-            step={0.01}
-            label="Margen Base (%)"
-            suffix="%"
-            borderColor="#dc2626"
-            buttonColor="#dc2626"
-          />
+        {/* Panel colapsable */}
+        {isOpen && (
+          <div className="space-y-4 p-4 bg-red-50 rounded-lg border border-red-200">
+            {/* Margen Base */}
+            <NumericInput
+              value={parametros.margenBase * 100}
+              onChange={(v) => handleMargenChange(v / 100)}
+              min={0}
+              max={100}
+              step={0.01}
+              label="Margen Base (%)"
+              suffix="%"
+              borderColor="#dc2626"
+              buttonColor="#dc2626"
+            />
 
-          {/* Peso Factor Esfuerzo */}
-          <NumericInput
-            value={parametros.pesoFactorEsfuerzo}
-            onChange={handlePesoEsfuerzoChange}
-            min={0.1}
-            max={3.0}
-            step={0.01}
-            label="Peso Factor Esfuerzo"
-            suffix="x"
-            borderColor="#ea580c"
-            buttonColor="#ea580c"
-          />
+            {/* Factor Esfuerzo */}
+            <NumericInput
+              value={parametros.factorEsfuerzo}
+              onChange={handleFactorEsfuerzoChange}
+              min={0.1}
+              max={3.0}
+              step={0.01}
+              label="Factor Esfuerzo (Reemplazo Directo)"
+              suffix=""
+              borderColor="#ea580c"
+              buttonColor="#ea580c"
+            />
 
-          {/* Peso Factor Marca */}
-          <NumericInput
-            value={parametros.pesoFactorMarca}
-            onChange={handlePesoMarcaChange}
-            min={0.1}
-            max={3.0}
-            step={0.01}
-            label="Peso Factor Marca"
-            suffix="x"
-            borderColor="#ca8a04"
-            buttonColor="#ca8a04"
-          />
+            {/* Factor Marca */}
+            <NumericInput
+              value={parametros.factorMarca}
+              onChange={handleFactorMarcaChange}
+              min={0.1}
+              max={3.0}
+              step={0.01}
+              label="Factor Marca (Reemplazo Directo)"
+              suffix=""
+              borderColor="#ca8a04"
+              buttonColor="#ca8a04"
+            />
 
-          {/* Preview */}
-          {vectorPreview !== undefined && precioPreview !== undefined && (
-            <div className="p-3 bg-white rounded-lg border border-red-300 space-y-2">
-              <div className="text-xs font-semibold text-gray-600 uppercase">
-                Preview del Cálculo
+            {/* Preview */}
+            {vectorPreview !== undefined && precioPreview !== undefined && (
+              <div className="p-3 bg-white rounded-lg border border-red-300 space-y-2">
+                <div className="text-xs font-semibold text-gray-600 uppercase">
+                  Preview del Cálculo
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-700">Vector Ajustado:</span>
+                  <span className="font-bold text-red-600">{vectorPreview.toFixed(3)}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-700">Precio Final:</span>
+                  <span className="font-bold text-lg text-red-700">
+                    ${precioPreview.toFixed(2)}/prenda
+                  </span>
+                </div>
               </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-700">Vector Ajustado:</span>
-                <span className="font-bold text-red-600">{vectorPreview.toFixed(3)}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-700">Precio Final:</span>
-                <span className="font-bold text-lg text-red-700">
-                  ${precioPreview.toFixed(2)}/prenda
-                </span>
-              </div>
-            </div>
-          )}
+            )}
 
-          {/* Botón Restaurar */}
-          <button
-            onClick={handleRestaurar}
-            className="w-full flex items-center justify-center gap-2 p-2 bg-red-200 hover:bg-red-300 text-red-900 rounded-lg font-semibold transition-colors text-sm"
-          >
-            <RotateCcw className="h-4 w-4" />
-            Restaurar Valores por Defecto
-          </button>
-        </div>
-      )}
-    </div>
+            {/* Botón Restaurar */}
+            <button
+              onClick={handleRestaurar}
+              className="w-full flex items-center justify-center gap-2 p-2 bg-red-200 hover:bg-red-300 text-red-900 rounded-lg font-semibold transition-colors text-sm"
+            >
+              <RotateCcw className="h-4 w-4" />
+              Restaurar Valores por Defecto
+            </button>
+          </div>
+        )}
+      </div>
     </>
   );
 };

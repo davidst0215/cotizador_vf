@@ -20,6 +20,8 @@ import {
   Search,
   Layers,
 } from "lucide-react";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 import { OpsSelectionTable } from "./OpsSelectionTable";
 import { WipDesgloseTable, WipDesgloseTableRef } from "./WipDesgloseTable";
 import { HilosDesgloseTable, HilosDesgloseTableRef } from "./HilosDesgloseTable";
@@ -226,9 +228,8 @@ const EstadoEstiloComponent = React.memo(
     return (
       <div className="flex items-center gap-2 mt-2">
         <div
-          className={`text-xs px-2 py-1 rounded-full inline-block text-white ${
-            esEstiloNuevo ? "bg-red-500" : "bg-green-600"
-          }`}
+          className={`text-xs px-2 py-1 rounded-full inline-block text-white ${esEstiloNuevo ? "bg-red-500" : "bg-green-600"
+            }`}
         >
           {esEstiloNuevo ? "🆕 Nuevo" : "✅ Recurrente"}
         </div>
@@ -258,9 +259,8 @@ const EstadoEstiloClienteComponent = React.memo(
     return (
       <div className="mt-3 inline-block">
         <div
-          className={`px-4 py-2 rounded-full text-white text-sm font-bold ${
-            esEstiloClienteNuevo ? "bg-red-500" : "bg-green-600"
-          }`}
+          className={`px-4 py-2 rounded-full text-white text-sm font-bold ${esEstiloClienteNuevo ? "bg-red-500" : "bg-green-600"
+            }`}
         >
           {esEstiloClienteNuevo ? "🆕 Nuevo" : "✅ Recurrente"}
         </div>
@@ -635,7 +635,7 @@ const SistemaCotizadorTDV = () => {
 
   // Estados de datos maestros dinámicos
   const [clientesDisponibles, setClientesDisponibles] = useState<string[]>([]);
-    const [tiposDisponibles, setTiposDisponibles] = useState<string[]>([]);
+  const [tiposDisponibles, setTiposDisponibles] = useState<string[]>([]);
   const [cargandoTipos, setCargandoTipos] = useState(false);
 
   // Estado para OPs seleccionadas en la tabla interactiva
@@ -659,6 +659,16 @@ const SistemaCotizadorTDV = () => {
 
   // ✨ Estado para factores de ajuste WIP - PERSISTENTE entre pestañas
   const [factoresWip, setFactoresWip] = useState<Record<string, number>>({});
+
+  // ✨ Estados PERSISTENTES para Materiales (Telas, Hilos, Avíos)
+  const [selectedTelas, setSelectedTelas] = useState<string[]>([]);
+  const [factoresTelas, setFactoresTelas] = useState<Record<string, number>>({});
+
+  const [selectedHilos, setSelectedHilos] = useState<string[]>([]);
+  const [factoresHilos, setFactoresHilos] = useState<Record<string, number>>({});
+
+  const [selectedAvios, setSelectedAvios] = useState<string[]>([]);
+  const [factoresAvios, setFactoresAvios] = useState<Record<string, number>>({});
 
 
   // ✨ Estados para guardar costos calculados de materiales (para usar en Costos Finales)
@@ -727,8 +737,8 @@ const SistemaCotizadorTDV = () => {
   // Estados para configuración de precios ajustables
   const [parametrosAjustables, setParametrosAjustables] = useState<ParametrosAjustables>({
     margenBase: 0.15,
-    pesoFactorEsfuerzo: 1.0,
-    pesoFactorMarca: 1.0,
+    factorEsfuerzo: 1.0,  // ✨ Renombrado: ahora reemplaza directamente el factor
+    factorMarca: 1.0,     // ✨ Renombrado: ahora reemplaza directamente el factor
   });
 
   // Referencias para evitar re-renders y debouncing
@@ -1411,11 +1421,10 @@ const SistemaCotizadorTDV = () => {
           </div>
           <div className="flex items-center gap-4 bg-gray-50 px-4 py-2 rounded-lg">
             <span
-              className={`font-medium transition-colors ${
-                formData.version_calculo === "FLUIDO"
-                  ? "text-gray-900"
-                  : "text-gray-400"
-              }`}
+              className={`font-medium transition-colors ${formData.version_calculo === "FLUIDO"
+                ? "text-gray-900"
+                : "text-gray-400"
+                }`}
               style={{
                 fontWeight:
                   formData.version_calculo === "FLUIDO" ? "600" : "400",
@@ -1451,11 +1460,10 @@ const SistemaCotizadorTDV = () => {
               />
             </button>
             <span
-              className={`font-medium transition-colors ${
-                formData.version_calculo === "truncado"
-                  ? "text-gray-900"
-                  : "text-gray-400"
-              }`}
+              className={`font-medium transition-colors ${formData.version_calculo === "truncado"
+                ? "text-gray-900"
+                : "text-gray-400"
+                }`}
               style={{
                 fontWeight:
                   formData.version_calculo === "truncado" ? "600" : "400",
@@ -1598,7 +1606,7 @@ const SistemaCotizadorTDV = () => {
           <div className="space-y-3">
             {/* MOSTRAR WIPS SI EXISTEN */}
             {rutaTextil.wips_recomendadas &&
-            rutaTextil.wips_recomendadas.length > 0 ? (
+              rutaTextil.wips_recomendadas.length > 0 ? (
               <>
                 <div className="grid grid-cols-4 gap-2 text-sm">
                   {rutaTextil.wips_recomendadas
@@ -1623,13 +1631,12 @@ const SistemaCotizadorTDV = () => {
                         </div>
                         {/* INDICADOR DE RECOMENDACIÓN */}
                         <div
-                          className={`text-xs px-1 py-0.5 rounded mt-1 ${
-                            wip.recomendacion === "Alta"
-                              ? "bg-green-100 text-green-700"
-                              : wip.recomendacion === "Media"
-                                ? "bg-yellow-100 text-yellow-700"
-                                : "bg-gray-100 text-gray-600"
-                          }`}
+                          className={`text-xs px-1 py-0.5 rounded mt-1 ${wip.recomendacion === "Alta"
+                            ? "bg-green-100 text-green-700"
+                            : wip.recomendacion === "Media"
+                              ? "bg-yellow-100 text-yellow-700"
+                              : "bg-gray-100 text-gray-600"
+                            }`}
                         >
                           {wip.recomendacion || "Media"}
                         </div>
@@ -1836,8 +1843,8 @@ const SistemaCotizadorTDV = () => {
           badge: costosWipCalculados.textil_por_prenda
             ? `${selectedOpsCode.length} OPs seleccionadas`
             : esEstiloNuevo
-            ? `${wipsTextiles?.length || 0} WIPs`
-            : "histórico",
+              ? `${wipsTextiles?.length || 0} WIPs`
+              : "histórico",
           es_agrupado: false,
         },
         {
@@ -1847,8 +1854,8 @@ const SistemaCotizadorTDV = () => {
           badge: costosWipCalculados.manufactura_por_prenda
             ? `${selectedOpsCode.length} OPs seleccionadas`
             : esEstiloNuevo
-            ? `${wipsManufactura?.length || 0} WIPs`
-            : "histórico",
+              ? `${wipsManufactura?.length || 0} WIPs`
+              : "histórico",
           es_agrupado: false,
         },
         {
@@ -1921,10 +1928,9 @@ const SistemaCotizadorTDV = () => {
         0
       );
 
-      // Recalcular vector con pesos ajustados (REEMPLAZA los originales)
-      const vectorAjustado =
-        (cotizacionActual.factor_esfuerzo || 1) * parametrosAjustables.pesoFactorEsfuerzo *
-        (cotizacionActual.factor_marca || 1) * parametrosAjustables.pesoFactorMarca;
+      // ✨ CAMBIO: Los factores ajustables REEMPLAZAN directamente los factores originales
+      // Ya no se multiplican, sino que se usan directamente
+      const vectorAjustado = parametrosAjustables.factorEsfuerzo * parametrosAjustables.factorMarca;
 
       // Recalcular precio final con margen ajustado (REEMPLAZA el original)
       const precioAjustado = costoBase * (1 + parametrosAjustables.margenBase * vectorAjustado);
@@ -2063,21 +2069,18 @@ const SistemaCotizadorTDV = () => {
                   <div className="flex justify-between items-center p-3 rounded-xl bg-orange-50 gap-3">
                     <div className="flex flex-col flex-1">
                       <span className="font-semibold text-red-900 text-sm">
-                        Factor Esfuerzo (
-                        {cotizacionActual.categoria_esfuerzo || 6}/10)
+                        Factor Esfuerzo (Original: {(cotizacionActual.factor_esfuerzo || 1).toFixed(2)})
                       </span>
-                      <span className="font-bold text-red-500 text-lg">
-                        {(cotizacionActual.factor_esfuerzo || 1).toFixed(2)}
-                      </span>
+                      <span className="text-xs text-gray-600">Categoría: {cotizacionActual.categoria_esfuerzo || 6}/10</span>
                     </div>
                     <div className="flex flex-col items-end">
-                      <span className="text-xs font-semibold text-orange-700 mb-1">Peso (×)</span>
+                      <span className="text-xs font-semibold text-orange-700 mb-1">Valor Ajustado</span>
                       <CompactNumericInput
-                        value={parametrosAjustables.pesoFactorEsfuerzo}
+                        value={parametrosAjustables.factorEsfuerzo}
                         onChange={(v) =>
                           setParametrosAjustables({
                             ...parametrosAjustables,
-                            pesoFactorEsfuerzo: Math.max(0.1, Math.min(3.0, v)),
+                            factorEsfuerzo: Math.max(0.1, Math.min(3.0, v)),
                           })
                         }
                         min={0.1}
@@ -2091,20 +2094,18 @@ const SistemaCotizadorTDV = () => {
                   <div className="flex justify-between items-center p-3 rounded-xl bg-orange-50 gap-3">
                     <div className="flex flex-col flex-1">
                       <span className="font-semibold text-red-900 text-sm">
-                        Factor Marca ({cotizacionActual.inputs.cliente_marca})
+                        Factor Marca (Original: {(cotizacionActual.factor_marca || 1).toFixed(2)})
                       </span>
-                      <span className="font-bold text-red-500 text-lg">
-                        {(cotizacionActual.factor_marca || 1).toFixed(2)}
-                      </span>
+                      <span className="text-xs text-gray-600">Cliente: {cotizacionActual.inputs.cliente_marca}</span>
                     </div>
                     <div className="flex flex-col items-end">
-                      <span className="text-xs font-semibold text-yellow-700 mb-1">Peso (×)</span>
+                      <span className="text-xs font-semibold text-yellow-700 mb-1">Valor Ajustado</span>
                       <CompactNumericInput
-                        value={parametrosAjustables.pesoFactorMarca}
+                        value={parametrosAjustables.factorMarca}
                         onChange={(v) =>
                           setParametrosAjustables({
                             ...parametrosAjustables,
-                            pesoFactorMarca: Math.max(0.1, Math.min(3.0, v)),
+                            factorMarca: Math.max(0.1, Math.min(3.0, v)),
                           })
                         }
                         min={0.1}
@@ -2164,39 +2165,170 @@ const SistemaCotizadorTDV = () => {
         </div>
 
         {/* Botones de acción */}
+        {/* Botones de acción */}
         <div className="flex justify-center gap-4">
           <button
             onClick={() => {
-              setCostosFinalCalculados(false);
-              setPestanaActiva("formulario");
-            }}
-            className="px-8 py-3 font-semibold text-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 bg-red-500"
-          >
-            Nueva Cotización
-          </button>
+              const doc = new jsPDF();
+              const pageWidth = doc.internal.pageSize.width;
+              const margin = 14;
+              let yPos = 20;
 
-          <button
-            onClick={() => window.print()}
-            className="px-8 py-3 font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 flex items-center gap-2 bg-orange-50 text-red-900"
-          >
-            <Printer className="h-5 w-5" />
-            Imprimir
-          </button>
+              // --- HEADER ---
+              doc.setFontSize(22);
+              doc.setTextColor(185, 28, 28); // Red 700
+              doc.text("HOJA DE COTIZACIÓN", pageWidth / 2, yPos, { align: "center" });
+              yPos += 10;
 
-          <button
-            onClick={() => {
-              const data = JSON.stringify(cotizacionActual, null, 2);
-              const blob = new Blob([data], { type: "application/json" });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement("a");
-              a.href = url;
-              a.download = `cotizacion_${cotizacionActual.id_cotizacion}.json`;
-              a.click();
+              doc.setFontSize(10);
+              doc.setTextColor(100);
+              doc.text(`Fecha: ${new Date().toLocaleDateString()}`, pageWidth / 2, yPos, { align: "center" });
+              yPos += 15;
+
+              // --- INFO COMERCIAL ---
+              doc.setFontSize(12);
+              doc.setTextColor(0);
+              doc.setFont("helvetica", "bold");
+              doc.text("Información Comercial", margin, yPos);
+              yPos += 8;
+
+              doc.setFont("helvetica", "normal");
+              doc.setFontSize(10);
+
+              const infoData = [
+                ["Cliente:", cotizacionActual.inputs.cliente_marca],
+                ["Estilo Cliente:", cotizacionActual.inputs.estilo_cliente || "-"],
+                ["Estilo Propio:", cotizacionActual.inputs.codigo_estilo || "-"],
+                ["Tipo Prenda:", cotizacionActual.inputs.tipo_prenda],
+                ["Categoría:", cotizacionActual.categoria_estilo || "-"],
+                ["OPs Consideradas:", cotizacionActual.info_comercial?.ops_utilizadas?.toString() || "0"],
+                ["Versión Cálculo:", cotizacionActual.version_calculo_usada || "FLUIDA"]
+              ];
+
+              autoTable(doc, {
+                startY: yPos,
+                head: [],
+                body: infoData,
+                theme: 'plain',
+                styles: { fontSize: 10, cellPadding: 1 },
+                columnStyles: { 0: { fontStyle: 'bold', cellWidth: 40 } },
+                margin: { left: margin }
+              });
+
+              yPos = (doc as any).lastAutoTable.finalY + 10;
+
+              // --- VECTORES DE AJUSTE ---
+              doc.setFontSize(12);
+              doc.setFont("helvetica", "bold");
+              doc.text("Vectores de Ajuste", margin, yPos);
+              yPos += 8;
+
+              const vectoresData = [
+                ["Factor Esfuerzo:", cotizacionActual.factor_esfuerzo.toFixed(2)],
+                ["Factor Marca:", cotizacionActual.factor_marca.toFixed(2)],
+                ["Vector Total:", cotizacionActual.vector_total.toFixed(3)]
+              ];
+
+              autoTable(doc, {
+                startY: yPos,
+                head: [],
+                body: vectoresData,
+                theme: 'plain',
+                styles: { fontSize: 10, cellPadding: 1 },
+                columnStyles: { 0: { fontStyle: 'bold', cellWidth: 40 } },
+                margin: { left: margin }
+              });
+
+              yPos = (doc as any).lastAutoTable.finalY + 10;
+
+              // --- RESUMEN FINANCIERO ---
+              doc.setFontSize(12);
+              doc.setFont("helvetica", "bold");
+              doc.text("Resumen Financiero", margin, yPos);
+              yPos += 8;
+
+              const resumenData = [
+                ["Costo Base Total:", `$${cotizacionActual.costo_base_total.toFixed(2)}`],
+                ["Margen Aplicado:", `${(cotizacionActual.margen_aplicado * 100).toFixed(1)}%`],
+                ["PRECIO FINAL:", `$${cotizacionActual.precio_final.toFixed(2)}`]
+              ];
+
+              autoTable(doc, {
+                startY: yPos,
+                head: [],
+                body: resumenData,
+                theme: 'grid',
+                headStyles: { fillColor: [255, 247, 237], textColor: [124, 45, 18] }, // Orange 50 / Red 900
+                styles: { fontSize: 11, cellPadding: 3 },
+                columnStyles: {
+                  0: { fontStyle: 'bold', cellWidth: 60 },
+                  1: { halign: 'right', fontStyle: 'bold' }
+                },
+                margin: { left: margin, right: pageWidth - margin - 100 } // Limit width
+              });
+
+              yPos = (doc as any).lastAutoTable.finalY + 15;
+
+              // --- DETALLE DE COSTOS ---
+              doc.setFontSize(12);
+              doc.setFont("helvetica", "bold");
+              doc.text("Detalle de Costos", margin, yPos);
+              yPos += 5;
+
+              const tableBody = componentesAgrupados.map((comp) => [
+                comp.nombre,
+                comp.fuente,
+                `$${comp.costo_unitario.toFixed(2)}`,
+                `${((comp.costo_unitario / cotizacionActual.costo_base_total) * 100).toFixed(1)}%`
+              ]);
+
+              // Agregar filas de totales
+              tableBody.push(
+                ["", "", "", ""], // Spacer
+                ["Costo Base Total", "", `$${cotizacionActual.costo_base_total.toFixed(2)}`, "100%"],
+                ["Precio Final (con Vector)", "", `$${cotizacionActual.precio_final.toFixed(2)}`, ""]
+              );
+
+              autoTable(doc, {
+                startY: yPos,
+                head: [["Componente", "Fuente", "Costo", "%"]],
+                body: tableBody,
+                theme: 'striped',
+                headStyles: { fillColor: [220, 38, 38] }, // Red 600
+                styles: { fontSize: 9, cellPadding: 2 },
+                columnStyles: {
+                  0: { cellWidth: 'auto' },
+                  1: { cellWidth: 40 },
+                  2: { halign: 'right', cellWidth: 30 },
+                  3: { halign: 'right', cellWidth: 20 }
+                },
+                didParseCell: function (data) {
+                  if (data.row.index >= tableBody.length - 2) {
+                    data.cell.styles.fontStyle = 'bold';
+                    if (data.row.index === tableBody.length - 1) {
+                      data.cell.styles.textColor = [220, 38, 38]; // Red for final price
+                      data.cell.styles.fontSize = 11;
+                    }
+                  }
+                }
+              });
+
+              // Construct filename: Marca_TipoPrenda_Estilo(if exists)_Fecha
+              const marca = cotizacionActual.inputs.cliente_marca.replace(/\s+/g, '_');
+              const tipo = cotizacionActual.inputs.tipo_prenda.replace(/\s+/g, '_');
+              const estilo = cotizacionActual.inputs.codigo_estilo
+                ? `_${cotizacionActual.inputs.codigo_estilo.replace(/\s+/g, '_')}`
+                : (cotizacionActual.inputs.estilo_cliente ? `_${cotizacionActual.inputs.estilo_cliente.replace(/\s+/g, '_')}` : "");
+              const fecha = new Date().toISOString().split('T')[0];
+
+              const filename = `${marca}_${tipo}${estilo}_${fecha}.pdf`;
+
+              doc.save(filename);
             }}
-            className="px-8 py-3 font-semibold text-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 flex items-center gap-2 bg-red-400"
+            className="px-8 py-3 font-semibold text-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 flex items-center gap-2 bg-red-600 hover:bg-red-700"
           >
             <Download className="h-5 w-5" />
-            Descargar
+            Descargar PDF
           </button>
         </div>
       </div>
@@ -2493,11 +2625,10 @@ const SistemaCotizadorTDV = () => {
           <div className="flex">
             <button
               onClick={() => setPestanaActiva("formulario")}
-              className={`px-8 py-4 font-bold transition-all duration-300 flex items-center gap-3 ${
-                pestanaActiva === "formulario"
-                  ? "text-white shadow-lg"
-                  : "hover:shadow-md"
-              }`}
+              className={`px-8 py-4 font-bold transition-all duration-300 flex items-center gap-3 ${pestanaActiva === "formulario"
+                ? "text-white shadow-lg"
+                : "hover:shadow-md"
+                }`}
               style={{
                 backgroundColor:
                   pestanaActiva === "formulario" ? "#821417" : "transparent",
@@ -2511,11 +2642,10 @@ const SistemaCotizadorTDV = () => {
             <button
               onClick={() => setPestanaActiva("resultados")}
               disabled={!selectedOpsCode || selectedOpsCode.length === 0}
-              className={`px-8 py-4 font-bold transition-all duration-300 flex items-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed ${
-                pestanaActiva === "resultados"
-                  ? "text-white shadow-lg"
-                  : "hover:shadow-md"
-              }`}
+              className={`px-8 py-4 font-bold transition-all duration-300 flex items-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed ${pestanaActiva === "resultados"
+                ? "text-white shadow-lg"
+                : "hover:shadow-md"
+                }`}
               style={{
                 backgroundColor:
                   pestanaActiva === "resultados" ? "#821417" : "transparent",
@@ -2529,11 +2659,10 @@ const SistemaCotizadorTDV = () => {
             <button
               onClick={() => setPestanaActiva("materiales")}
               disabled={!selectedOpsCode || selectedOpsCode.length === 0}
-              className={`px-8 py-4 font-bold transition-all duration-300 flex items-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed ${
-                pestanaActiva === "materiales"
-                  ? "text-white shadow-lg"
-                  : "hover:shadow-md"
-              }`}
+              className={`px-8 py-4 font-bold transition-all duration-300 flex items-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed ${pestanaActiva === "materiales"
+                ? "text-white shadow-lg"
+                : "hover:shadow-md"
+                }`}
               style={{
                 backgroundColor:
                   pestanaActiva === "materiales" ? "#821417" : "transparent",
@@ -2547,11 +2676,10 @@ const SistemaCotizadorTDV = () => {
             <button
               onClick={() => setPestanaActiva("costos")}
               disabled={!costosFinalCalculados}
-              className={`px-8 py-4 font-bold transition-all duration-300 flex items-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed ${
-                pestanaActiva === "costos"
-                  ? "text-white shadow-lg"
-                  : "hover:shadow-md"
-              }`}
+              className={`px-8 py-4 font-bold transition-all duration-300 flex items-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed ${pestanaActiva === "costos"
+                ? "text-white shadow-lg"
+                : "hover:shadow-md"
+                }`}
               style={{
                 backgroundColor:
                   pestanaActiva === "costos" ? "#821417" : "transparent",

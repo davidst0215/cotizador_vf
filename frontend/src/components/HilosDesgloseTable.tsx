@@ -39,11 +39,21 @@ interface HilosDesgloseTableProps {
   tipoPrenda?: string; // Tipo de prenda (para búsqueda fallback)
   onError?: (error: string) => void;
   hilosPreseleccionados?: string[]; // Hilos preseleccionados por cod_hilado
+  // ✨ Props para persistencia visual de configuración
+  modoInicial?: "detallado" | "monto_fijo" | "automatico";
+  factoresIniciales?: Record<string, number>;
+  costosDetalladosIniciales?: Record<string, number>;
+  montoFijoInicial?: number;
 }
 
 export interface HilosDesgloseTableRef {
   getSelectedHilos: () => HiloConFactor[];
   getTotalCostoHilos: () => number;
+  // ✨ Métodos para obtener configuración visual actual
+  getModo: () => "detallado" | "monto_fijo" | "automatico";
+  getFactores: () => Record<string, number>;
+  getCostosDetallados: () => Record<string, number>;
+  getMontoFijo: () => number;
 }
 
 const HilosDesgloseTableComponent = forwardRef<HilosDesgloseTableRef, HilosDesgloseTableProps>(({
@@ -54,32 +64,36 @@ const HilosDesgloseTableComponent = forwardRef<HilosDesgloseTableRef, HilosDesgl
   tipoPrenda,
   onError,
   hilosPreseleccionados = [],
+  modoInicial = "automatico",
+  factoresIniciales = {},
+  costosDetalladosIniciales = {},
+  montoFijoInicial = 0,
 }, ref) => {
   const [hilosData, setHilosData] = useState<Hilo[]>([]);
   const [totalOps, setTotalOps] = useState<number>(0);
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedHilos, setSelectedHilos] = useState<Set<string>>(new Set(hilosPreseleccionados));
-  const [factoresHiloLocal, setFactoresHiloLocal] = useState<Record<string, number>>({}); // (cod_hilado|tipo_hilo) -> factor (valores reales)
+  const [factoresHiloLocal, setFactoresHiloLocal] = useState<Record<string, number>>(factoresIniciales); // (cod_hilado|tipo_hilo) -> factor (valores reales)
   const [factoresInputLocal, setFactoresInputLocal] = useState<Record<string, string>>({}); // (cod_hilado|tipo_hilo) -> factor (para typing)
   const [sortField, setSortField] = useState<"descripcion_hilo" | "tipo_hilo" | "costo_por_kg" | "frecuencia_ops">("descripcion_hilo");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [busqueda, setBusqueda] = useState<string>("");
 
   // ✨ 3 Modos de configuración
-  const [modo, setModo] = useState<"detallado" | "monto_fijo" | "automatico">("automatico");
+  const [modo, setModo] = useState<"detallado" | "monto_fijo" | "automatico">(modoInicial);
 
   // Estado para modal de histórico de precios
   const [modalHistoricoAbierto, setModalHistoricoAbierto] = useState(false);
   const [codigoMaterialSeleccionado, setCodigoMaterialSeleccionado] = useState<string>("");
 
   // Estado para Modo Detallado (costos directos)
-  const [costosDetalladoLocal, setCostosDetalladoLocal] = useState<Record<string, number>>({}); // (cod_hilado) -> costo directo
+  const [costosDetalladoLocal, setCostosDetalladoLocal] = useState<Record<string, number>>(costosDetalladosIniciales); // (cod_hilado) -> costo directo
   const [costosDetalladoInputLocal, setCostosDetalladoInputLocal] = useState<Record<string, string>>({}); // (cod_hilado) -> costo (para typing)
 
   // Estado para Modo Monto Fijo
-  const [montoFijoGlobal, setMontoFijoGlobal] = useState<number>(0);
-  const [montoFijoInput, setMontoFijoInput] = useState<string>("");
+  const [montoFijoGlobal, setMontoFijoGlobal] = useState<number>(montoFijoInicial);
+  const [montoFijoInput, setMontoFijoInput] = useState<string>(montoFijoInicial > 0 ? montoFijoInicial.toString() : "");
 
   // ✨ Ref para almacenar factoresHiloLocal sin crear dependencias
   const factoresHiloRef = useRef<Record<string, number>>(factoresHiloLocal);
@@ -297,7 +311,12 @@ const HilosDesgloseTableComponent = forwardRef<HilosDesgloseTableRef, HilosDesgl
     getSelectedHilos: () =>
       hilosConFactor.filter((h) => selectedHilos.has(`${h.cod_hilado}|${h.tipo_hilo}`)),
     getTotalCostoHilos: () => totalCostoHilos,
-  }), [hilosConFactor, selectedHilos, totalCostoHilos, totalOps, modo]);
+    // ✨ Métodos para obtener configuración visual actual
+    getModo: () => modo,
+    getFactores: () => factoresHiloLocal,
+    getCostosDetallados: () => costosDetalladoLocal,
+    getMontoFijo: () => montoFijoGlobal,
+  }), [hilosConFactor, selectedHilos, totalCostoHilos, totalOps, modo, factoresHiloLocal, costosDetalladoLocal, montoFijoGlobal]);
 
   if (cargando) {
     return (

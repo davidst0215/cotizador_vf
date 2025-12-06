@@ -650,6 +650,22 @@ const SistemaCotizadorTDV = () => {
   const telasDesgloseTableRef = useRef<TelasDesgloseTableRef>(null); // ✨ Ref para acceder a Telas seleccionadas
   const selectedTelasRef = useRef<string[]>([]); // ✨ Mantener Telas seleccionadas en ref para persistencia visual
 
+  // ✨ Refs para guardar configuración visual de materiales (modo, factores, costos detallados, monto fijo)
+  const hilosModoRef = useRef<"detallado" | "monto_fijo" | "automatico">("automatico");
+  const hilosFactoresRef = useRef<Record<string, number>>({});
+  const hilosCostosDetalladosRef = useRef<Record<string, number>>({});
+  const hilosMontoFijoRef = useRef<number>(0);
+
+  const aviosModoRef = useRef<"detallado" | "monto_fijo" | "automatico">("automatico");
+  const aviosFactoresRef = useRef<Record<string, number>>({});
+  const aviosCostosDetalladosRef = useRef<Record<string, number>>({});
+  const aviosMontoFijoRef = useRef<number>(0);
+
+  const telasModoRef = useRef<"detallado" | "monto_fijo" | "automatico">("automatico");
+  const telasFactoresRef = useRef<Record<string, number>>({});
+  const telasCostosDetalladosRef = useRef<Record<string, number>>({});
+  const telasMontoFijoRef = useRef<number>(0);
+
   // Estados para costos calculados del WIP (para sobrescribir backend values)
   const [costosWipCalculados, setCostosWipCalculados] = useState<{
     textil_por_prenda: number | null;
@@ -2492,6 +2508,10 @@ const SistemaCotizadorTDV = () => {
                 tipoPrenda={formData.tipo_prenda}
                 onError={(errorMsg) => console.error("Error en hilos:", errorMsg)}
                 hilosPreseleccionados={selectedHilosRef.current}
+                modoInicial={hilosModoRef.current}
+                factoresIniciales={hilosFactoresRef.current}
+                costosDetalladosIniciales={hilosCostosDetalladosRef.current}
+                montoFijoInicial={hilosMontoFijoRef.current}
               />
             </div>
 
@@ -2508,6 +2528,10 @@ const SistemaCotizadorTDV = () => {
                 tipoPrenda={formData.tipo_prenda}
                 onError={(errorMsg) => console.error("Error en avios:", errorMsg)}
                 aviosPreseleccionados={selectedAviosRef.current}
+                modoInicial={aviosModoRef.current}
+                factoresIniciales={aviosFactoresRef.current}
+                costosDetalladosIniciales={aviosCostosDetalladosRef.current}
+                montoFijoInicial={aviosMontoFijoRef.current}
               />
             </div>
 
@@ -2524,6 +2548,9 @@ const SistemaCotizadorTDV = () => {
                 tipoPrenda={formData.tipo_prenda}
                 onError={(errorMsg) => console.error("Error en telas:", errorMsg)}
                 telasPreseleccionadas={selectedTelasRef.current}
+                modoInicial={telasModoRef.current}
+                costosDetalladosIniciales={telasCostosDetalladosRef.current}
+                montoFijoInicial={telasMontoFijoRef.current}
               />
             </div>
           </div>
@@ -2537,14 +2564,29 @@ const SistemaCotizadorTDV = () => {
               if (telasDesgloseTableRef.current) {
                 const telasSeleccionadas = telasDesgloseTableRef.current.getSelectedTelas();
                 selectedTelasRef.current = telasSeleccionadas.map(t => t.tela_codigo);
+                // ✨ Guardar configuración visual de telas
+                telasModoRef.current = telasDesgloseTableRef.current.getModo();
+                telasFactoresRef.current = telasDesgloseTableRef.current.getFactores();
+                telasCostosDetalladosRef.current = telasDesgloseTableRef.current.getCostosDetallados();
+                telasMontoFijoRef.current = telasDesgloseTableRef.current.getMontoFijo();
               }
               if (hilosDesgloseTableRef.current) {
                 const hilosSeleccionados = hilosDesgloseTableRef.current.getSelectedHilos();
                 selectedHilosRef.current = hilosSeleccionados.map(h => `${h.cod_hilado}|${h.tipo_hilo}`);
+                // ✨ Guardar configuración visual de hilos
+                hilosModoRef.current = hilosDesgloseTableRef.current.getModo();
+                hilosFactoresRef.current = hilosDesgloseTableRef.current.getFactores();
+                hilosCostosDetalladosRef.current = hilosDesgloseTableRef.current.getCostosDetallados();
+                hilosMontoFijoRef.current = hilosDesgloseTableRef.current.getMontoFijo();
               }
               if (aviosDesgloseTableRef.current) {
                 const aviosSeleccionados = aviosDesgloseTableRef.current.getSelectedAvios();
                 selectedAviosRef.current = aviosSeleccionados.map(a => a.avio_codigo);
+                // ✨ Guardar configuración visual de avíos
+                aviosModoRef.current = aviosDesgloseTableRef.current.getModo();
+                aviosFactoresRef.current = aviosDesgloseTableRef.current.getFactores();
+                aviosCostosDetalladosRef.current = aviosDesgloseTableRef.current.getCostosDetallados();
+                aviosMontoFijoRef.current = aviosDesgloseTableRef.current.getMontoFijo();
               }
 
               // ✨ Obtener totales de las tablas de desgloses

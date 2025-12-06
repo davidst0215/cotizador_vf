@@ -41,11 +41,21 @@ interface AviosDesgloseTableProps {
   tipoPrenda?: string; // Tipo de prenda (para búsqueda fallback)
   onError?: (error: string) => void;
   aviosPreseleccionados?: string[]; // Avios preseleccionados por avio_codigo
+  // ✨ Props para persistencia visual de configuración
+  modoInicial?: "detallado" | "monto_fijo" | "automatico";
+  factoresIniciales?: Record<string, number>;
+  costosDetalladosIniciales?: Record<string, number>;
+  montoFijoInicial?: number;
 }
 
 export interface AviosDesgloseTableRef {
   getSelectedAvios: () => AvioConFactor[] | Avio[];
   getTotalCostoAvios: () => number;
+  // ✨ Métodos para obtener configuración visual actual
+  getModo: () => "detallado" | "monto_fijo" | "automatico";
+  getFactores: () => Record<string, number>;
+  getCostosDetallados: () => Record<string, number>;
+  getMontoFijo: () => number;
 }
 
 const AviosDesgloseTableComponent = forwardRef<AviosDesgloseTableRef, AviosDesgloseTableProps>((
@@ -57,6 +67,10 @@ const AviosDesgloseTableComponent = forwardRef<AviosDesgloseTableRef, AviosDesgl
     tipoPrenda,
     onError,
     aviosPreseleccionados = [],
+    modoInicial = "automatico",
+    factoresIniciales = {},
+    costosDetalladosIniciales = {},
+    montoFijoInicial = 0,
   },
   ref
 ) => {
@@ -68,23 +82,23 @@ const AviosDesgloseTableComponent = forwardRef<AviosDesgloseTableRef, AviosDesgl
   const [selectedAvios, setSelectedAvios] = useState<Set<string>>(new Set(aviosPreseleccionados));
 
   // ✨ 3 Modos de configuración
-  const [modo, setModo] = useState<ModoAvios>("automatico");
+  const [modo, setModo] = useState<ModoAvios>(modoInicial);
 
   // Estado para modal de histórico de precios
   const [modalHistoricoAbierto, setModalHistoricoAbierto] = useState(false);
   const [codigoMaterialSeleccionado, setCodigoMaterialSeleccionado] = useState<string>("");
 
   // Estado para Modo Automático (factores)
-  const [factoresAvioLocal, setFactoresAvioLocal] = useState<Record<string, number>>({}); // (avio_codigo) -> factor
+  const [factoresAvioLocal, setFactoresAvioLocal] = useState<Record<string, number>>(factoresIniciales); // (avio_codigo) -> factor
   const [factoresInputLocal, setFactoresInputLocal] = useState<Record<string, string>>({}); // (avio_codigo) -> factor (para typing)
 
   // Estado para Modo Detallado (costos directos)
-  const [costosDetalladoLocal, setCostosDetalladoLocal] = useState<Record<string, number>>({}); // (avio_codigo) -> costo directo
+  const [costosDetalladoLocal, setCostosDetalladoLocal] = useState<Record<string, number>>(costosDetalladosIniciales); // (avio_codigo) -> costo directo
   const [costosDetalladoInputLocal, setCostosDetalladoInputLocal] = useState<Record<string, string>>({}); // (avio_codigo) -> costo (para typing)
 
   // Estado para Modo Monto Fijo
-  const [montoFijoGlobal, setMontoFijoGlobal] = useState<number>(0);
-  const [montoFijoInput, setMontoFijoInput] = useState<string>("");
+  const [montoFijoGlobal, setMontoFijoGlobal] = useState<number>(montoFijoInicial);
+  const [montoFijoInput, setMontoFijoInput] = useState<string>(montoFijoInicial > 0 ? montoFijoInicial.toString() : "");
 
   const [sortField, setSortField] = useState<"avio_descripcion" | "can_consuni" | "costo_por_unidad" | "frecuencia_ops">("avio_descripcion");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
@@ -300,7 +314,12 @@ const AviosDesgloseTableComponent = forwardRef<AviosDesgloseTableRef, AviosDesgl
         ? aviosConFactor.filter((a) => selectedAvios.has(a.avio_codigo))
         : aviosData.filter((a) => selectedAvios.has(a.avio_codigo)),
     getTotalCostoAvios: () => totalCostoAvios,
-  }), [aviosConFactor, aviosData, selectedAvios, costosDetalladoLocal, montoFijoGlobal, modo]);
+    // ✨ Métodos para obtener configuración visual actual
+    getModo: () => modo,
+    getFactores: () => factoresAvioLocal,
+    getCostosDetallados: () => costosDetalladoLocal,
+    getMontoFijo: () => montoFijoGlobal,
+  }), [aviosConFactor, aviosData, selectedAvios, costosDetalladoLocal, montoFijoGlobal, modo, factoresAvioLocal]);
 
   if (cargando) {
     return (

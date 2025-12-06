@@ -47,11 +47,20 @@ interface TelasDesgloseTableProps {
   factores?: Record<string, number>;
   onSelectionChange?: (ids: string[]) => void;
   onFactorChange?: (factores: Record<string, number>) => void;
+  // ✨ Props para persistencia visual de configuración
+  modoInicial?: "detallado" | "monto_fijo" | "automatico";
+  costosDetalladosIniciales?: Record<string, number>;
+  montoFijoInicial?: number;
 }
 
 export interface TelasDesgloseTableRef {
   getSelectedTelas: () => TelaConFactor[];
   getTotalCostoTelas: () => number;
+  // ✨ Métodos para obtener configuración visual actual
+  getModo: () => "detallado" | "monto_fijo" | "automatico";
+  getFactores: () => Record<string, number>;
+  getCostosDetallados: () => Record<string, number>;
+  getMontoFijo: () => number;
 }
 
 const TelasDesgloseTableComponent = forwardRef<TelasDesgloseTableRef, TelasDesgloseTableProps>(({
@@ -66,6 +75,9 @@ const TelasDesgloseTableComponent = forwardRef<TelasDesgloseTableRef, TelasDesgl
   factores = {},
   onSelectionChange,
   onFactorChange,
+  modoInicial = "automatico",
+  costosDetalladosIniciales = {},
+  montoFijoInicial = 0,
 }, ref) => {
   const [telasData, setTelasData] = useState<Tela[]>([]);
   const [totalOps, setTotalOps] = useState<number>(0);
@@ -86,19 +98,19 @@ const TelasDesgloseTableComponent = forwardRef<TelasDesgloseTableRef, TelasDesgl
   const [busqueda, setBusqueda] = useState<string>("");
 
   // ✨ 3 Modos de configuración
-  const [modo, setModo] = useState<"detallado" | "monto_fijo" | "automatico">("automatico");
+  const [modo, setModo] = useState<"detallado" | "monto_fijo" | "automatico">(modoInicial);
 
   // Estado para modal de histórico de precios
   const [modalHistoricoAbierto, setModalHistoricoAbierto] = useState(false);
   const [codigoMaterialSeleccionado, setCodigoMaterialSeleccionado] = useState<string>("");
 
   // Estado para Modo Detallado (costos directos)
-  const [costosDetalladoLocal, setCostosDetalladoLocal] = useState<Record<string, number>>({}); // (tela_codigo) -> costo directo
+  const [costosDetalladoLocal, setCostosDetalladoLocal] = useState<Record<string, number>>(costosDetalladosIniciales); // (tela_codigo) -> costo directo
   const [costosDetalladoInputLocal, setCostosDetalladoInputLocal] = useState<Record<string, string>>({}); // (tela_codigo) -> costo (para typing)
 
   // Estado para Modo Monto Fijo
-  const [montoFijoGlobal, setMontoFijoGlobal] = useState<number>(0);
-  const [montoFijoInput, setMontoFijoInput] = useState<string>("");
+  const [montoFijoGlobal, setMontoFijoGlobal] = useState<number>(montoFijoInicial);
+  const [montoFijoInput, setMontoFijoInput] = useState<string>(montoFijoInicial > 0 ? montoFijoInicial.toString() : "");
 
   // ✨ Ref para almacenar factores sin crear dependencias
   const factoreTelaRef = useRef<Record<string, number>>(currentFactores);
@@ -370,8 +382,13 @@ const TelasDesgloseTableComponent = forwardRef<TelasDesgloseTableRef, TelasDesgl
       getTotalCostoTelas: () => {
         return totalCostoTelas;
       },
+      // ✨ Métodos para obtener configuración visual actual
+      getModo: () => modo,
+      getFactores: () => currentFactores,
+      getCostosDetallados: () => costosDetalladoLocal,
+      getMontoFijo: () => montoFijoGlobal,
     }),
-    [telasConFactor, selectedTelasSet, totalCostoTelas]
+    [telasConFactor, selectedTelasSet, totalCostoTelas, modo, currentFactores, costosDetalladoLocal, montoFijoGlobal]
   );
 
   const handleSort = (field: typeof sortField) => {

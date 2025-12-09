@@ -106,7 +106,7 @@ export function SectionVersiones() {
         </div>
 
         <InfoCard type="info" title="Selector de Versión">
-          El selector se encuentra en la parte superior del <strong>Formulario de Cotización</strong>. Se utilizará siempre la metodología Fluida para esta versión del cotizador.
+          El selector se encuentra en la parte superior del <strong>Formulario de Cotización</strong>. Se utilizará siempre la metodología <strong>FLUIDA</strong> para esta versión del cotizador.
         </InfoCard>
       </div>
     </section>

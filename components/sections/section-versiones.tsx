@@ -106,9 +106,7 @@ export function SectionVersiones() {
         </div>
 
         <InfoCard type="info" title="Selector de Versión">
-          El selector se encuentra en la parte superior del <strong>Formulario de Cotización</strong>. Al cambiar la
-          versión, el sistema recarga automáticamente la lista de clientes, tipos de prenda y catálogo de materiales
-          correspondientes.
+          El selector se encuentra en la parte superior del <strong>Formulario de Cotización</strong>. Se utilizará siempre la metodología Fluida para esta versión del cotizador.
         </InfoCard>
       </div>
     </section>

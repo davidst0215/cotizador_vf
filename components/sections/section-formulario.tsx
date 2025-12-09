@@ -64,13 +64,8 @@ export function SectionFormulario() {
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="w-5 h-5 bg-primary text-white rounded-full flex items-center justify-center text-xs flex-shrink-0">
+                   
                     2
-                  </span>
-                  Sugiere estilos similares mientras escribe
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="w-5 h-5 bg-primary text-white rounded-full flex items-center justify-center text-xs flex-shrink-0">
-                    3
                   </span>
                   Al seleccionar, rellena automáticamente tipo de prenda y cliente
                 </li>

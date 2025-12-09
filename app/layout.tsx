@@ -10,7 +10,7 @@ const _geistMono = Geist_Mono({ subsets: ["latin"] })
 const _inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "Manual de Usuario - Sistema Cotizador TDV v2.0",
+  title: "Manual de Usuario - Sistema Cotizador TDV",
   description: "Guía completa para la generación de cotizaciones precisas de prendas de vestir",
   generator: "v0.app",
   icons: {

@@ -37,7 +37,7 @@ export default function ManualUsuario() {
               </div>
               <div>
                 <h1 className="text-lg font-bold">Sistema Cotizador TDV</h1>
-                <p className="text-xs text-white/70">Manual de Usuario v2.0</p>
+                <p className="text-xs text-white/70">Manual de Usuario </p>
               </div>
             </div>
           </div>
@@ -79,7 +79,7 @@ export default function ManualUsuario() {
                 <span>Documentación Oficial</span>
               </div>
               <h1 className="text-3xl lg:text-5xl font-bold mb-4 text-balance">Manual de Usuario</h1>
-              <p className="text-xl lg:text-2xl text-white/80 mb-6">Sistema Cotizador TDV v2.0</p>
+              <p className="text-xl lg:text-2xl text-white/80 mb-6">Sistema Cotizador TDV</p>
               <p className="text-white/60 max-w-2xl leading-relaxed">
                 Guía completa para la generación de cotizaciones precisas de prendas de vestir, considerando procesos
                 productivos, materiales y factores de ajuste comercial.
@@ -125,7 +125,7 @@ export default function ManualUsuario() {
 
           {/* Footer */}
           <footer className="mt-16 pt-8 border-t border-border text-center text-muted-foreground">
-            <p className="text-sm">Sistema Cotizador TDV v2.0 - Manual de Usuario</p>
+            <p className="text-sm">Sistema Cotizador TDV - Manual de Usuario</p>
             <p className="text-xs mt-1">
               Documento generado el{" "}
               {new Date().toLocaleDateString("es-ES", {

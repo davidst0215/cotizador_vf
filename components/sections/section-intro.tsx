@@ -23,7 +23,7 @@ export function SectionIntro() {
 
       <div className="prose prose-slate max-w-none">
         <p className="text-lg text-foreground leading-relaxed">
-          El <strong>Sistema Cotizador TDV v2.0</strong> es una herramienta profesional diseñada para generar
+          El <strong>Sistema Cotizador TDV </strong> es una herramienta profesional diseñada para generar
           cotizaciones precisas de prendas de vestir considerando todos los aspectos del proceso productivo.
         </p>
 

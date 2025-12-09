@@ -18,6 +18,11 @@ export function SectionProcesos() {
     ["34", "Corte", "Corte de piezas de la prenda"],
     ["40", "Costura", "Ensamblaje de la prenda"],
     ["49", "Acabado", "Inspección, planchado, etiquetado"],
+    ["37", "Bordado Pieza", "Bordado de las piezas antes de la costura"],
+    ["43", "Bordado Prenda", "Bordado de las prendas despues de la costura"],
+    ["44", "Estampado Prendas", "Estampado de logos y otros"],
+    ["45", "Lavado en Prenda", "Lavado de prenda despues de estampado"],
+    ["50", "Movimiento logístico", "Trasporte entre areas/procesos"],
   ]
 
   return (
@@ -64,8 +69,11 @@ export function SectionProcesos() {
         </p>
 
         <InfoCard type="info" title="Filtros Disponibles">
-          Puede filtrar las OPs por tamaño de lote: <strong>Lote Grande (1001-4000)</strong>,{" "}
-          <strong>Lote Masivo (4001+)</strong> o <strong>Lote Pequeño (N/A)</strong>.
+        Puede filtrar las OPs por tamaño de lote: <strong>Micro Lote (1-50)</strong>,{" "}
+        <strong>Lote Pequeño (51-500)</strong>,{" "}
+        <strong>Lote Mediano (501-1000)</strong>,{" "}
+        <strong>Lote Grande (1001-4000)</strong> o{" "}
+        <strong>Lote Masivo (4001+)</strong>.
         </InfoCard>
 
         <ScreenshotFrame

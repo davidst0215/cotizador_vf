@@ -1,6 +1,6 @@
 "use client"
 
-import { BookOpen, FileText, BarChart3, Layers, DollarSign, Settings, GitBranch } from "lucide-react"
+import { BookOpen, FileText, BarChart3, Layers, DollarSign, GitBranch } from "lucide-react"
 
 interface TableOfContentsProps {
   onItemClick?: () => void
@@ -12,7 +12,6 @@ const sections = [
   { id: "procesos", title: "Resultados de Procesos", icon: BarChart3 },
   { id: "materiales", title: "Análisis de Materiales", icon: Layers },
   { id: "costos", title: "Costos Finales", icon: DollarSign },
-  { id: "versiones", title: "Versiones de Cálculo", icon: Settings },
   { id: "flujo", title: "Flujo de Trabajo", icon: GitBranch },
 ]
 

@@ -9,7 +9,6 @@ import { SectionFormulario } from "@/components/sections/section-formulario"
 import { SectionProcesos } from "@/components/sections/section-procesos"
 import { SectionMateriales } from "@/components/sections/section-materiales"
 import { SectionCostos } from "@/components/sections/section-costos"
-import { SectionVersiones } from "@/components/sections/section-versiones"
 import { SectionFlujo } from "@/components/sections/section-flujo"
 
 export default function ManualUsuario() {
@@ -37,7 +36,7 @@ export default function ManualUsuario() {
               </div>
               <div>
                 <h1 className="text-lg font-bold">Sistema Cotizador TDV</h1>
-                <p className="text-xs text-white/70">Manual de Usuario </p>
+                <p className="text-xs text-white/70">Manual de Usuario</p>
               </div>
             </div>
           </div>
@@ -120,7 +119,6 @@ export default function ManualUsuario() {
           <SectionProcesos />
           <SectionMateriales />
           <SectionCostos />
-          <SectionVersiones />
           <SectionFlujo />
 
           {/* Footer */}

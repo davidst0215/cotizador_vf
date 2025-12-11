@@ -10,7 +10,7 @@ export function SectionFormulario() {
     ["Cliente/Marca", "Lista desplegable", "Sí", "Marca o cliente para quien se cotiza"],
     ["Estilo Propio", "Texto con búsqueda", "Condicional*", "Código interno de la empresa para el estilo"],
     ["Tipo de Prenda", "Lista desplegable", "Sí", "Clasificación del producto"],
-    ["Versión de Cálculo", "Selector visual", "No", "FLUIDO o TRUNCADO"],
+    ["Versión de Cálculo", "Selector visual", "Si", "mantener elegida metodología FLUIDA"],
   ]
 
   return (

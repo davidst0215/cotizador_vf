@@ -31,18 +31,17 @@ export function SectionProcesos() {
         id="procesos"
         number={3}
         title="Resultados de Procesos"
-        description="Selección de procesos productivos (WIPs) para la fabricación"
+        description="Selección de OPs de referencia y procesos productivos (WIPs) para la fabricación"
         icon={BarChart3}
       />
 
-      <ScreenshotFrame
-        src="/images/procesos.png"
-        alt="Pestaña Resultados de Procesos"
-        caption="Figura 3.1: Vista de Resultados de Procesos con OPs de referencia seleccionadas"
-      />
-
       <div className="prose prose-slate max-w-none">
-        <h3 className="text-xl font-semibold text-foreground mt-8 mb-4">Header de Cotización</h3>
+        <h3 className="text-xl font-semibold text-foreground mt-4 mb-4">Header de Cotización</h3>
+
+        <p className="text-foreground mb-4">
+          Al ingresar a esta pestaña, verá un resumen de la cotización generada con su ID único, fecha de creación y
+          versión de datos utilizada.
+        </p>
 
         <div className="bg-primary text-primary-foreground rounded-xl p-6 my-4">
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
@@ -69,11 +68,28 @@ export function SectionProcesos() {
         </p>
 
         <InfoCard type="info" title="Filtros Disponibles">
-        Puede filtrar las OPs por tamaño de lote: <strong>Micro Lote (1-50)</strong>,{" "}
-        <strong>Lote Pequeño (51-500)</strong>,{" "}
-        <strong>Lote Mediano (501-1000)</strong>,{" "}
-        <strong>Lote Grande (1001-4000)</strong> o{" "}
-        <strong>Lote Masivo (4001+)</strong>.
+          Puede filtrar las OPs por tamaño de lote: <strong>Micro Lote (1-50)</strong>,{" "}
+          <strong>Lote Pequeño (51-500)</strong>, <strong>Lote Mediano (501-1000)</strong>,{" "}
+          <strong>Lote Grande (1001-4000)</strong> o <strong>Lote Masivo (4001+)</strong>. El sistema también permite
+          una selección 1 a 1 de las OPs para mayor personalización.
+        </InfoCard>
+
+        <ScreenshotFrame
+          src="/images/procesos.png"
+          alt="Pestaña Resultados de Procesos"
+          caption="Figura 3.1: Vista de Resultados de Procesos con OPs de referencia seleccionadas"
+        />
+
+        <h3 className="text-xl font-semibold text-foreground mt-8 mb-4">Análisis de Costos por WIP</h3>
+
+        <p className="text-foreground mb-4">
+          En esta sección puede configurar la ruta de producción seleccionando o deseleccionando los WIPs (Work In
+          Progress) que aplican a su producto. Cada WIP muestra su costo Textil y de Manufactura por prenda.
+        </p>
+
+        <InfoCard type="tip" title="Configuración de Ruta">
+          Marque o desmarque los WIPs según los procesos que requiera su producto. Por ejemplo, si no necesita teñido de
+          hilado, puede desmarcarlo para excluirlo del cálculo de costos.
         </InfoCard>
 
         <ScreenshotFrame
